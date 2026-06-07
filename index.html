@@ -1757,10 +1757,27 @@ function commitSegui(){
 }
 
 
-/* ---- refresco automatico al volver a la app (ver cambios de otros dispositivos) ---- */
-function _autoSync(){ if(DEVICE && LOADED && S.user && !S.modal) syncAll(); }
+/* ---- refresco automatico: al volver a la app + sondeo suave cada 5s (robusto en iOS) ---- */
+let _lastSig='';
+function _canSync(){
+  if(!(DEVICE && LOADED && S.user)) return false;
+  if(S.modal) return false;
+  if(document.visibilityState && document.visibilityState!=='visible') return false;
+  const ae=document.activeElement;
+  if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return false;
+  return true;
+}
+async function _autoSync(){
+  if(!_canSync()) return;
+  await loadFromDB();
+  const sig=JSON.stringify([S.articulos.length,S.movimientos.length,S.pedidos.length,S.seguimientos.length,
+    S.articulos.reduce((s,a)=>s+(Number(a.stock)||0),0),(S.movimientos[0]||{}).id]);
+  if(sig!==_lastSig){ _lastSig=sig; render(); }
+}
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _autoSync(); });
-window.addEventListener('focus', _autoSync);
+window.addEventListener('focus', function(){ _autoSync(); });
+window.addEventListener('pageshow', function(){ _autoSync(); });
+setInterval(function(){ _autoSync(); }, 5000);
 /* ===== FIN CAPA ROBUSTA ===== */
 
 boot();
