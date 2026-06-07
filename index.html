@@ -1526,6 +1526,238 @@ function exportMovs(){
 /* ---- arranque ---- */
 S.movimientos.forEach(m=>{ if(!m.id) m.id=uid(); });
 ['click','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,resetIdle,true));
+/* ===== CAPA ROBUSTA (insertada) ===== */
+/* ============================================================================
+   LUCAI · CAPA ROBUSTA (multiusuario)
+   Redefine por debajo las funciones de guardado para que cada acción pase por
+   las tablas relacionales y el candado atómico del servidor. No toca las
+   pantallas: solo cambia cómo se guarda y se sincroniza.
+   ============================================================================ */
+
+/* ---- LECTURA: construir S desde las tablas ---- */
+async function loadFromDB(){
+  try{
+    const [arts, provs, movs, peds, segs] = await Promise.all([
+      sbc.from('lucai_articulos').select('*').order('cod'),
+      sbc.from('lucai_proveedores').select('nombre').order('nombre'),
+      sbc.from('lucai_movimientos').select('*').order('created_at',{ascending:false}),
+      sbc.from('lucai_pedidos').select('*').order('created_at',{ascending:false}),
+      sbc.from('lucai_seguimientos').select('*').order('created_at',{ascending:false}),
+    ]);
+    if(arts.data) S.articulos = arts.data.map(r=>({
+      cod:r.cod, nombre:r.nombre, categoria:r.categoria, proveedor:r.proveedor,
+      min:Number(r.min)||0, precioRef:Number(r.precio_ref)||0, stock:Number(r.stock)||0,
+      cost:Number(r.cost)||0, aviso:r.aviso!==false, activo:r.activo!==false,
+      caduca:r.caduca||null, trazable:r.trazable===true }));
+    if(provs.data) S.proveedores = provs.data.map(r=>r.nombre);
+    if(movs.data) S.movimientos = movs.data.map(r=>({
+      id:r.id, ts:r.ts, tipo:r.tipo, user:r.user_nombre, doctor:r.doctor, cod:r.cod,
+      nombre:r.nombre, cant:Number(r.cant)||0,
+      pac:(r.pac_cod||r.pac_nombre||r.pac_apellido)?{cod:r.pac_cod||'',nombre:r.pac_nombre||'',apellido:r.pac_apellido||''}:null,
+      precio:r.precio==null?undefined:Number(r.precio), motivo:r.motivo,
+      valorPerdido:r.valor_perdido==null?undefined:Number(r.valor_perdido),
+      incidencia:r.incidencia===true, incidComentario:r.incid_comentario, ref:r.ref,
+      anulado:r.anulado===true }));
+    if(peds.data) S.pedidos = peds.data.map(r=>({
+      id:r.id, ts:r.ts, proveedor:r.proveedor, user:r.user_nombre, estado:r.estado,
+      recTs:r.rec_ts, recUser:r.rec_user, lineas:Array.isArray(r.lineas)?r.lineas:[] }));
+    if(segs.data) S.seguimientos = segs.data.map(r=>({
+      id:r.id, ts:r.ts, user:r.user_nombre, cod:r.cod, nombre:r.nombre, estado:r.estado, comentario:r.comentario }));
+    LOADED = true;
+  }catch(e){ console.error('loadFromDB', e); toast('No se pudieron cargar los datos: '+(e.message||e)); }
+}
+/* loadEstado se redefine para usar las tablas (lo llama boot() y el login del dispositivo) */
+async function loadEstado(){ await loadFromDB(); }
+/* el guardado en bloque queda desactivado: ahora se guarda por filas en cada accion */
+function _persistSoon(){ /* no-op */ }
+
+async function syncAll(){ await loadFromDB(); render(); }
+
+/* ---- ESCRITURA: stock via candado atomico ---- */
+async function _rpcMov(m){
+  const precio = (m.precio && m.precio>0) ? m.precio : null;
+  const { error } = await sbc.rpc('lucai_mov', {
+    p_id:m.id, p_tipo:m.tipo, p_cod:m.cod, p_cant:Math.abs(m.cant),
+    p_user:m.user||null, p_doctor:m.doctor||null, p_nombre:m.nombre||null,
+    p_pac_cod:m.pac?(m.pac.cod||null):null, p_pac_nombre:m.pac?(m.pac.nombre||null):null,
+    p_pac_apellido:m.pac?(m.pac.apellido||null):null,
+    p_precio:precio, p_motivo:m.motivo||null,
+    p_incidencia:!!m.incidencia, p_incid_comentario:m.incidComentario||null, p_ts:m.ts||null });
+  if(error) throw error;
+}
+async function srvMov(m, okMsg, undo){
+  try{ await _rpcMov(m); }
+  catch(e){ console.error('srvMov', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+  if(undo) toastUndo(okMsg); else if(okMsg) toast(okMsg);
+}
+async function srvAnular(id, okMsg){
+  try{ const { error } = await sbc.rpc('lucai_anular', { p_mov_id:id }); if(error) throw error; }
+  catch(e){ console.error('srvAnular', e); await syncAll(); toast('No se pudo anular: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvProveedor(nombre){
+  if(!nombre) return;
+  try{ await sbc.from('lucai_proveedores').upsert({ nombre }, { onConflict:'nombre' }); }catch(e){ console.error('srvProveedor', e); }
+}
+async function srvArticulo(a, okMsg){
+  try{
+    const { error } = await sbc.from('lucai_articulos').upsert({
+      cod:a.cod, nombre:a.nombre, categoria:a.categoria||null, proveedor:a.proveedor||null,
+      min:a.min||0, precio_ref:a.precioRef||0, stock:a.stock||0, cost:a.cost||0,
+      aviso:a.aviso!==false, activo:a.activo!==false, caduca:a.caduca||null, trazable:a.trazable===true,
+      updated_at:new Date().toISOString() }, { onConflict:'cod' });
+    if(error) throw error;
+  }catch(e){ console.error('srvArticulo', e); await syncAll(); toast('Error al guardar articulo: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvPedidoInsert(p, okMsg){
+  try{
+    const { error } = await sbc.from('lucai_pedidos').insert({
+      id:String(p.id), ts:p.ts||null, proveedor:p.proveedor||null, user_nombre:p.user||null,
+      estado:p.estado||'pendiente', lineas:p.lineas||[] });
+    if(error) throw error;
+  }catch(e){ console.error('srvPedidoInsert', e); await syncAll(); toast('Error al crear pedido: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvSegui(s, okMsg){
+  try{
+    const { error } = await sbc.from('lucai_seguimientos').insert({
+      id:s.id, ts:s.ts||null, user_nombre:s.user||null, cod:s.cod||null, nombre:s.nombre||null,
+      estado:s.estado||null, comentario:s.comentario||null });
+    if(error) throw error;
+  }catch(e){ console.error('srvSegui', e); await syncAll(); toast('Error al guardar seguimiento: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+
+/* ============================================================================
+   REDEFINICION de las funciones de guardado (misma logica, ahora hacia el servidor)
+   ============================================================================ */
+
+function quickOut(cod){
+  const a=art(cod); if(!a) return;
+  if(a.stock<=0){ toast('Sin stock'); return; }
+  a.stock-=1;
+  const mov={id:uid(),ts:tsFrom(todayStr()),tipo:"salida",user:S.user.nombre,cod:a.cod,nombre:a.nombre,cant:1,doctor:null,motivo:"Salida rápida (genérico)",pac:null};
+  S.movimientos.unshift(mov);
+  window._lastQuick=mov;
+  render();
+  srvMov(mov, `−1 ${a.nombre} · como ${S.user.nombre} · quedan ${a.stock}`, true);
+}
+function undoQuick(){
+  const mov=window._lastQuick; if(!mov){ toast('Nada que deshacer'); return; }
+  window._lastQuick=null;
+  const a=art(mov.cod);
+  srvAnular(mov.id, `Deshecho · ${a?a.nombre:''}`);
+}
+function anular(id){
+  const m=S.movimientos.find(x=>x.id===id); if(!m||m.anulado) return;
+  if(!(m.tipo==='salida'||m.tipo==='merma')){ toast('Solo se anulan salidas y bajas'); return; }
+  if(window._lastQuick && window._lastQuick.id===id) window._lastQuick=null;
+  srvAnular(id, 'Movimiento anulado');
+}
+
+function commitMove(){
+  const a=art(F.cod); if(!a){ toast('Elige un artículo'); return; }
+  const cant=parseInt(F.cant)||0; if(cant<1){ toast('Cantidad no válida'); return; }
+  const ts=tsFrom(F.fecha||todayStr());
+  if(F.type==='salida'){
+    if(!F.doctor){ toast('Selecciona el doctor'); return; }
+    if(a.stock<cant){ toast('No hay stock suficiente'); return; }
+    a.stock-=cant;
+    const mov={id:uid(),ts,tipo:"salida",user:S.user.nombre,cod:a.cod,nombre:a.nombre,cant,doctor:F.doctor,
+      pac:{cod:(F.pcod||'').trim(),nombre:(F.pnombre||'').trim(),apellido:(F.papellido||'').trim()},
+      incidencia:!!F.incidencia, incidComentario:(F.incidComentario||'').trim()};
+    S.movimientos.unshift(mov);
+    closeModal(); render(); srvMov(mov, 'Salida registrada');
+  } else if(F.type==='entrada'){
+    const precio=parseFloat(String(F.precio).replace(',','.'))||0;
+    const oldQ=a.stock||0, oldC=a.cost||0, newQ=oldQ+cant;
+    a.cost = newQ>0 ? (oldQ*oldC + cant*(precio>0?precio:oldC))/newQ : precio;
+    a.stock=newQ;
+    const mov={id:uid(),ts,tipo:"entrada",user:S.user.nombre,cod:a.cod,nombre:a.nombre,cant,precio,motivo:"Entrada directa",pac:null};
+    S.movimientos.unshift(mov);
+    closeModal(); render(); srvMov(mov, 'Entrada registrada · stock actualizado');
+  } else if(F.type==='merma'){
+    if(a.stock<cant){ toast('No hay stock suficiente para la baja'); return; }
+    a.stock-=cant;
+    const valorPerdido=cant*(a.cost||0);
+    const mov={id:uid(),ts,tipo:"merma",user:S.user.nombre,cod:a.cod,nombre:a.nombre,cant,motivo:F.motivo||"Pérdida",ref:(F.ref||'').trim(),valorPerdido,pac:null};
+    S.movimientos.unshift(mov);
+    closeModal(); render(); srvMov(mov, 'Baja registrada · '+eur(valorPerdido)+' de pérdida');
+  }
+}
+
+async function commitRecepcion(){
+  const p=S.pedidos.find(x=>x.id===F.pedidoId); if(!p) return;
+  if(p.lineas.some((l,i)=> !(parseFloat(String(F.recPrecios[i]).replace(',','.'))>0))){ toast('Introduce el precio de todas las líneas para poder recibir'); return; }
+  const ts=todayStr();
+  try{
+    for(let i=0;i<p.lineas.length;i++){
+      const l=p.lineas[i];
+      const precio=parseFloat(String(F.recPrecios[i]).replace(',','.'))||0;
+      l.precio=precio;
+      const a=art(l.cod); if(!a) continue;
+      const mov={id:uid(),ts:tsFrom(ts),tipo:"entrada",user:S.user.nombre,cod:l.cod,nombre:a.nombre,cant:l.cant,precio:precio,motivo:`Recepción pedido #${String(p.id).slice(-4)} · ${p.proveedor||''}`,pac:null};
+      await _rpcMov(mov);
+    }
+    await sbc.from('lucai_pedidos').update({ estado:'recibido', rec_ts:ts, rec_user:S.user.nombre, lineas:p.lineas }).eq('id', String(p.id));
+  }catch(e){ console.error('commitRecepcion', e); await syncAll(); toast('Error al recibir: '+(e.message||e)); return; }
+  closeModal(); await loadFromDB(); render(); toast('Pedido recibido · stock actualizado');
+}
+
+function commitPedido(){
+  if(!F.lineas.length) return;
+  const prov=(F.proveedor==='__nuevo__'?(F.proveedorNuevo||''):(F.proveedor||'')).trim();
+  if(!prov){ toast('Elige o escribe un proveedor'); return; }
+  if(!S.proveedores.includes(prov)) S.proveedores.push(prov);
+  const ped={id:Date.now(), ts:F.fecha||todayStr(), proveedor:prov, user:S.user.nombre, lineas:F.lineas.map(l=>({...l})), estado:'pendiente'};
+  S.pedidos.unshift(ped);
+  closeModal(); S.sub='pedidos'; render();
+  srvProveedor(prov); srvPedidoInsert(ped, 'Pedido creado · pendiente de recibir');
+}
+
+function commitArticulo(){
+  const cod=(F.acod||'').trim().toUpperCase();
+  const nombre=(F.anombre||'').trim();
+  if(!cod||!nombre||!F.acat){ toast('Código, nombre y categoría son obligatorios'); return; }
+  if(art(cod)){ toast('Ese código ya existe'); return; }
+  const prov=(F.aprov==='__nuevo__'?(F.aprovNuevo||''):(F.aprov||'')).trim();
+  if(prov && !S.proveedores.includes(prov)) S.proveedores.push(prov);
+  const precio=parseFloat(String(F.aprecio).replace(',','.'))||0;
+  const nuevo={cod,nombre,categoria:F.acat,proveedor:prov,min:parseInt(F.amin)||0,precioRef:precio,stock:0,cost:precio,aviso:F.aviso!==false,activo:true,caduca:(F.acaduca||'').trim()||null,trazable:F.atraz===true};
+  S.articulos.push(nuevo);
+  closeModal(); S.sub='arts'; render();
+  srvProveedor(prov); srvArticulo(nuevo, 'Artículo creado');
+}
+
+function commitEdit(){
+  const a=art(F.cod); if(!a) return;
+  a.nombre=(F.enombre||'').trim()||a.nombre;
+  a.categoria=F.ecat||a.categoria;
+  a.proveedor=(F.eprov||'').trim();
+  a.min=parseInt(F.emin)||0;
+  a.precioRef=parseFloat(String(F.eprecio).replace(',','.'))||0;
+  a.aviso=F.eaviso!==false;
+  a.activo=F.eactivo!==false;
+  a.caduca=(F.ecaduca||'').trim()||null;
+  a.trazable=F.etraz===true;
+  if(a.proveedor && !S.proveedores.includes(a.proveedor)) S.proveedores.push(a.proveedor);
+  closeModal(); render();
+  srvProveedor(a.proveedor); srvArticulo(a, 'Artículo actualizado');
+}
+
+function commitSegui(){
+  if(F.estado==='incidencia' && !(F.comentario||'').trim()){ toast('En una incidencia escribe un comentario'); return; }
+  const a=F.scod?art(F.scod):null;
+  const seg={id:uid(), ts:tsFrom(todayStr()), user:S.user.nombre, cod:F.scod, nombre:a?a.nombre:'', estado:F.estado, comentario:(F.comentario||'').trim()};
+  S.seguimientos.unshift(seg);
+  closeModal(); render();
+  srvSegui(seg, 'Seguimiento registrado');
+}
+
+/* ===== FIN CAPA ROBUSTA ===== */
+
 boot();
 
 </script>
