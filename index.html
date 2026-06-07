@@ -386,6 +386,44 @@
   .matrix td::before{display:none}
   .matrix td.empty{text-align:center}
 }
+
+/* === Incidencias === */
+.inccard{border:1px solid var(--line);border-radius:12px;background:var(--white);padding:14px 16px;margin-bottom:10px}
+.inc-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.inc-cat{font-size:12px;font-weight:700;letter-spacing:.02em;color:#333F48;background:#EAE3D7;padding:3px 10px;border-radius:20px}
+.inc-imp{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;color:#fff}
+.imp-Alta{background:#C0392B}.imp-Media{background:#B8860B}.imp-Baja{background:#8A949B}
+.inc-rev{font-size:11px;font-weight:700;color:#6E8E00;border:1px solid #6E8E00;padding:2px 9px;border-radius:20px}
+.inc-detalle{font-size:14px;line-height:1.55;color:#333F48;white-space:pre-wrap}
+.inc-sug{font-size:13px;color:#5A6770;margin-top:6px;font-style:italic}
+.inc-meta{font-size:12px;color:#8A949B;margin-top:8px}
+.inc-nota{font-size:13px;color:#333F48;background:#F4F0E9;border-radius:8px;padding:8px 10px;margin-top:8px}
+.inc-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.inc-filters .inp{max-width:230px}
+.incbar-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:13px}
+.incbar-lbl{width:200px;color:#333F48;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.incbar-track{flex:1;background:#EAE3D7;border-radius:6px;overflow:hidden;height:20px;min-width:60px}
+.incbar-fill{height:100%;background:#A8B400}
+.incbar-val{width:34px;text-align:right;color:#5A6770;flex:none;font-weight:600}
+@media(max-width:720px){ .incbar-lbl{width:120px} .inc-filters .inp{max-width:100%} }
+
+/* === Incidencias · tabla === */
+.inctable-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--white)}
+.inctable{width:100%;border-collapse:collapse;font-size:13.5px;min-width:680px}
+.inctable thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#8A949B;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:#FAF8F3}
+.inctable tbody td{padding:10px 12px;border-bottom:1px solid #f1ece3;vertical-align:middle}
+.inctable tbody tr{cursor:pointer}
+.inctable tbody tr:last-child td{border-bottom:none}
+.inctable tbody tr:hover{background:#FAF8F3}
+.inc-c-fecha{white-space:nowrap;color:#5A6770}
+.inc-c-det{color:#333F48;max-width:360px;overflow:hidden;text-overflow:ellipsis}
+.inc-pend{font-size:11px;font-weight:700;color:#C0392B;border:1px solid #e3b6af;padding:2px 9px;border-radius:20px;white-space:nowrap;display:inline-block}
+@media(max-width:720px){ .inctable{min-width:0} .inctable .col-hide-m{display:none} }
+
+/* === candado de módulos sin acceso === */
+.pill-lock{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#8A949B;background:#EAE3D7;padding:3px 9px;border-radius:20px}
+.locked-card{opacity:.55}
+.locked-card:hover{transform:none;box-shadow:none}
 </style>
 
 <body>
@@ -407,9 +445,11 @@ const LOGO_WHITE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAvgAAAJkCAYAAA
 /* ===================== LUCAI 2 — modelo plano ===================== */
 const USERS = [
   {id:1, nombre:"David Lucas", rol:"Director", pin:"1980"},
-  {id:2, nombre:"Laura Fernández", rol:"Directora", pin:"2024"},
-  {id:3, nombre:"Marta Ruiz", rol:"Auxiliar", pin:"1111"},
-  {id:4, nombre:"Paqui Soler", rol:"Auxiliar", pin:"2222"},
+  {id:2, nombre:"Encarna Garcia", rol:"Coordinadora", pin:"1111"},
+  {id:3, nombre:"Noemi Martinez", rol:"Coordinadora", pin:"2222"},
+  {id:4, nombre:"Cristina Vazquez", rol:"Coordinadora", pin:"3333"},
+  {id:5, nombre:"Dessire Perez", rol:"Atención paciente", pin:"4444"},
+  {id:6, nombre:"Irene Garcia", rol:"Atención paciente", pin:"5555"},
 ];
 const DOCTORS = ["Dra. Laura Fernández","Dr. Javier Ruiz","Dra. Ana Gómez"];
 const CATEGORIAS = ["RMR","Ortodoncia","Implantología","Endodoncia","Anestesia","Fungible","Higiene y prevención"];
@@ -1779,6 +1819,2087 @@ window.addEventListener('focus', function(){ _autoSync(); });
 window.addEventListener('pageshow', function(){ _autoSync(); });
 setInterval(function(){ _autoSync(); }, 5000);
 /* ===== FIN CAPA ROBUSTA ===== */
+
+/* ===== MÓDULO INCIDENCIAS ===== */
+/* ============================================================================
+   LUCAI · MÓDULO INCIDENCIAS
+   Registro operativo/de calidad. Todos reportan; dirección ve listado y análisis.
+   Se engancha al sistema de módulos sin tocar el almacén.
+   ============================================================================ */
+
+const INC_CATS = ['Informático','Mantenimiento/instalaciones','Laboratorio','Protocolo/coordinación',
+  'Agenda/organización','Administración','Consentimientos/documentación',
+  'Atención y experiencia del paciente','Material/instrumental','Otros'];
+
+const incEsc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+if(!Array.isArray(S.incidencias)) S.incidencias=[];
+
+/* activar el módulo en el hub */
+(function(){ const m=MODULES.find(x=>x.id==='incidencias');
+  if(m){ m.estado='activo'; m.desc='Un sitio para que el equipo reporte lo que va mal o se puede mejorar. Dirección revisa y detecta patrones.'; } })();
+
+/* añadir la carga de incidencias a loadFromDB (envolviendo la versión robusta) */
+const _loadFromDB_base = loadFromDB;
+loadFromDB = async function(){
+  await _loadFromDB_base();
+  try{
+    const inc = await sbc.from('inc_incidencias').select('*').order('created_at',{ascending:false});
+    if(inc.data) S.incidencias = inc.data.map(r=>({
+      id:r.id, ts:r.ts, fecha:r.fecha, reporta:r.reporta, categoria:r.categoria,
+      importancia:r.importancia, detalle:r.detalle, sugerencia:r.sugerencia,
+      pacCod:r.pac_cod, pacNombre:r.pac_nombre, revisada:r.revisada===true,
+      notaDir:r.nota_dir, revPor:r.rev_por, revTs:r.rev_ts, origen:r.origen }));
+  }catch(e){ console.error('loadIncidencias', e); }
+};
+
+/* ---- guardado en servidor ---- */
+async function srvIncidencia(o, okMsg){
+  try{
+    const { error } = await sbc.from('inc_incidencias').insert({
+      id:o.id, ts:o.ts, fecha:o.fecha, reporta:o.reporta, categoria:o.categoria,
+      importancia:o.importancia, detalle:o.detalle, sugerencia:o.sugerencia||null,
+      pac_cod:o.pacCod||null, pac_nombre:o.pacNombre||null, origen:'app' });
+    if(error) throw error;
+  }catch(e){ console.error('srvIncidencia', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function incRevisar(id, nota){
+  try{
+    const { error } = await sbc.from('inc_incidencias').update({
+      revisada:true, nota_dir:nota||null, rev_por:S.user.nombre, rev_ts:tsFrom(todayStr()) }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('incRevisar', e); await syncAll(); toast('No se pudo guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+
+/* ---- acciones de formulario ---- */
+function openIncidencia(){
+  S.alert="";
+  F={type:'incidencia', categoria:'', importancia:'Media', detalle:'', sugerencia:'', pacCod:'', pacNombre:''};
+  S.modal='incidencia'; render();
+}
+function commitIncidencia(){
+  if(!F.categoria){ toast('Elige de qué trata'); return; }
+  if(!(F.detalle||'').trim()){ toast('Cuenta qué ha ocurrido'); return; }
+  const o={ id:uid(), ts:tsFrom(todayStr()), fecha:todayStr(), reporta:S.user.nombre,
+    categoria:F.categoria, importancia:F.importancia||'Media', detalle:(F.detalle||'').trim(),
+    sugerencia:(F.sugerencia||'').trim(), pacCod:(F.pacCod||'').trim(), pacNombre:(F.pacNombre||'').trim() };
+  S.incidencias.unshift(o);
+  closeModal(); render();
+  srvIncidencia(o, 'Incidencia registrada · gracias');
+}
+function openRevisar(id){
+  const o=(S.incidencias||[]).find(x=>x.id===id);
+  F={type:'revisar', id, nota:(o&&o.notaDir)||''};
+  S.modal='revisar'; render();
+}
+function commitRevisar(){
+  const id=F.id, nota=(F.nota||'').trim();
+  const o=(S.incidencias||[]).find(x=>x.id===id);
+  if(o){ o.revisada=true; o.notaDir=nota; o.revPor=S.user.nombre; }
+  closeModal(); render();
+  incRevisar(id, nota);
+}
+function setIncF(field,v){ S[field]=v; render(); }
+function toggleIncPend(){ S.incPend=!S.incPend; render(); }
+
+/* ---- vista principal del módulo ---- */
+function incidenciasView(){
+  const admin=isAdmin();
+  const acts=`<div class="actions"><button class="btn btn-primary" onclick="openIncidencia()">Nueva incidencia</button></div>`;
+  let body='';
+  if(admin){
+    const sub=(S.sub==='inc_analisis')?'inc_analisis':'inc_list';
+    const seg=`<div class="seg">
+      <button class="${sub==='inc_list'?'on':''}" onclick="setSub('inc_list')">Listado</button>
+      <button class="${sub==='inc_analisis'?'on':''}" onclick="setSub('inc_analisis')">Análisis</button>
+    </div>`;
+    body=seg+(sub==='inc_analisis'?incAnalisisView():incListView());
+  } else {
+    const mine=(S.incidencias||[]).filter(x=>x.reporta===S.user.nombre).slice(0,10);
+    body=`<div class="note" style="margin-top:0">Aquí puedes reportar cualquier cosa que haya ido mal o se pueda mejorar. Gracias por ayudar a que el Centro funcione mejor.</div>`+
+      (mine.length?`<div class="section-title" style="font-size:15px;margin:18px 0 10px">Tus últimos reportes</div>`+mine.map(incCardMine).join(''):'');
+  }
+  return `${moduleHeader('Incidencias de la clínica', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:14px">
+      <div><div class="section-title">Incidencias</div>
+      <div class="section-sub" style="margin:0">Un sitio para reportar lo que va mal o se puede mejorar. Una cosa por ticket.</div></div>
+      ${acts}
+    </div>
+    ${body}
+  </div></main>
+  ${S.modal?modalContent():''}`;
+}
+
+function incFiltered(){
+  let l=(S.incidencias||[]).slice();
+  if(S.incCat) l=l.filter(x=>x.categoria===S.incCat);
+  if(S.incImp) l=l.filter(x=>x.importancia===S.incImp);
+  if(S.incRep) l=l.filter(x=>x.reporta===S.incRep);
+  if(S.incPend) l=l.filter(x=>!x.revisada);
+  return l;
+}
+function incListView(){
+  const all=S.incidencias||[];
+  const cats=[...new Set(all.map(x=>x.categoria))].filter(Boolean).sort();
+  const reps=[...new Set(all.map(x=>x.reporta))].filter(Boolean).sort();
+  const list=incFiltered();
+  const filtros=`<div class="inc-filters">
+    <select class="inp" onchange="setIncF('incCat',this.value)"><option value="">Todas las categorías</option>${cats.map(c=>`<option ${S.incCat===c?'selected':''}>${incEsc(c)}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('incImp',this.value)"><option value="">Toda importancia</option>${['Alta','Media','Baja'].map(i=>`<option ${S.incImp===i?'selected':''}>${i}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('incRep',this.value)"><option value="">Todas las personas</option>${reps.map(r=>`<option ${S.incRep===r?'selected':''}>${incEsc(r)}</option>`).join('')}</select>
+    <button class="btn btn-sm ${S.incPend?'btn-primary':'btn-ghost'}" onclick="toggleIncPend()">Solo sin revisar</button>
+  </div>`;
+  if(!list.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay incidencias con esos filtros.</div>`;
+  return filtros+list.map(incCard).join('');
+}
+function incCard(o){
+  return `<div class="inccard">
+    <div class="inc-top"><span class="inc-cat">${incEsc(o.categoria||'—')}</span>
+      <span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span>
+      ${o.revisada?'<span class="inc-rev">Revisada</span>':''}
+      ${o.origen==='forms'?'<span class="muted" style="font-size:11px">importada</span>':''}</div>
+    <div class="inc-detalle">${incEsc(o.detalle||'')}</div>
+    ${o.sugerencia?`<div class="inc-sug">Sugerencia: ${incEsc(o.sugerencia)}</div>`:''}
+    <div class="inc-meta">${incEsc(o.fecha||'')} · ${incEsc(o.reporta||'—')}${o.pacNombre?` · Paciente: ${incEsc(o.pacNombre)}`:(o.pacCod?` · Paciente: ${incEsc(o.pacCod)}`:'')}</div>
+    ${o.revisada&&o.notaDir?`<div class="inc-nota"><strong>Dirección:</strong> ${incEsc(o.notaDir)}</div>`:''}
+    ${!o.revisada?`<div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="openRevisar('${o.id}')">Marcar revisada</button></div>`:''}
+  </div>`;
+}
+function incCardMine(o){
+  return `<div class="inccard">
+    <div class="inc-top"><span class="inc-cat">${incEsc(o.categoria||'—')}</span>
+      <span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span>
+      ${o.revisada?'<span class="inc-rev">Vista por dirección</span>':''}</div>
+    <div class="inc-detalle">${incEsc(o.detalle||'')}</div>
+    <div class="inc-meta">${incEsc(o.fecha||'')}</div>
+  </div>`;
+}
+
+function incTally(arr,key){ const m={}; arr.forEach(x=>{const k=x[key]||'—'; m[k]=(m[k]||0)+1;}); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+function incBars(title, counts){
+  const max=Math.max(1,...counts.map(c=>c[1]));
+  return `<div style="margin-bottom:22px"><div class="section-title" style="font-size:15px;margin-bottom:10px">${title}</div>`+
+    counts.map(([l,n])=>`<div class="incbar-row"><div class="incbar-lbl">${incEsc(l)}</div><div class="incbar-track"><div class="incbar-fill" style="width:${Math.round(n/max*100)}%"></div></div><div class="incbar-val">${n}</div></div>`).join('')+
+    `</div>`;
+}
+function incAnalisisView(){
+  const all=S.incidencias||[];
+  if(!all.length) return `<div class="muted" style="padding:20px;text-align:center">Aún no hay incidencias para analizar.</div>`;
+  const pend=all.filter(x=>!x.revisada).length;
+  const kpi=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px">
+    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:130px"><div style="font-size:12px;opacity:.7">Total incidencias</div><div style="font-size:28px;font-weight:700">${all.length}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:130px"><div style="font-size:12px;color:#8A949B">Sin revisar</div><div style="font-size:28px;font-weight:700;color:#C0392B">${pend}</div></div>
+  </div>`;
+  return kpi
+    + incBars('Por categoría', incTally(all,'categoria'))
+    + incBars('Por persona (quién reporta más)', incTally(all,'reporta'))
+    + incBars('Por importancia', incTally(all,'importancia'));
+}
+
+/* ---- formularios (modales) ---- */
+function incidenciaModalContent(){
+  const ready=F.categoria && (F.detalle||'').trim();
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Nueva incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Reporta algo que ha ido mal o se puede mejorar. <strong>Una cosa por ticket.</strong> Si es algo urgente que alguien tiene que resolver ya, avísalo por el canal de siempre.</div>
+      <div class="fld" style="margin-top:0"><label>¿De qué trata?</label>
+        <select class="inp" onchange="setSel('categoria',this.value)"><option value="">Elige…</option>${INC_CATS.map(c=>`<option ${F.categoria===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="fld"><label>Importancia</label>
+        <select class="inp" onchange="setSel('importancia',this.value)">${['Baja','Media','Alta'].map(i=>`<option ${(F.importancia||'Media')===i?'selected':''}>${i}</option>`).join('')}</select></div>
+      <div class="fld"><label>¿Qué ha ocurrido?</label>
+        <textarea class="inp" rows="4" oninput="setInp('detalle',this.value)" placeholder="Cuéntalo claro: qué ha pasado y, si lo sabes, las consecuencias.">${incEsc(F.detalle||'')}</textarea></div>
+      <div class="fld"><label>Sugerencia de mejora (opcional)</label>
+        <textarea class="inp" rows="2" oninput="setInp('sugerencia',this.value)" placeholder="¿Cómo se podría evitar o mejorar?">${incEsc(F.sugerencia||'')}</textarea></div>
+      <div class="fld"><label>Paciente relacionado (opcional)</label>
+        <div style="display:flex;gap:8px">
+          <input class="inp" style="max-width:120px" placeholder="Nº" value="${incEsc(F.pacCod||'')}" oninput="setInp('pacCod',this.value)">
+          <input class="inp" placeholder="Nombre" value="${incEsc(F.pacNombre||'')}" oninput="setInp('pacNombre',this.value)">
+        </div></div>
+      <div class="note" style="margin-top:4px">${ready?'✓ Listo para registrar.':'Elige de qué trata y cuenta qué ha ocurrido.'}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitIncidencia()">Registrar incidencia</button>
+      </div>
+    </div></div></div>`;
+}
+function revisarModalContent(){
+  const o=(S.incidencias||[]).find(x=>x.id===F.id)||{};
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Marcar como revisada</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="inc-detalle" style="margin-bottom:12px">${incEsc(o.detalle||'')}</div>
+      <div class="fld" style="margin-top:0"><label>Nota interna (opcional)</label>
+        <textarea class="inp" rows="3" oninput="setInp('nota',this.value)" placeholder="Qué has decidido, hablado o hecho.">${incEsc(F.nota||'')}</textarea></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitRevisar()">Marcar revisada</button>
+      </div>
+    </div></div></div>`;
+}
+
+/* ---- enganches al núcleo (redefinición: gana la última) ---- */
+function appView(){
+  if(!S.module) return homeView();
+  if(S.module==='material') return materialView();
+  if(S.module==='incidencias') return incidenciasView();
+  return modulePlaceholder();
+}
+function modalContent(){
+  if(F.type==='incidencia') return incidenciaModalContent();
+  if(F.type==='revisar') return revisarModalContent();
+  if(F.type==='articulo') return articleModalContent();
+  if(F.type==='editart') return editArticleModalContent();
+  if(F.type==='seguimiento') return seguiModalContent();
+  if(F.type==='pedido') return pedidoModalContent();
+  if(F.type==='recepcion') return recepcionModalContent();
+  if(F.type==='salida'||F.type==='entrada'||F.type==='merma') return stockMoveModal();
+  return '';
+}
+
+/* ===== FIN INCIDENCIAS ===== */
+
+/* ===== INCIDENCIAS v2 (tabla) ===== */
+/* ============================================================================
+   LUCAI · INCIDENCIAS v2 — listado en TABLA
+   Columnas + preview del texto + columna de estado + click para ver completo.
+   Redefine incListView/incFiltered/modalContent (gana la última definición).
+   ============================================================================ */
+
+function incPreview(t){ t=(t||'').replace(/\s+/g,' ').trim(); return t.length>80?t.slice(0,80)+'…':t; }
+
+function incFiltered(){
+  let l=(S.incidencias||[]).slice();
+  if(S.incCat) l=l.filter(x=>x.categoria===S.incCat);
+  if(S.incImp) l=l.filter(x=>x.importancia===S.incImp);
+  if(S.incRep) l=l.filter(x=>x.reporta===S.incRep);
+  if(S.incEstado==='pend') l=l.filter(x=>!x.revisada);
+  else if(S.incEstado==='rev') l=l.filter(x=>x.revisada);
+  return l;
+}
+
+function incListView(){
+  const all=S.incidencias||[];
+  const cats=[...new Set(all.map(x=>x.categoria))].filter(Boolean).sort();
+  const reps=[...new Set(all.map(x=>x.reporta))].filter(Boolean).sort();
+  const list=incFiltered();
+  const filtros=`<div class="inc-filters">
+    <select class="inp" onchange="setIncF('incCat',this.value)"><option value="">Todas las categorías</option>${cats.map(c=>`<option ${S.incCat===c?'selected':''}>${incEsc(c)}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('incImp',this.value)"><option value="">Toda importancia</option>${['Alta','Media','Baja'].map(i=>`<option ${S.incImp===i?'selected':''}>${i}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('incRep',this.value)"><option value="">Todas las personas</option>${reps.map(r=>`<option ${S.incRep===r?'selected':''}>${incEsc(r)}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('incEstado',this.value)"><option value="">Revisadas y pendientes</option><option value="pend" ${S.incEstado==='pend'?'selected':''}>Solo sin revisar</option><option value="rev" ${S.incEstado==='rev'?'selected':''}>Solo revisadas</option></select>
+    <span class="muted" style="font-size:12px">${list.length} incidencia${list.length===1?'':'s'}</span>
+  </div>`;
+  if(!list.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay incidencias con esos filtros.</div>`;
+  const rows=list.map(o=>`<tr onclick="openIncDetalle('${o.id}')">
+    <td class="inc-c-fecha">${incEsc((o.fecha||'').slice(0,10))}</td>
+    <td class="col-hide-m">${incEsc(o.reporta||'—')}</td>
+    <td><span class="inc-cat">${incEsc(o.categoria||'—')}</span></td>
+    <td class="col-hide-m"><span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span></td>
+    <td class="inc-c-det col-hide-m">${incEsc(incPreview(o.detalle))}</td>
+    <td>${o.revisada?'<span class="inc-rev">Revisada</span>':'<span class="inc-pend">Pendiente</span>'}</td>
+  </tr>`).join('');
+  return filtros+`<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Fecha</th><th class="col-hide-m">Persona</th><th>Categoría</th><th class="col-hide-m">Import.</th><th class="col-hide-m">Detalle</th><th>Estado</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function openIncDetalle(id){
+  const o=(S.incidencias||[]).find(x=>x.id===id); if(!o) return;
+  F={type:'incdet', id, nota:(o.notaDir||'')};
+  S.modal='incdet'; render();
+}
+function incDetalleModalContent(){
+  const o=(S.incidencias||[]).find(x=>x.id===F.id)||{};
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="inc-top" style="margin-bottom:10px">
+        <span class="inc-cat">${incEsc(o.categoria||'—')}</span>
+        <span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span>
+        ${o.revisada?'<span class="inc-rev">Revisada</span>':'<span class="inc-pend">Pendiente</span>'}
+        ${o.origen==='forms'?'<span class="muted" style="font-size:11px">importada</span>':''}
+      </div>
+      <div class="inc-meta" style="margin:0 0 10px">${incEsc(o.fecha||'')} · ${incEsc(o.reporta||'—')}${o.pacNombre?` · Paciente: ${incEsc(o.pacNombre)}`:(o.pacCod?` · Paciente: ${incEsc(o.pacCod)}`:'')}</div>
+      <div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(o.detalle||'')}</div>
+      ${o.sugerencia?`<div class="inc-sug" style="margin-top:10px">Sugerencia: ${incEsc(o.sugerencia)}</div>`:''}
+      ${o.revisada
+        ? (o.notaDir?`<div class="inc-nota" style="margin-top:12px"><strong>Nota de dirección:</strong> ${incEsc(o.notaDir)}</div>`:'')
+        : `<div class="fld"><label>Nota interna (opcional)</label><textarea class="inp" rows="3" oninput="setInp('nota',this.value)" placeholder="Qué has decidido, hablado o hecho.">${incEsc(F.nota||'')}</textarea></div>`}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+        ${o.revisada?'':`<button class="btn btn-primary" onclick="commitRevisarDet()">Marcar revisada</button>`}
+      </div>
+    </div></div></div>`;
+}
+function commitRevisarDet(){
+  const id=F.id, nota=(F.nota||'').trim();
+  const o=(S.incidencias||[]).find(x=>x.id===id);
+  if(o){ o.revisada=true; o.notaDir=nota; o.revPor=S.user.nombre; }
+  closeModal(); render();
+  incRevisar(id, nota);
+}
+
+function modalContent(){
+  if(F.type==='incidencia') return incidenciaModalContent();
+  if(F.type==='incdet') return incDetalleModalContent();
+  if(F.type==='revisar') return revisarModalContent();
+  if(F.type==='articulo') return articleModalContent();
+  if(F.type==='editart') return editArticleModalContent();
+  if(F.type==='seguimiento') return seguiModalContent();
+  if(F.type==='pedido') return pedidoModalContent();
+  if(F.type==='recepcion') return recepcionModalContent();
+  if(F.type==='salida'||F.type==='entrada'||F.type==='merma') return stockMoveModal();
+  return '';
+}
+
+/* ===== FIN v2 ===== */
+
+/* ===== INCIDENCIAS v3 (reabrir) ===== */
+/* ============================================================================
+   LUCAI · INCIDENCIAS v3 — permitir volver a "pendiente"
+   Redefine incDetalleModalContent (gana la última) y añade reapertura.
+   ============================================================================ */
+
+async function incReabrir(id){
+  try{
+    const { error } = await sbc.from('inc_incidencias').update({ revisada:false, rev_por:null, rev_ts:null }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('incReabrir', e); await syncAll(); toast('No se pudo cambiar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+function commitReabrir(){
+  const id=F.id;
+  const o=(S.incidencias||[]).find(x=>x.id===id);
+  if(o){ o.revisada=false; }   // optimista; la nota se conserva
+  render();                     // el modal sigue abierto, ahora en estado pendiente
+  incReabrir(id);
+}
+
+function incDetalleModalContent(){
+  const o=(S.incidencias||[]).find(x=>x.id===F.id)||{};
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="inc-top" style="margin-bottom:10px">
+        <span class="inc-cat">${incEsc(o.categoria||'—')}</span>
+        <span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span>
+        ${o.revisada?'<span class="inc-rev">Revisada</span>':'<span class="inc-pend">Pendiente</span>'}
+        ${o.origen==='forms'?'<span class="muted" style="font-size:11px">importada</span>':''}
+      </div>
+      <div class="inc-meta" style="margin:0 0 10px">${incEsc(o.fecha||'')} · ${incEsc(o.reporta||'—')}${o.pacNombre?` · Paciente: ${incEsc(o.pacNombre)}`:(o.pacCod?` · Paciente: ${incEsc(o.pacCod)}`:'')}</div>
+      <div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(o.detalle||'')}</div>
+      ${o.sugerencia?`<div class="inc-sug" style="margin-top:10px">Sugerencia: ${incEsc(o.sugerencia)}</div>`:''}
+      ${o.revisada
+        ? (o.notaDir?`<div class="inc-nota" style="margin-top:12px"><strong>Nota de dirección:</strong> ${incEsc(o.notaDir)}</div>`:'')
+        : `<div class="fld"><label>Nota interna (opcional)</label><textarea class="inp" rows="3" oninput="setInp('nota',this.value)" placeholder="Qué has decidido, hablado o hecho.">${incEsc(F.nota||'')}</textarea></div>`}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        ${o.revisada?`<button class="btn btn-ghost" onclick="commitReabrir()">Volver a pendiente</button>`:''}
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+        ${o.revisada?'':`<button class="btn btn-primary" onclick="commitRevisarDet()">Marcar revisada</button>`}
+      </div>
+    </div></div></div>`;
+}
+
+/* ===== FIN v3 ===== */
+
+/* ===== INCIDENCIAS v4 (visibilidad + edición) ===== */
+/* ============================================================================
+   LUCAI · INCIDENCIAS v4 — visibilidad por persona + edición
+   - Staff: ve y edita SOLO sus incidencias (estado + nota de dirección).
+   - Dirección: ve todas, el análisis, revisa y también puede editar/reclasificar.
+   ============================================================================ */
+
+function incidenciasView(){
+  const admin=isAdmin();
+  const acts=`<div class="actions"><button class="btn btn-primary" onclick="openIncidencia()">Nueva incidencia</button></div>`;
+  let body='';
+  if(admin){
+    const sub=(S.sub==='inc_analisis')?'inc_analisis':'inc_list';
+    const seg=`<div class="seg">
+      <button class="${sub==='inc_list'?'on':''}" onclick="setSub('inc_list')">Listado</button>
+      <button class="${sub==='inc_analisis'?'on':''}" onclick="setSub('inc_analisis')">Análisis</button>
+    </div>`;
+    body=seg+(sub==='inc_analisis'?incAnalisisView():incListView());
+  } else {
+    body=`<div class="note" style="margin-top:0">Aquí ves <strong>tus</strong> incidencias y en qué estado están. Toca una para ver el detalle y lo que haya escrito dirección; puedes editarlas.</div>`+incMineView();
+  }
+  return `${moduleHeader('Incidencias de la clínica', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:14px">
+      <div><div class="section-title">Incidencias</div>
+      <div class="section-sub" style="margin:0">${admin?'Todas las incidencias del Centro.':'Reporta y consulta tus incidencias. Una cosa por ticket.'}</div></div>
+      ${acts}
+    </div>
+    ${body}
+  </div></main>
+  ${S.modal?modalContent():''}`;
+}
+
+function incMineView(){
+  const mine=(S.incidencias||[]).filter(x=>x.reporta===S.user.nombre);
+  if(!mine.length) return `<div class="muted" style="padding:20px;text-align:center">Todavía no has reportado nada. Usa “Nueva incidencia” cuando veas algo que mejorar.</div>`;
+  const rows=mine.map(o=>`<tr onclick="openIncDetalle('${o.id}')">
+    <td class="inc-c-fecha">${incEsc((o.fecha||'').slice(0,10))}</td>
+    <td><span class="inc-cat">${incEsc(o.categoria||'—')}</span></td>
+    <td class="col-hide-m"><span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span></td>
+    <td class="inc-c-det col-hide-m">${incEsc(incPreview(o.detalle))}</td>
+    <td>${o.revisada?'<span class="inc-rev">Revisada</span>':'<span class="inc-pend">Pendiente</span>'}</td>
+  </tr>`).join('');
+  return `<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Fecha</th><th>Categoría</th><th class="col-hide-m">Import.</th><th class="col-hide-m">Detalle</th><th>Estado</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+/* ---- detalle con permisos ---- */
+function incDetalleModalContent(){
+  const o=(S.incidencias||[]).find(x=>x.id===F.id)||{};
+  const admin=isAdmin();
+  const own=o.reporta===S.user.nombre;
+  const notaBlock = o.revisada
+    ? (o.notaDir?`<div class="inc-nota" style="margin-top:12px"><strong>Nota de dirección:</strong> ${incEsc(o.notaDir)}</div>`:`<div class="muted" style="margin-top:12px;font-size:13px">Revisada por dirección.</div>`)
+    : (admin
+        ? `<div class="fld"><label>Nota interna (opcional)</label><textarea class="inp" rows="3" oninput="setInp('nota',this.value)" placeholder="Qué has decidido, hablado o hecho.">${incEsc(F.nota||'')}</textarea></div>`
+        : `<div class="muted" style="margin-top:12px;font-size:13px">Pendiente de revisar por dirección.</div>`);
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="inc-top" style="margin-bottom:10px">
+        <span class="inc-cat">${incEsc(o.categoria||'—')}</span>
+        <span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span>
+        ${o.revisada?'<span class="inc-rev">Revisada</span>':'<span class="inc-pend">Pendiente</span>'}
+        ${o.origen==='forms'?'<span class="muted" style="font-size:11px">importada</span>':''}
+      </div>
+      <div class="inc-meta" style="margin:0 0 10px">${incEsc(o.fecha||'')} · ${incEsc(o.reporta||'—')}${o.pacNombre?` · Paciente: ${incEsc(o.pacNombre)}`:(o.pacCod?` · Paciente: ${incEsc(o.pacCod)}`:'')}</div>
+      <div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(o.detalle||'')}</div>
+      ${o.sugerencia?`<div class="inc-sug" style="margin-top:10px">Sugerencia: ${incEsc(o.sugerencia)}</div>`:''}
+      ${notaBlock}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+        ${admin&&o.revisada?`<button class="btn btn-ghost" onclick="commitReabrir()">Volver a pendiente</button>`:''}
+        ${(admin||own)?`<button class="btn btn-ghost" onclick="openIncEdit('${o.id}')">Editar</button>`:''}
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+        ${admin&&!o.revisada?`<button class="btn btn-primary" onclick="commitRevisarDet()">Marcar revisada</button>`:''}
+      </div>
+    </div></div></div>`;
+}
+
+/* ---- edición de la incidencia (contenido) ---- */
+function openIncEdit(id){
+  const o=(S.incidencias||[]).find(x=>x.id===id); if(!o) return;
+  if(!(isAdmin() || o.reporta===S.user.nombre)){ toast('Solo puedes editar tus incidencias'); return; }
+  F={type:'inc_edit', id, categoria:o.categoria||'', importancia:o.importancia||'Media',
+     detalle:o.detalle||'', sugerencia:o.sugerencia||'', pacCod:o.pacCod||'', pacNombre:o.pacNombre||''};
+  S.modal='inc_edit'; render();
+}
+function commitIncEdit(){
+  const id=F.id;
+  if(!F.categoria){ toast('Elige de qué trata'); return; }
+  if(!(F.detalle||'').trim()){ toast('Cuenta qué ha ocurrido'); return; }
+  const o=(S.incidencias||[]).find(x=>x.id===id); if(!o) return;
+  o.categoria=F.categoria; o.importancia=F.importancia||'Media'; o.detalle=(F.detalle||'').trim();
+  o.sugerencia=(F.sugerencia||'').trim(); o.pacCod=(F.pacCod||'').trim(); o.pacNombre=(F.pacNombre||'').trim();
+  closeModal(); render();
+  srvIncidenciaUpdate(id, o, 'Incidencia actualizada');
+}
+async function srvIncidenciaUpdate(id, o, okMsg){
+  try{
+    const { error } = await sbc.from('inc_incidencias').update({
+      categoria:o.categoria, importancia:o.importancia, detalle:o.detalle,
+      sugerencia:o.sugerencia||null, pac_cod:o.pacCod||null, pac_nombre:o.pacNombre||null }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('srvIncidenciaUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+function incEditModalContent(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Editar incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>¿De qué trata?</label>
+        <select class="inp" onchange="setSel('categoria',this.value)"><option value="">Elige…</option>${INC_CATS.map(c=>`<option ${F.categoria===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="fld"><label>Importancia</label>
+        <select class="inp" onchange="setSel('importancia',this.value)">${['Baja','Media','Alta'].map(i=>`<option ${(F.importancia||'Media')===i?'selected':''}>${i}</option>`).join('')}</select></div>
+      <div class="fld"><label>¿Qué ha ocurrido?</label>
+        <textarea class="inp" rows="4" oninput="setInp('detalle',this.value)">${incEsc(F.detalle||'')}</textarea></div>
+      <div class="fld"><label>Sugerencia de mejora (opcional)</label>
+        <textarea class="inp" rows="2" oninput="setInp('sugerencia',this.value)">${incEsc(F.sugerencia||'')}</textarea></div>
+      <div class="fld"><label>Paciente relacionado (opcional)</label>
+        <div style="display:flex;gap:8px">
+          <input class="inp" style="max-width:120px" placeholder="Nº" value="${incEsc(F.pacCod||'')}" oninput="setInp('pacCod',this.value)">
+          <input class="inp" placeholder="Nombre" value="${incEsc(F.pacNombre||'')}" oninput="setInp('pacNombre',this.value)">
+        </div></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitIncEdit()">Guardar cambios</button>
+      </div>
+    </div></div></div>`;
+}
+
+function modalContent(){
+  if(F.type==='incidencia') return incidenciaModalContent();
+  if(F.type==='incdet') return incDetalleModalContent();
+  if(F.type==='inc_edit') return incEditModalContent();
+  if(F.type==='revisar') return revisarModalContent();
+  if(F.type==='articulo') return articleModalContent();
+  if(F.type==='editart') return editArticleModalContent();
+  if(F.type==='seguimiento') return seguiModalContent();
+  if(F.type==='pedido') return pedidoModalContent();
+  if(F.type==='recepcion') return recepcionModalContent();
+  if(F.type==='salida'||F.type==='entrada'||F.type==='merma') return stockMoveModal();
+  return '';
+}
+
+/* ===== FIN v4 ===== */
+
+/* ===== ACCESO POR ROL v5 ===== */
+/* ============================================================================
+   LUCAI · ACCESO POR ROL (candados en el hub)
+   Dirección (Director/Directora): todos los módulos.
+   Resto (Doctora, Auxiliar…): solo Incidencias; los demás con candado.
+   ============================================================================ */
+
+const LOCK_SVG='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+
+function canAccess(id){
+  if(!S.user) return false;
+  if(isAdmin()) return true;        // Director / Directora: todo
+  return id==='incidencias';        // resto: solo incidencias
+}
+
+function homeView(){
+  const first=S.user.nombre.split(' ')[0];
+  const cards=MODULES.map(m=>{
+    const ok=canAccess(m.id);
+    const soon=m.estado==='pronto';
+    let pill, click;
+    if(!ok){ pill=`<span class="pill-lock">${LOCK_SVG} Sin acceso</span>`; click=`onclick="toast('No tienes acceso a este módulo')"`; }
+    else if(soon){ pill='<span class="pill-soon">Próximamente</span>'; click=`onclick="setModule('${m.id}')"`; }
+    else { pill='<span class="pill-ok">Disponible</span>'; click=`onclick="setModule('${m.id}')"`; }
+    return `<button class="modcard ${soon?'soon-card':''} ${!ok?'locked-card':''}" ${click}>
+      <div class="mc-top"><span class="mc-ic">${m.ini}</span>${pill}</div>
+      <div class="mc-title">${m.nombre}</div>
+      <div class="mc-desc">${m.desc}</div>
+    </button>`;
+  }).join("");
+  return `<header><div class="brand">
+      <img src="${LOGO_WHITE}" alt="Laura Fernández">
+      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández</small></div>
+    </div>${whoBlock(false)}</header>
+  <main class="homearea"><div class="wrap">
+    <div class="hello">Hola, ${first}. ¿Con qué quieres trabajar?</div>
+    <div class="modgrid">${cards}</div>
+  </div></main>`;
+}
+
+function setModule(id){
+  if(!canAccess(id)){ toast('No tienes acceso a este módulo'); return; }
+  S.module=id; S.sub='stock'; S.alert=(id==='material' && lowItems().length?'pedir':''); render();
+  if(id==='material') setTimeout(showCadPop, 400);
+}
+
+function appView(){
+  if(!S.module) return homeView();
+  if(!canAccess(S.module)){ S.module=null; return homeView(); }
+  if(S.module==='material') return materialView();
+  if(S.module==='incidencias') return incidenciasView();
+  return modulePlaceholder();
+}
+
+/* ===== FIN v5 ===== */
+
+/* ===== MÓDULO EQUIPOS ===== */
+/* ============================================================================
+   LUCAI · MÓDULO MANTENIMIENTO DE EQUIPOS
+   Partes de reparación + registro de equipos (coste acumulado). Solo dirección.
+   ============================================================================ */
+
+const EQ_ESTADOS = ['Abierto','Enviado a proveedor','Esperando técnico','Resuelto','No reparable'];
+const EQ_TIPOS   = ['Sillón','Autoclave','Compresor','Aspiración','RX','Escáner','Informático','Climatización','Mobiliario','Otros'];
+
+if(!Array.isArray(S.equipos)) S.equipos=[];
+if(!Array.isArray(S.partes))  S.partes=[];
+
+/* activar módulo en el hub */
+(function(){ const m=MODULES.find(x=>x.id==='equipos');
+  if(m){ m.estado='activo'; m.desc='Partes de reparación con estado y coste, y coste acumulado por equipo.'; } })();
+
+/* añadir equipos y partes a loadFromDB */
+const _loadFromDB_eq = loadFromDB;
+loadFromDB = async function(){
+  await _loadFromDB_eq();
+  try{
+    const [eq, pa] = await Promise.all([
+      sbc.from('eq_equipos').select('*').order('nombre'),
+      sbc.from('eq_partes').select('*').order('created_at',{ascending:false})
+    ]);
+    if(eq.data) S.equipos = eq.data.map(r=>({ id:r.id, nombre:r.nombre, tipo:r.tipo, ubicacion:r.ubicacion,
+      marcaModelo:r.marca_modelo, nserie:r.nserie, proveedor:r.proveedor, compra:r.compra,
+      garantiaHasta:r.garantia_hasta, activo:r.activo!==false }));
+    if(pa.data) S.partes = pa.data.map(r=>({ id:r.id, equipoId:r.equipo_id, equipoNombre:r.equipo_nombre,
+      ts:r.ts, fechaApertura:r.fecha_apertura, abiertoPor:r.abierto_por, averia:r.averia, urgencia:r.urgencia,
+      estado:r.estado, proveedor:r.proveedor, coste:(r.coste==null?null:Number(r.coste)), factura:r.factura,
+      fechaCierre:r.fecha_cierre, fechaEstado:r.fecha_estado, notas:r.notas }));
+  }catch(e){ console.error('loadEquipos', e); }
+};
+
+/* ---- guardado ---- */
+async function srvEquipoUpsert(e, okMsg){
+  try{
+    const { error } = await sbc.from('eq_equipos').upsert({
+      id:e.id, nombre:e.nombre, tipo:e.tipo||null, ubicacion:e.ubicacion||null,
+      marca_modelo:e.marcaModelo||null, nserie:e.nserie||null, proveedor:e.proveedor||null,
+      compra:e.compra||null, garantia_hasta:e.garantiaHasta||null, activo:e.activo!==false }, { onConflict:'id' });
+    if(error) throw error;
+  }catch(err){ console.error('srvEquipoUpsert', err); toast('Error al guardar equipo: '+(err.message||err)); throw err; }
+  if(okMsg){ await loadFromDB(); render(); toast(okMsg); }
+}
+async function srvParteInsert(p, okMsg){
+  try{
+    const { error } = await sbc.from('eq_partes').insert({
+      id:p.id, equipo_id:p.equipoId, equipo_nombre:p.equipoNombre, ts:p.ts, fecha_apertura:p.fechaApertura,
+      abierto_por:p.abiertoPor, averia:p.averia, urgencia:p.urgencia, estado:p.estado, proveedor:p.proveedor||null,
+      coste:(p.coste==null?null:p.coste), factura:p.factura||null, fecha_cierre:p.fechaCierre||null, fecha_estado:p.fechaEstado||null, notas:p.notas||null });
+    if(error) throw error;
+  }catch(e){ console.error('srvParteInsert', e); await syncAll(); toast('Error al crear parte: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvParteUpdate(id, p, okMsg){
+  try{
+    const { error } = await sbc.from('eq_partes').update({
+      estado:p.estado, proveedor:p.proveedor||null, coste:(p.coste==null?null:p.coste),
+      factura:p.factura||null, fecha_cierre:p.fechaCierre||null, fecha_estado:p.fechaEstado||null, notas:p.notas||null }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('srvParteUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+
+/* ---- helpers ---- */
+function eqAbierto(p){ return p.estado!=='Resuelto' && p.estado!=='No reparable'; }
+function eqEstadoChip(e){
+  const map={'Abierto':'#8A949B','Enviado a proveedor':'#E67E22','Esperando técnico':'#E0A800','Resuelto':'#6E8E00','No reparable':'#C0392B'};
+  const c=map[e]||'#8A949B';
+  return `<span style="font-size:11px;font-weight:700;color:#fff;background:${c};padding:2px 9px;border-radius:20px;white-space:nowrap;display:inline-block">${incEsc(e||'—')}</span>`;
+}
+function eqEquipoStats(id){
+  const ps=(S.partes||[]).filter(p=>p.equipoId===id);
+  return { n:ps.length, coste:ps.reduce((s,p)=>s+(Number(p.coste)||0),0), abiertos:ps.filter(eqAbierto).length };
+}
+
+/* ---- vista del módulo ---- */
+function equiposView(){
+  const sub=(S.sub==='eq_equipos')?'eq_equipos':'eq_partes';
+  const seg=`<div class="seg">
+    <button class="${sub==='eq_partes'?'on':''}" onclick="setSub('eq_partes')">Partes</button>
+    <button class="${sub==='eq_equipos'?'on':''}" onclick="setSub('eq_equipos')">Equipos</button>
+  </div>`;
+  const acts = sub==='eq_partes'
+    ? `<div class="actions"><button class="btn btn-primary" onclick="openParte()">Nuevo parte</button></div>`
+    : `<div class="actions"><button class="btn btn-primary" onclick="openEquipo()">Nuevo equipo</button></div>`;
+  const body = sub==='eq_equipos' ? eqEquiposView() : eqPartesView();
+  return `${moduleHeader('Mantenimiento de equipos', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:14px">
+      <div><div class="section-title">Mantenimiento de equipos</div>
+      <div class="section-sub" style="margin:0">Partes de reparación y coste por equipo.</div></div>
+      ${acts}
+    </div>
+    ${seg}
+    ${body}
+  </div></main>
+  ${S.modal?modalContent():''}`;
+}
+
+function eqPartesFiltered(){
+  let l=(S.partes||[]).slice();
+  if(S.eqFEquipo) l=l.filter(p=>p.equipoId===S.eqFEquipo);
+  if(S.eqFEstado) l=l.filter(p=>p.estado===S.eqFEstado);
+  if(S.eqFUrg)    l=l.filter(p=>p.urgencia===S.eqFUrg);
+  return l;
+}
+function eqPartesView(){
+  const all=S.partes||[];
+  const abiertos=all.filter(eqAbierto).length;
+  const costeTotal=all.reduce((s,p)=>s+(Number(p.coste)||0),0);
+  const kpi=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;opacity:.7">Partes abiertos</div><div style="font-size:28px;font-weight:700">${abiertos}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:150px"><div style="font-size:12px;color:#8A949B">Coste total reparaciones</div><div style="font-size:28px;font-weight:700">${eur(costeTotal)}</div></div>
+  </div>`;
+  const equiposOpts=(S.equipos||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const filtros=`<div class="inc-filters">
+    <select class="inp" onchange="setIncF('eqFEquipo',this.value)"><option value="">Todos los equipos</option>${equiposOpts.map(e=>`<option value="${e.id}" ${S.eqFEquipo===e.id?'selected':''}>${incEsc(e.nombre)}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('eqFEstado',this.value)"><option value="">Todos los estados</option>${EQ_ESTADOS.map(s=>`<option ${S.eqFEstado===s?'selected':''}>${s}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('eqFUrg',this.value)"><option value="">Toda urgencia</option>${['Alta','Media','Baja'].map(u=>`<option ${S.eqFUrg===u?'selected':''}>${u}</option>`).join('')}</select>
+    <span class="muted" style="font-size:12px">${eqPartesFiltered().length} parte(s)</span>
+  </div>`;
+  const list=eqPartesFiltered();
+  if(!list.length) return kpi+filtros+`<div class="muted" style="padding:20px;text-align:center">No hay partes con esos filtros.</div>`;
+  const rows=list.map(p=>`<tr onclick="openParteDet('${p.id}')">
+    <td class="inc-c-fecha">${incEsc((p.fechaApertura||'').slice(0,10))}</td>
+    <td class="inc-c-fecha col-hide-m">${p.fechaCierre?incEsc((p.fechaCierre||'').slice(0,10)):'\u2014'}</td>
+    <td>${incEsc(p.equipoNombre||'—')}</td>
+    <td class="inc-c-det col-hide-m">${incEsc(incPreview(p.averia))}</td>
+    <td class="col-hide-m"><span class="inc-imp imp-${p.urgencia||'Media'}">${p.urgencia||'Media'}</span></td>
+    <td>${eqEstadoChip(p.estado)}</td>
+    <td class="col-hide-m" style="text-align:right;white-space:nowrap">${p.coste!=null?eur(p.coste):'—'}</td>
+  </tr>`).join('');
+  return kpi+filtros+`<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Apertura</th><th class="col-hide-m">Cierre</th><th>Equipo</th><th class="col-hide-m">Avería</th><th class="col-hide-m">Urg.</th><th>Estado</th><th class="col-hide-m" style="text-align:right">Coste</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function eqEquiposView(){
+  const list=(S.equipos||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  if(!list.length) return `<div class="muted" style="padding:20px;text-align:center">Aún no hay equipos. Crea uno con “Nuevo equipo” o al abrir un parte.</div>`;
+  const rows=list.map(e=>{ const s=eqEquipoStats(e.id);
+    return `<tr onclick="verPartesEquipo('${e.id}')">
+      <td><strong>${incEsc(e.nombre)}</strong></td>
+      <td class="col-hide-m">${incEsc(e.tipo||'—')}</td>
+      <td class="col-hide-m">${incEsc(e.ubicacion||'—')}</td>
+      <td style="text-align:right">${s.n}</td>
+      <td style="text-align:right;font-weight:600;white-space:nowrap">${eur(s.coste)}</td>
+      <td class="col-hide-m">${s.abiertos?`<span class="inc-pend">${s.abiertos} abierto${s.abiertos>1?'s':''}</span>`:'<span class="muted" style="font-size:12px">al día</span>'}</td>
+    </tr>`;}).join('');
+  return `<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Equipo</th><th class="col-hide-m">Tipo</th><th class="col-hide-m">Ubicación</th><th style="text-align:right">Partes</th><th style="text-align:right">Coste acum.</th><th class="col-hide-m">Estado</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+function verPartesEquipo(id){ S.eqFEquipo=id; S.eqFEstado=''; S.eqFUrg=''; S.sub='eq_partes'; render(); }
+
+/* ---- alta de parte ---- */
+function openParte(){
+  S.alert='';
+  F={type:'eq_parte', equipoId:'', equipoNuevo:'', tipoNuevo:'', ubicNuevo:'', averia:'', urgencia:'Media',
+     estado:'Abierto', proveedor:'', fecha:todayStr(), coste:'', notas:''};
+  S.modal='eq_parte'; render();
+}
+function eqParteModalContent(){
+  const equipos=(S.equipos||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const nuevo=F.equipoId==='__nuevo__';
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Nuevo parte de reparación</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>Equipo</label>
+        <select class="inp" onchange="setSel('equipoId',this.value)">
+          <option value="">Elige equipo…</option>
+          ${equipos.map(e=>`<option value="${e.id}" ${F.equipoId===e.id?'selected':''}>${incEsc(e.nombre)}${e.ubicacion?` · ${incEsc(e.ubicacion)}`:''}</option>`).join('')}
+          <option value="__nuevo__" ${nuevo?'selected':''}>＋ Nuevo equipo…</option>
+        </select></div>
+      ${nuevo?`<div class="fld"><label>Nombre del equipo nuevo</label><input class="inp" value="${incEsc(F.equipoNuevo||'')}" oninput="setInp('equipoNuevo',this.value)" placeholder="Ej: Sillón gabinete 3"></div>
+        <div class="fld"><label>Tipo</label><select class="inp" onchange="setSel('tipoNuevo',this.value)"><option value="">Elige tipo…</option>${EQ_TIPOS.map(t=>`<option ${F.tipoNuevo===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="fld"><label>Ubicación (opcional)</label><input class="inp" value="${incEsc(F.ubicNuevo||'')}" oninput="setInp('ubicNuevo',this.value)" placeholder="Gabinete / zona"></div>`:''}
+      <div class="fld"><label>¿Qué le pasa? (avería)</label><textarea class="inp" rows="3" oninput="setInp('averia',this.value)" placeholder="Describe el problema.">${incEsc(F.averia||'')}</textarea></div>
+      <div class="fld"><label>Urgencia</label><select class="inp" onchange="setSel('urgencia',this.value)">${['Baja','Media','Alta'].map(u=>`<option ${(F.urgencia||'Media')===u?'selected':''}>${u}</option>`).join('')}</select></div>
+      <div class="fld"><label>Estado</label><select class="inp" onchange="setSel('estado',this.value)">${EQ_ESTADOS.map(s=>`<option ${(F.estado||'Abierto')===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fld"><label>Proveedor / técnico <span class="muted" style="font-weight:400">(a quién se manda o a quién esperamos)</span></label><input class="inp" value="${incEsc(F.proveedor||'')}" oninput="setInp('proveedor',this.value)"></div>
+      <div class="fld"><label>Fecha de apertura</label><input class="inp" type="date" value="${incEsc(F.fecha||todayStr())}" oninput="setInp('fecha',this.value)"></div>
+      <div class="fld"><label>Coste (€) <span class="muted" style="font-weight:400">— opcional, normalmente al cerrar</span></label><input class="inp" inputmode="decimal" value="${incEsc(F.coste||'')}" oninput="setInp('coste',this.value)"></div>
+      <div class="fld"><label>Notas (opcional)</label><textarea class="inp" rows="2" oninput="setInp('notas',this.value)">${incEsc(F.notas||'')}</textarea></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitParte()">Crear parte</button>
+      </div>
+    </div></div></div>`;
+}
+async function commitParte(){
+  let equipoId=F.equipoId, equipoNombre='', equipoNuevoObj=null;
+  if(equipoId==='__nuevo__'){
+    const nom=(F.equipoNuevo||'').trim();
+    if(!nom){ toast('Pon el nombre del equipo nuevo'); return; }
+    equipoId=uid(); equipoNombre=nom;
+    equipoNuevoObj={ id:equipoId, nombre:nom, tipo:F.tipoNuevo||null, ubicacion:(F.ubicNuevo||'').trim()||null, activo:true };
+  } else if(equipoId){
+    const e=(S.equipos||[]).find(x=>x.id===equipoId); equipoNombre=e?e.nombre:'';
+  } else { toast('Elige o crea un equipo'); return; }
+  if(!(F.averia||'').trim()){ toast('Describe la avería'); return; }
+  const cerrado=(F.estado==='Resuelto'||F.estado==='No reparable');
+  const parte={ id:uid(), equipoId, equipoNombre, ts:tsFrom(F.fecha||todayStr()), fechaApertura:(F.fecha||todayStr()),
+    abiertoPor:S.user.nombre, averia:(F.averia||'').trim(), urgencia:F.urgencia||'Media', estado:F.estado||'Abierto',
+    proveedor:(F.proveedor||'').trim(), coste:(F.coste!==''&&F.coste!=null)?parseFloat(String(F.coste).replace(',','.')):null,
+    factura:'', fechaCierre:(cerrado?(F.fecha||todayStr()):null), fechaEstado:(F.fecha||todayStr()), notas:(F.notas||'').trim() };
+  if(equipoNuevoObj) S.equipos.push(equipoNuevoObj);
+  S.partes.unshift(parte);
+  closeModal(); S.sub='eq_partes'; render();
+  try{ if(equipoNuevoObj) await srvEquipoUpsert(equipoNuevoObj); }catch(e){ return; }
+  await srvParteInsert(parte, 'Parte creado');
+}
+
+/* ---- detalle / edición de parte ---- */
+function openParteDet(id){
+  const p=(S.partes||[]).find(x=>x.id===id); if(!p) return;
+  F={type:'eq_parte_edit', id, estado:p.estado, proveedor:p.proveedor||'', coste:(p.coste==null?'':String(p.coste)),
+     factura:p.factura||'', notas:p.notas||'', fechaCierre:p.fechaCierre||''};
+  S.modal='eq_parte_edit'; render();
+}
+function eqParteEditModalContent(){
+  const p=(S.partes||[]).find(x=>x.id===F.id)||{};
+  const cerrado=(F.estado==='Resuelto'||F.estado==='No reparable');
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Parte de reparación</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="inc-top" style="margin-bottom:8px">${eqEstadoChip(p.estado)} <span class="inc-imp imp-${p.urgencia||'Media'}">${p.urgencia||'Media'}</span></div>
+      <div class="inc-meta" style="margin:0 0 8px"><strong>${incEsc(p.equipoNombre||'—')}</strong> · abierto ${incEsc(p.fechaApertura||'')} por ${incEsc(p.abiertoPor||'—')}${p.fechaCierre?` · cerrado ${incEsc(p.fechaCierre)}`:''}</div>
+      <div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(p.averia||'')}</div>
+      <div class="fld"><label>Estado</label><select class="inp" onchange="setSel('estado',this.value)">${EQ_ESTADOS.map(s=>`<option ${F.estado===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fld"><label>Proveedor / técnico</label><input class="inp" value="${incEsc(F.proveedor||'')}" oninput="setInp('proveedor',this.value)"></div>
+      ${cerrado?`<div class="fld"><label>Fecha de cierre</label><input class="inp" type="date" value="${incEsc(F.fechaCierre||todayStr())}" oninput="setInp('fechaCierre',this.value)"></div>`:''}
+      <div class="fld"><label>Coste (€)</label><input class="inp" inputmode="decimal" value="${incEsc(F.coste||'')}" oninput="setInp('coste',this.value)"></div>
+      <div class="fld"><label>Nº de factura (opcional)</label><input class="inp" value="${incEsc(F.factura||'')}" oninput="setInp('factura',this.value)"></div>
+      <div class="fld"><label>Notas</label><textarea class="inp" rows="3" oninput="setInp('notas',this.value)">${incEsc(F.notas||'')}</textarea></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+        <button class="btn btn-primary" onclick="commitParteUpdate()">Guardar</button>
+      </div>
+    </div></div></div>`;
+}
+function commitParteUpdate(){
+  const id=F.id; const p=(S.partes||[]).find(x=>x.id===id); if(!p) return;
+  const cerrado=(F.estado==='Resuelto'||F.estado==='No reparable');
+  p.estado=F.estado; p.proveedor=(F.proveedor||'').trim();
+  p.coste=(F.coste!==''&&F.coste!=null)?parseFloat(String(F.coste).replace(',','.')):null;
+  p.factura=(F.factura||'').trim(); p.notas=(F.notas||'').trim();
+  p.fechaEstado=F.fechaEstado||todayStr(); p.fechaCierre=cerrado?p.fechaEstado:null;
+  closeModal(); render();
+  srvParteUpdate(id, p, 'Parte actualizado');
+}
+
+/* ---- alta de equipo ---- */
+function openEquipo(){
+  S.alert='';
+  F={type:'eq_equipo', nombre:'', tipo:'', ubicacion:'', marcaModelo:'', nserie:'', proveedor:'', compra:'', garantiaHasta:''};
+  S.modal='eq_equipo'; render();
+}
+function eqEquipoModalContent(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Nuevo equipo</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)" placeholder="Ej: Autoclave esterilización"></div>
+      <div class="fld"><label>Tipo</label><select class="inp" onchange="setSel('tipo',this.value)"><option value="">Elige tipo…</option>${EQ_TIPOS.map(t=>`<option ${F.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="fld"><label>Ubicación</label><input class="inp" value="${incEsc(F.ubicacion||'')}" oninput="setInp('ubicacion',this.value)" placeholder="Gabinete / zona"></div>
+      <div class="fld"><label>Marca y modelo (opcional)</label><input class="inp" value="${incEsc(F.marcaModelo||'')}" oninput="setInp('marcaModelo',this.value)"></div>
+      <div class="fld"><label>Nº de serie (opcional)</label><input class="inp" value="${incEsc(F.nserie||'')}" oninput="setInp('nserie',this.value)"></div>
+      <div class="fld"><label>Proveedor / SAT habitual (opcional)</label><input class="inp" value="${incEsc(F.proveedor||'')}" oninput="setInp('proveedor',this.value)"></div>
+      <div class="fld"><label>Fecha de compra (opcional)</label><input class="inp" type="date" value="${incEsc(F.compra||'')}" oninput="setInp('compra',this.value)"></div>
+      <div class="fld"><label>Garantía hasta (opcional)</label><input class="inp" type="date" value="${incEsc(F.garantiaHasta||'')}" oninput="setInp('garantiaHasta',this.value)"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitEquipo()">Crear equipo</button>
+      </div>
+    </div></div></div>`;
+}
+function commitEquipo(){
+  const nom=(F.nombre||'').trim(); if(!nom){ toast('Pon el nombre del equipo'); return; }
+  const e={ id:uid(), nombre:nom, tipo:F.tipo||null, ubicacion:(F.ubicacion||'').trim()||null,
+    marcaModelo:(F.marcaModelo||'').trim()||null, nserie:(F.nserie||'').trim()||null, proveedor:(F.proveedor||'').trim()||null,
+    compra:F.compra||null, garantiaHasta:F.garantiaHasta||null, activo:true };
+  S.equipos.push(e);
+  closeModal(); S.sub='eq_equipos'; render();
+  srvEquipoUpsert(e, 'Equipo creado');
+}
+
+/* ---- enganches al núcleo (envoltura: gana la última) ---- */
+const _modalContent_eq = modalContent;
+modalContent = function(){
+  if(F.type==='eq_parte') return eqParteModalContent();
+  if(F.type==='eq_parte_edit') return eqParteEditModalContent();
+  if(F.type==='eq_equipo') return eqEquipoModalContent();
+  return _modalContent_eq();
+};
+const _appView_eqmod = appView;
+appView = function(){
+  if(S.module==='equipos'){ if(!canAccess('equipos')){ S.module=null; return homeView(); } return equiposView(); }
+  return _appView_eqmod();
+};
+
+/* ===== FIN EQUIPOS ===== */
+
+/* ===== EQUIPOS v2 ===== */
+/* ============================================================================
+   LUCAI · EQUIPOS v2 — "fecha del estado" + columna Días abierto
+   Redefine eqPartesView, openParteDet y eqParteEditModalContent (gana la última).
+   ============================================================================ */
+
+function parteDias(p){
+  if(!p.fechaApertura) return null;
+  const cerrado=(p.estado==='Resuelto'||p.estado==='No reparable');
+  const end = cerrado ? (p.fechaEstado||p.fechaApertura) : todayStr();
+  const d = Math.round((Date.parse(end)-Date.parse(p.fechaApertura))/86400000);
+  return isNaN(d)?null:Math.max(0,d);
+}
+function parteDiasCell(p){
+  const d=parteDias(p); if(d==null) return '—';
+  const cerrado=(p.estado==='Resuelto'||p.estado==='No reparable');
+  if(cerrado) return `<span class="muted">${d} d</span>`;
+  const col = d>14?'#C0392B':(d>7?'#B8860B':'#333F48');
+  return `<span style="font-weight:700;color:${col}">${d} d</span>`;
+}
+
+function eqPartesView(){
+  const all=S.partes||[];
+  const abiertos=all.filter(eqAbierto).length;
+  const costeTotal=all.reduce((s,p)=>s+(Number(p.coste)||0),0);
+  const kpi=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;opacity:.7">Partes abiertos</div><div style="font-size:28px;font-weight:700">${abiertos}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:150px"><div style="font-size:12px;color:#8A949B">Coste total reparaciones</div><div style="font-size:28px;font-weight:700">${eur(costeTotal)}</div></div>
+  </div>`;
+  const equiposOpts=(S.equipos||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const filtros=`<div class="inc-filters">
+    <select class="inp" onchange="setIncF('eqFEquipo',this.value)"><option value="">Todos los equipos</option>${equiposOpts.map(e=>`<option value="${e.id}" ${S.eqFEquipo===e.id?'selected':''}>${incEsc(e.nombre)}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('eqFEstado',this.value)"><option value="">Todos los estados</option>${EQ_ESTADOS.map(s=>`<option ${S.eqFEstado===s?'selected':''}>${s}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('eqFUrg',this.value)"><option value="">Toda urgencia</option>${['Alta','Media','Baja'].map(u=>`<option ${S.eqFUrg===u?'selected':''}>${u}</option>`).join('')}</select>
+    <span class="muted" style="font-size:12px">${eqPartesFiltered().length} parte(s)</span>
+  </div>`;
+  const list=eqPartesFiltered();
+  if(!list.length) return kpi+filtros+`<div class="muted" style="padding:20px;text-align:center">No hay partes con esos filtros.</div>`;
+  const rows=list.map(p=>`<tr onclick="openParteDet('${p.id}')">
+    <td class="inc-c-fecha">${incEsc((p.fechaApertura||'').slice(0,10))}</td>
+    <td>${incEsc(p.equipoNombre||'—')}</td>
+    <td class="inc-c-det col-hide-m">${incEsc(incPreview(p.averia))}</td>
+    <td class="col-hide-m"><span class="inc-imp imp-${p.urgencia||'Media'}">${p.urgencia||'Media'}</span></td>
+    <td>${eqEstadoChip(p.estado)}</td>
+    <td class="inc-c-fecha col-hide-m">${p.fechaEstado?incEsc((p.fechaEstado||'').slice(0,10)):'—'}</td>
+    <td style="text-align:right">${parteDiasCell(p)}</td>
+    <td class="col-hide-m" style="text-align:right;white-space:nowrap">${p.coste!=null?eur(p.coste):'—'}</td>
+  </tr>`).join('');
+  return kpi+filtros+`<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Apertura</th><th>Equipo</th><th class="col-hide-m">Avería</th><th class="col-hide-m">Urg.</th><th>Estado</th><th class="col-hide-m">Fecha estado</th><th style="text-align:right">Días</th><th class="col-hide-m" style="text-align:right">Coste</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function openParteDet(id){
+  const p=(S.partes||[]).find(x=>x.id===id); if(!p) return;
+  F={type:'eq_parte_edit', id, estado:p.estado, proveedor:p.proveedor||'', coste:(p.coste==null?'':String(p.coste)),
+     factura:p.factura||'', notas:p.notas||'', fechaEstado:(p.fechaEstado||p.fechaApertura||todayStr())};
+  S.modal='eq_parte_edit'; render();
+}
+function setParteEstado(v){ F.estado=v; F.fechaEstado=todayStr(); render(); }
+
+function eqParteEditModalContent(){
+  const p=(S.partes||[]).find(x=>x.id===F.id)||{};
+  const d=parteDias(Object.assign({}, p, {estado:F.estado, fechaEstado:F.fechaEstado}));
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Parte de reparación</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="inc-top" style="margin-bottom:8px">${eqEstadoChip(F.estado)} <span class="inc-imp imp-${p.urgencia||'Media'}">${p.urgencia||'Media'}</span></div>
+      <div class="inc-meta" style="margin:0 0 8px"><strong>${incEsc(p.equipoNombre||'—')}</strong> · abierto ${incEsc(p.fechaApertura||'')} por ${incEsc(p.abiertoPor||'—')}${d!=null?` · ${d} días`:''}</div>
+      <div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(p.averia||'')}</div>
+      <div class="fld"><label>Estado</label><select class="inp" onchange="setParteEstado(this.value)">${EQ_ESTADOS.map(s=>`<option ${F.estado===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fld"><label>Fecha del estado</label><input class="inp" type="date" value="${incEsc(F.fechaEstado||todayStr())}" oninput="setInp('fechaEstado',this.value)"></div>
+      <div class="fld"><label>Proveedor / técnico</label><input class="inp" value="${incEsc(F.proveedor||'')}" oninput="setInp('proveedor',this.value)"></div>
+      <div class="fld"><label>Coste (€)</label><input class="inp" inputmode="decimal" value="${incEsc(F.coste||'')}" oninput="setInp('coste',this.value)"></div>
+      <div class="fld"><label>Nº de factura (opcional)</label><input class="inp" value="${incEsc(F.factura||'')}" oninput="setInp('factura',this.value)"></div>
+      <div class="fld"><label>Notas</label><textarea class="inp" rows="3" oninput="setInp('notas',this.value)">${incEsc(F.notas||'')}</textarea></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+        <button class="btn btn-primary" onclick="commitParteUpdate()">Guardar</button>
+      </div>
+    </div></div></div>`;
+}
+
+/* ===== FIN EQUIPOS v2 ===== */
+
+/* ===== EQUIPOS v3 ===== */
+/* ============================================================================
+   LUCAI · EQUIPOS v3 — edición en línea (estado + fecha) y botón Editar
+   ============================================================================ */
+
+function parteEstadoInline(id, v){
+  const p=(S.partes||[]).find(x=>x.id===id); if(!p) return;
+  p.estado=v; p.fechaEstado=todayStr();
+  const cerrado=(v==='Resuelto'||v==='No reparable'); p.fechaCierre=cerrado?p.fechaEstado:null;
+  render();
+  srvParteUpdate(id, p);
+}
+function parteFechaInline(id, v){
+  const p=(S.partes||[]).find(x=>x.id===id); if(!p) return;
+  p.fechaEstado=v;
+  const cerrado=(p.estado==='Resuelto'||p.estado==='No reparable'); p.fechaCierre=cerrado?v:null;
+  render();
+  srvParteUpdate(id, p);
+}
+
+function eqPartesView(){
+  const all=S.partes||[];
+  const abiertos=all.filter(eqAbierto).length;
+  const costeTotal=all.reduce((s,p)=>s+(Number(p.coste)||0),0);
+  const kpi=`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;opacity:.7">Partes abiertos</div><div style="font-size:28px;font-weight:700">${abiertos}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:150px"><div style="font-size:12px;color:#8A949B">Coste total reparaciones</div><div style="font-size:28px;font-weight:700">${eur(costeTotal)}</div></div>
+  </div>`;
+  const equiposOpts=(S.equipos||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const filtros=`<div class="inc-filters">
+    <select class="inp" onchange="setIncF('eqFEquipo',this.value)"><option value="">Todos los equipos</option>${equiposOpts.map(e=>`<option value="${e.id}" ${S.eqFEquipo===e.id?'selected':''}>${incEsc(e.nombre)}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('eqFEstado',this.value)"><option value="">Todos los estados</option>${EQ_ESTADOS.map(s=>`<option ${S.eqFEstado===s?'selected':''}>${s}</option>`).join('')}</select>
+    <select class="inp" onchange="setIncF('eqFUrg',this.value)"><option value="">Toda urgencia</option>${['Alta','Media','Baja'].map(u=>`<option ${S.eqFUrg===u?'selected':''}>${u}</option>`).join('')}</select>
+    <span class="muted" style="font-size:12px">${eqPartesFiltered().length} parte(s)</span>
+  </div>`;
+  const list=eqPartesFiltered();
+  if(!list.length) return kpi+filtros+`<div class="muted" style="padding:20px;text-align:center">No hay partes con esos filtros.</div>`;
+  const estSel=(p)=>`<select class="inp" style="border-left:5px solid ${eqEstadoColor(p.estado)};background:${eqEstadoColor(p.estado)}22;font-weight:600;padding:6px 8px;font-size:12.5px;width:auto;min-width:155px" onchange="parteEstadoInline('${p.id}',this.value)">${EQ_ESTADOS.map(s=>`<option ${p.estado===s?'selected':''}>${s}</option>`).join('')}</select>`;
+  const rows=list.map(p=>`<tr>
+    <td class="inc-c-fecha">${incEsc((p.fechaApertura||'').slice(0,10))}</td>
+    <td>${incEsc(p.equipoNombre||'—')}</td>
+    <td class="inc-c-det col-hide-m">${incEsc(incPreview(p.averia))}</td>
+    <td class="col-hide-m"><span class="inc-imp imp-${p.urgencia||'Media'}">${p.urgencia||'Media'}</span></td>
+    <td>${estSel(p)}</td>
+    <td class="inc-c-fecha col-hide-m"><input type="date" class="inp" style="padding:6px 8px;font-size:12.5px;width:auto" value="${incEsc((p.fechaEstado||'').slice(0,10))}" onchange="parteFechaInline('${p.id}',this.value)"></td>
+    <td style="text-align:right">${parteDiasCell(p)}</td>
+    <td class="col-hide-m" style="text-align:right;white-space:nowrap">${p.coste!=null?eur(p.coste):'—'}</td>
+    <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="openParteDet('${p.id}')">Editar</button></td>
+  </tr>`).join('');
+  return kpi+filtros+`<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Apertura</th><th>Equipo</th><th class="col-hide-m">Avería</th><th class="col-hide-m">Urg.</th><th>Estado</th><th class="col-hide-m">Fecha estado</th><th style="text-align:right">Días</th><th class="col-hide-m" style="text-align:right">Coste</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+/* ===== FIN EQUIPOS v3 ===== */
+
+function eqEstadoColor(e){ return ({"Abierto":"#8A949B","Enviado a proveedor":"#E67E22","Esperando técnico":"#E0A800","Resuelto":"#6E8E00","No reparable":"#C0392B"}[e]||"#8A949B"); }
+
+/* === LUCAI EQUIPOS v4 (inicio) === */
+/* ============================================================================
+   LUCAI · EQUIPOS v4 — editar equipo + columnas compra/garantía
+   ============================================================================ */
+
+function eqEquiposView(){
+  const list=(S.equipos||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  if(!list.length) return `<div class="muted" style="padding:20px;text-align:center">Aún no hay equipos. Crea uno con “Nuevo equipo” o al abrir un parte.</div>`;
+  const today=todayStr();
+  const rows=list.map(e=>{ const s=eqEquipoStats(e.id);
+    const garOk = e.garantiaHasta && e.garantiaHasta>=today;
+    return `<tr onclick="verPartesEquipo('${e.id}')">
+      <td><strong>${incEsc(e.nombre)}</strong></td>
+      <td class="col-hide-m">${incEsc(e.tipo||'—')}</td>
+      <td class="col-hide-m">${incEsc(e.ubicacion||'—')}</td>
+      <td class="col-hide-m inc-c-fecha">${e.compra?incEsc(e.compra):'—'}</td>
+      <td class="col-hide-m inc-c-fecha">${e.garantiaHasta?`<span style="color:${garOk?'#6E8E00':'#8A949B'}">${incEsc(e.garantiaHasta)}${garOk?' ✓':''}</span>`:'—'}</td>
+      <td class="col-hide-m" style="text-align:right">${s.n}</td>
+      <td style="text-align:right;font-weight:600;white-space:nowrap">${eur(s.coste)}</td>
+      <td class="col-hide-m">${s.abiertos?`<span class="inc-pend">${s.abiertos} abierto${s.abiertos>1?'s':''}</span>`:'<span class="muted" style="font-size:12px">al día</span>'}</td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); openEquipoEdit('${e.id}')">Editar</button></td>
+    </tr>`;}).join('');
+  return `<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Equipo</th><th class="col-hide-m">Tipo</th><th class="col-hide-m">Ubicación</th><th class="col-hide-m">Compra</th><th class="col-hide-m">Garantía</th><th class="col-hide-m" style="text-align:right">Partes</th><th style="text-align:right">Coste acum.</th><th class="col-hide-m">Estado</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function openEquipoEdit(id){
+  const e=(S.equipos||[]).find(x=>x.id===id); if(!e) return;
+  F={type:'eq_equipo_edit', id, nombre:e.nombre||'', tipo:e.tipo||'', ubicacion:e.ubicacion||'',
+     marcaModelo:e.marcaModelo||'', nserie:e.nserie||'', proveedor:e.proveedor||'', compra:e.compra||'', garantiaHasta:e.garantiaHasta||''};
+  S.modal='eq_equipo_edit'; render();
+}
+function eqEquipoEditModalContent(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Editar equipo</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)"></div>
+      <div class="fld"><label>Tipo</label><select class="inp" onchange="setSel('tipo',this.value)"><option value="">Elige tipo…</option>${EQ_TIPOS.map(t=>`<option ${F.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="fld"><label>Ubicación</label><input class="inp" value="${incEsc(F.ubicacion||'')}" oninput="setInp('ubicacion',this.value)"></div>
+      <div class="fld"><label>Marca y modelo (opcional)</label><input class="inp" value="${incEsc(F.marcaModelo||'')}" oninput="setInp('marcaModelo',this.value)"></div>
+      <div class="fld"><label>Nº de serie (opcional)</label><input class="inp" value="${incEsc(F.nserie||'')}" oninput="setInp('nserie',this.value)"></div>
+      <div class="fld"><label>Proveedor / SAT habitual (opcional)</label><input class="inp" value="${incEsc(F.proveedor||'')}" oninput="setInp('proveedor',this.value)"></div>
+      <div class="fld"><label>Fecha de compra (opcional)</label><input class="inp" type="date" value="${incEsc(F.compra||'')}" oninput="setInp('compra',this.value)"></div>
+      <div class="fld"><label>Garantía hasta (opcional)</label><input class="inp" type="date" value="${incEsc(F.garantiaHasta||'')}" oninput="setInp('garantiaHasta',this.value)"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitEquipoEdit()">Guardar cambios</button>
+      </div>
+    </div></div></div>`;
+}
+function commitEquipoEdit(){
+  const id=F.id; const e=(S.equipos||[]).find(x=>x.id===id); if(!e) return;
+  const nom=(F.nombre||'').trim(); if(!nom){ toast('Pon el nombre del equipo'); return; }
+  e.nombre=nom; e.tipo=F.tipo||null; e.ubicacion=(F.ubicacion||'').trim()||null;
+  e.marcaModelo=(F.marcaModelo||'').trim()||null; e.nserie=(F.nserie||'').trim()||null;
+  e.proveedor=(F.proveedor||'').trim()||null; e.compra=F.compra||null; e.garantiaHasta=F.garantiaHasta||null;
+  (S.partes||[]).forEach(p=>{ if(p.equipoId===id) p.equipoNombre=nom; });
+  closeModal(); render();
+  srvEquipoEdit(e);
+}
+async function srvEquipoEdit(e){
+  try{
+    const { error } = await sbc.from('eq_equipos').upsert({
+      id:e.id, nombre:e.nombre, tipo:e.tipo||null, ubicacion:e.ubicacion||null,
+      marca_modelo:e.marcaModelo||null, nserie:e.nserie||null, proveedor:e.proveedor||null,
+      compra:e.compra||null, garantia_hasta:e.garantiaHasta||null, activo:e.activo!==false }, { onConflict:'id' });
+    if(error) throw error;
+    await sbc.from('eq_partes').update({ equipo_nombre:e.nombre }).eq('equipo_id', e.id);
+  }catch(err){ console.error('srvEquipoEdit', err); await syncAll(); toast('Error al guardar: '+(err.message||err)); return; }
+  await loadFromDB(); render(); toast('Equipo actualizado');
+}
+
+const _modalContent_eqe = modalContent;
+modalContent = function(){ if(F.type==='eq_equipo_edit') return eqEquipoEditModalContent(); return _modalContent_eqe(); };
+
+/* === LUCAI EQUIPOS v4 (fin) === */
+
+/* === LUCAI EQUIPOS v5 (inicio) === */
+/* ============================================================================
+   LUCAI · EQUIPOS v5 — dar de baja / reactivar equipo
+   ============================================================================ */
+
+function eqEquiposView(){
+  const all=(S.equipos||[]).slice();
+  if(!all.length) return `<div class="muted" style="padding:20px;text-align:center">Aún no hay equipos. Crea uno con “Nuevo equipo” o al abrir un parte.</div>`;
+  const activos=all.filter(e=>e.activo!==false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const bajas  =all.filter(e=>e.activo===false).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const today=todayStr();
+  const verBajas=!!S.eqVerBajas;
+  const rowOf=(e,baja)=>{ const s=eqEquipoStats(e.id); const garOk=e.garantiaHasta&&e.garantiaHasta>=today;
+    return `<tr onclick="verPartesEquipo('${e.id}')"${baja?' style="opacity:.5"':''}>
+      <td><strong>${incEsc(e.nombre)}</strong>${baja?' <span style="font-size:11px;font-weight:600;color:#C0392B;border:1px solid #C0392B;border-radius:6px;padding:1px 6px;margin-left:6px">De baja</span>':''}</td>
+      <td class="col-hide-m">${incEsc(e.tipo||'—')}</td>
+      <td class="col-hide-m">${incEsc(e.ubicacion||'—')}</td>
+      <td class="col-hide-m inc-c-fecha">${e.compra?incEsc(e.compra):'—'}</td>
+      <td class="col-hide-m inc-c-fecha">${e.garantiaHasta?`<span style="color:${garOk?'#6E8E00':'#8A949B'}">${incEsc(e.garantiaHasta)}${garOk?' ✓':''}</span>`:'—'}</td>
+      <td class="col-hide-m" style="text-align:right">${s.n}</td>
+      <td style="text-align:right;font-weight:600;white-space:nowrap">${eur(s.coste)}</td>
+      <td class="col-hide-m">${baja?'<span class="muted" style="font-size:12px">—</span>':(s.abiertos?`<span class="inc-pend">${s.abiertos} abierto${s.abiertos>1?'s':''}</span>`:'<span class="muted" style="font-size:12px">al día</span>')}</td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); openEquipoEdit('${e.id}')">${baja?'Ver / reactivar':'Editar'}</button></td>
+    </tr>`;};
+  let rows=activos.map(e=>rowOf(e,false)).join('');
+  if(verBajas) rows+=bajas.map(e=>rowOf(e,true)).join('');
+  const toggle = bajas.length? `<div style="margin:0 0 10px"><label class="muted" style="font-size:13px;cursor:pointer"><input type="checkbox" ${verBajas?'checked':''} onchange="S.eqVerBajas=this.checked; render()" style="vertical-align:middle;margin-right:6px">Mostrar equipos dados de baja (${bajas.length})</label></div>` : '';
+  return toggle+`<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Equipo</th><th class="col-hide-m">Tipo</th><th class="col-hide-m">Ubicación</th><th class="col-hide-m">Compra</th><th class="col-hide-m">Garantía</th><th class="col-hide-m" style="text-align:right">Partes</th><th style="text-align:right">Coste acum.</th><th class="col-hide-m">Estado</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function openEquipoEdit(id){
+  const e=(S.equipos||[]).find(x=>x.id===id); if(!e) return;
+  F={type:'eq_equipo_edit', id, nombre:e.nombre||'', tipo:e.tipo||'', ubicacion:e.ubicacion||'',
+     marcaModelo:e.marcaModelo||'', nserie:e.nserie||'', proveedor:e.proveedor||'', compra:e.compra||'',
+     garantiaHasta:e.garantiaHasta||'', activo:e.activo!==false};
+  S.modal='eq_equipo_edit'; render();
+}
+
+function eqEquipoEditModalContent(){
+  const baja = F.activo===false;
+  const banner = baja ? `<div style="background:#FBEAEA;border:1px solid #E3B7B2;color:#8A2A20;border-radius:8px;padding:8px 10px;font-size:13px;margin:0 0 12px">Este equipo está <strong>dado de baja</strong>. Se conserva su historial y su coste acumulado. Puedes reactivarlo cuando quieras.</div>` : '';
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Editar equipo</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${banner}
+      <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)"></div>
+      <div class="fld"><label>Tipo</label><select class="inp" onchange="setSel('tipo',this.value)"><option value="">Elige tipo…</option>${EQ_TIPOS.map(t=>`<option ${F.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="fld"><label>Ubicación</label><input class="inp" value="${incEsc(F.ubicacion||'')}" oninput="setInp('ubicacion',this.value)"></div>
+      <div class="fld"><label>Marca y modelo (opcional)</label><input class="inp" value="${incEsc(F.marcaModelo||'')}" oninput="setInp('marcaModelo',this.value)"></div>
+      <div class="fld"><label>Nº de serie (opcional)</label><input class="inp" value="${incEsc(F.nserie||'')}" oninput="setInp('nserie',this.value)"></div>
+      <div class="fld"><label>Proveedor / SAT habitual (opcional)</label><input class="inp" value="${incEsc(F.proveedor||'')}" oninput="setInp('proveedor',this.value)"></div>
+      <div class="fld"><label>Fecha de compra (opcional)</label><input class="inp" type="date" value="${incEsc(F.compra||'')}" oninput="setInp('compra',this.value)"></div>
+      <div class="fld"><label>Garantía hasta (opcional)</label><input class="inp" type="date" value="${incEsc(F.garantiaHasta||'')}" oninput="setInp('garantiaHasta',this.value)"></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
+        ${baja
+          ? `<button class="btn btn-ghost" style="color:#6E8E00;border-color:#6E8E00" onclick="reactivarEquipo()">Reactivar equipo</button>`
+          : `<button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="darBajaEquipo()">Dar de baja</button>`}
+        <div style="flex:1"></div>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitEquipoEdit()">Guardar cambios</button>
+      </div>
+    </div></div></div>`;
+}
+
+function darBajaEquipo(){ setEquipoActivo(F.id,false); }
+function reactivarEquipo(){ setEquipoActivo(F.id,true); }
+function setEquipoActivo(id,activo){
+  const e=(S.equipos||[]).find(x=>x.id===id); if(!e) return;
+  e.activo=activo;
+  if(!activo) S.eqVerBajas=true;
+  closeModal(); render();
+  srvEquipoEdit(e);
+}
+
+/* === LUCAI EQUIPOS v5 (fin) === */
+
+
+/* ===== MÓDULO PRESUPUESTOS ===== */
+/* ============================================================================
+   LUCAI · PRESUPUESTOS RECHAZADOS
+   Registrar cada presupuesto que se cae: importe, área, días hasta el rechazo,
+   doctor, coordinadora y motivo(s). Panel de indicadores por motivo, área,
+   doctor y coordinadora (nº de casos e importe perdido). Solo dirección.
+   ============================================================================ */
+
+const PRES_AREAS = ['Implantes','Prótesis removible','Puentes','Estética','Ortodoncia','RMR'];
+const PRES_MOTIVOS = [
+  'Precio (lo ve caro)',
+  'No percibe el valor / no lo ve necesario',
+  'Se lo piensa / lo consultará',
+  'Pide otra opinión / segundas valoraciones',
+  'Se va a otra clínica',
+  'Problema de financiación',
+  'Miedo / ansiedad al tratamiento',
+  'Motivos de salud',
+  'No es prioritario ahora',
+  'No contactamos / no localizable',
+  'Otro'
+];
+const COORDINADORAS = ['Encarna Garcia','Noemi Martinez','Cristina Vazquez'];
+
+/* estado del módulo */
+if(!Array.isArray(S.presupuestos)) S.presupuestos = [
+  {id:uid(), fechaPresup:'2026-04-02', fechaRechazo:'2026-04-29', importe:4200, area:'Implantes',  pacCod:'10654', pacNombre:'Antonio Pérez',   doctor:'Dr. Javier Ruiz',     coordinadora:'Paqui Soler', motivos:['Precio (lo ve caro)','Problema de financiación'], explicacion:'Le encaja el plan pero no puede asumir el pago ahora; pediría financiación a 24 meses.', registradoPor:'David Lucas', ts:'2026-04-29 12:10'},
+  {id:uid(), fechaPresup:'2026-04-15', fechaRechazo:'2026-05-06', importe:2950, area:'Ortodoncia',  pacCod:'10888', pacNombre:'Lucía Gómez',     doctor:'Dra. Laura Fernández',coordinadora:'Encarna',     motivos:['Se lo piensa / lo consultará'], explicacion:'Quiere hablarlo con su pareja antes de empezar.', registradoPor:'David Lucas', ts:'2026-05-06 17:25'},
+  {id:uid(), fechaPresup:'2026-04-20', fechaRechazo:'2026-05-19', importe:1800, area:'Estética',    pacCod:'10921', pacNombre:'Marta Ruiz',     doctor:'Dra. Ana Gómez',      coordinadora:'Paqui Soler', motivos:['No percibe el valor / no lo ve necesario'], explicacion:'No ve necesario el blanqueamiento + carillas que se le propuso.', registradoPor:'Laura Fernández', ts:'2026-05-19 10:40'},
+  {id:uid(), fechaPresup:'2026-05-02', fechaRechazo:'2026-05-09', importe:5600, area:'Implantes',   pacCod:'11003', pacNombre:'José Martín',    doctor:'Dr. Javier Ruiz',     coordinadora:'Encarna',     motivos:['Precio (lo ve caro)','Pide otra opinión / segundas valoraciones'], explicacion:'Le pareció elevado y va a pedir presupuesto en otro sitio.', registradoPor:'David Lucas', ts:'2026-05-09 13:05'},
+  {id:uid(), fechaPresup:'2026-05-10', fechaRechazo:'2026-06-04', importe:1200, area:'Prótesis removible', pacCod:'11050', pacNombre:'Carmen Soto', doctor:'Dra. Laura Fernández',coordinadora:'Paqui Soler', motivos:['No contactamos / no localizable'], explicacion:'No responde a las llamadas ni al WhatsApp de seguimiento.', registradoPor:'David Lucas', ts:'2026-06-04 09:30'},
+];
+S.presF = S.presF || {area:'',doctor:'',coord:'',motivo:'',desde:'',hasta:''};
+
+/* activar módulo en el hub */
+(function(){
+  if(!MODULES.find(x=>x.id==='presupuestos')){
+    MODULES.splice(1,0,{id:'presupuestos', nombre:'Presupuestos rechazados', ini:'P',
+      desc:'Control de presupuestos que se caen: importe, área, días hasta el rechazo y motivo. Panel para entender por qué perdemos pacientes y cuánto.', estado:'activo'});
+  }
+})();
+
+/* ---- persistencia ---- */
+const _loadFromDB_pres = loadFromDB;
+loadFromDB = async function(){
+  await _loadFromDB_pres();
+  try{
+    const r = await sbc.from('pres_presupuestos').select('*').order('created_at',{ascending:false});
+    if(r.data){
+      S.presupuestos = r.data.map(x=>({
+        id:x.id, fechaPresup:x.fecha_presupuesto, fechaRechazo:x.fecha_rechazo,
+        importe:Number(x.importe)||0, area:x.area, pacCod:x.pac_cod, pacNombre:x.pac_nombre,
+        doctor:x.doctor, coordinadora:x.coordinadora,
+        motivos: Array.isArray(x.motivos) ? x.motivos : (function(){ try{ return x.motivos?JSON.parse(x.motivos):[]; }catch(_){ return []; } })(),
+        explicacion:x.explicacion, registradoPor:x.registrado_por, ts:x.created_at
+      }));
+    }
+  }catch(e){ console.error('loadPresupuestos', e); }
+};
+
+async function srvPresInsert(p, okMsg){
+  try{
+    const { error } = await sbc.from('pres_presupuestos').insert({
+      id:p.id, fecha_presupuesto:p.fechaPresup, fecha_rechazo:p.fechaRechazo, importe:p.importe,
+      area:p.area, pac_cod:p.pacCod||null, pac_nombre:p.pacNombre||null, doctor:p.doctor||null,
+      coordinadora:p.coordinadora||null, motivos:p.motivos, explicacion:p.explicacion||null, registrado_por:p.registradoPor||null });
+    if(error) throw error;
+  }catch(e){ console.error('srvPresInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvPresUpdate(id, p, okMsg){
+  try{
+    const { error } = await sbc.from('pres_presupuestos').update({
+      fecha_presupuesto:p.fechaPresup, fecha_rechazo:p.fechaRechazo, importe:p.importe, area:p.area,
+      pac_cod:p.pacCod||null, pac_nombre:p.pacNombre||null, doctor:p.doctor||null,
+      coordinadora:p.coordinadora||null, motivos:p.motivos, explicacion:p.explicacion||null }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('srvPresUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+
+/* ---- cálculos ---- */
+function presDias(p){
+  if(!p.fechaPresup || !p.fechaRechazo) return null;
+  const d = Math.round((Date.parse(p.fechaRechazo)-Date.parse(p.fechaPresup))/86400000);
+  return isNaN(d)?null:Math.max(0,d);
+}
+function presMatch(p){
+  const f=S.presF;
+  if(f.area && p.area!==f.area) return false;
+  if(f.doctor && p.doctor!==f.doctor) return false;
+  if(f.coord && p.coordinadora!==f.coord) return false;
+  if(f.motivo && !(p.motivos||[]).includes(f.motivo)) return false;
+  if(f.desde && (p.fechaRechazo||'') < f.desde) return false;
+  if(f.hasta && (p.fechaRechazo||'') > f.hasta) return false;
+  return true;
+}
+function presFiltered(){ return (S.presupuestos||[]).filter(presMatch).sort((a,b)=>String(b.fechaRechazo).localeCompare(String(a.fechaRechazo))); }
+
+function presTally(arr,key){ const m={}; arr.forEach(x=>{const k=x[key]||'—'; m[k]=(m[k]||0)+1;}); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+function presSum(arr,key){ const m={}; arr.forEach(x=>{const k=x[key]||'—'; m[k]=(m[k]||0)+(Number(x.importe)||0);}); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+function presTallyMotivos(arr){ const m={}; arr.forEach(x=>(x.motivos||['—']).forEach(mo=>{ m[mo]=(m[mo]||0)+1; })); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+function presSumMotivos(arr){ const m={}; arr.forEach(x=>(x.motivos||['—']).forEach(mo=>{ m[mo]=(m[mo]||0)+(Number(x.importe)||0); })); return Object.entries(m).sort((a,b)=>b[1]-a[1]); }
+
+function presBars(title, entries, isEur){
+  if(!entries.length) return '';
+  const max=Math.max(1,...entries.map(c=>c[1]));
+  return `<div style="margin-bottom:22px"><div class="section-title" style="font-size:15px;margin-bottom:10px">${title}</div>`+
+    entries.map(([l,n])=>`<div class="incbar-row"><div class="incbar-lbl" title="${incEsc(l)}">${incEsc(l)}</div><div class="incbar-track"><div class="incbar-fill" style="width:${Math.round(n/max*100)}%"></div></div><div class="incbar-val" style="white-space:nowrap">${isEur?eur(n):n}</div></div>`).join('')+
+    `</div>`;
+}
+
+/* ---- vistas ---- */
+function presupuestosView(){
+  const sub=(S.sub==='pres_analisis')?'pres_analisis':'pres_list';
+  const seg=`<div class="seg">
+    <button class="${sub==='pres_list'?'on':''}" onclick="setSub('pres_list')">Listado</button>
+    <button class="${sub==='pres_analisis'?'on':''}" onclick="setSub('pres_analisis')">Indicadores</button>
+  </div>`;
+  const acts=`<div class="actions"><button class="btn btn-primary" onclick="openPres()">Registrar presupuesto rechazado</button></div>`;
+  return `${moduleHeader('Presupuestos rechazados', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:14px">
+      <div><div class="section-title">Presupuestos rechazados</div>
+      <div class="section-sub" style="margin:0">Cada presupuesto que se cae se registra aquí para entender por qué perdemos pacientes y cuánto importe.</div></div>
+      ${acts}
+    </div>
+    ${seg}
+    ${sub==='pres_analisis'?presAnalisisView():presListView()}
+  </div></main>
+  ${S.modal?modalContent():''}`;
+}
+
+function presKpis(arr){
+  const n=arr.length;
+  const total=arr.reduce((s,p)=>s+(Number(p.importe)||0),0);
+  const medio=n?total/n:0;
+  const dias=arr.map(presDias).filter(d=>d!=null);
+  const diasMed=dias.length?Math.round(dias.reduce((s,d)=>s+d,0)/dias.length):null;
+  return `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px">
+    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:130px"><div style="font-size:12px;opacity:.7">Casos rechazados</div><div style="font-size:28px;font-weight:700">${n}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:160px"><div style="font-size:12px;color:#8A949B">Importe perdido</div><div style="font-size:28px;font-weight:700;color:#C0392B">${eur(total)}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:140px"><div style="font-size:12px;color:#8A949B">Importe medio</div><div style="font-size:28px;font-weight:700">${eur(medio)}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:140px"><div style="font-size:12px;color:#8A949B">Días medios a rechazo</div><div style="font-size:28px;font-weight:700">${diasMed==null?'—':diasMed+' d'}</div></div>
+  </div>`;
+}
+
+function presListView(){
+  const all=S.presupuestos||[];
+  if(!all.length) return `<div class="muted" style="padding:20px;text-align:center">Aún no hay presupuestos registrados. Usa “Registrar presupuesto rechazado” cuando se caiga uno.</div>`;
+  const f=S.presF;
+  const list=presFiltered();
+  const docs=[...new Set(all.map(p=>p.doctor).filter(Boolean))];
+  const coords=[...new Set(all.map(p=>p.coordinadora).filter(Boolean))];
+  const filtros=`<div class="inc-filters">
+    <select class="inp" onchange="setPresF('area',this.value)"><option value="">Todas las áreas</option>${PRES_AREAS.map(a=>`<option ${f.area===a?'selected':''}>${a}</option>`).join('')}</select>
+    <select class="inp" onchange="setPresF('doctor',this.value)"><option value="">Todos los doctores</option>${docs.map(d=>`<option ${f.doctor===d?'selected':''}>${incEsc(d)}</option>`).join('')}</select>
+    <select class="inp" onchange="setPresF('coord',this.value)"><option value="">Todas las coordinadoras</option>${coords.map(c=>`<option ${f.coord===c?'selected':''}>${incEsc(c)}</option>`).join('')}</select>
+    <select class="inp" onchange="setPresF('motivo',this.value)"><option value="">Todos los motivos</option>${PRES_MOTIVOS.map(m=>`<option ${f.motivo===m?'selected':''}>${incEsc(m)}</option>`).join('')}</select>
+    <input class="inp" type="date" value="${f.desde||''}" onchange="setPresF('desde',this.value)" title="Rechazado desde" style="max-width:160px">
+    <input class="inp" type="date" value="${f.hasta||''}" onchange="setPresF('hasta',this.value)" title="Rechazado hasta" style="max-width:160px">
+    ${(f.area||f.doctor||f.coord||f.motivo||f.desde||f.hasta)?`<button class="btn btn-ghost btn-sm" onclick="clearPresF()">Limpiar</button>`:''}
+    <button class="btn btn-ghost btn-sm" onclick="exportPres()">Exportar Excel</button>
+    <span class="muted" style="font-size:12px">${list.length} caso(s)</span>
+  </div>`;
+  if(!list.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay presupuestos con esos filtros.</div>`;
+  const rows=list.map(p=>{
+    const d=presDias(p);
+    const dCol = d==null?'—':(d>30?`<span style="font-weight:700;color:#C0392B">${d} d</span>`:(d>14?`<span style="font-weight:700;color:#B8860B">${d} d</span>`:`${d} d`));
+    const mot=(p.motivos||[]).join(' · ');
+    const pac=p.pacNombre?`${incEsc(p.pacNombre)}${p.pacCod?` (${incEsc(p.pacCod)})`:''}`:(p.pacCod?incEsc(p.pacCod):'—');
+    return `<tr onclick="openPresDet('${p.id}')">
+      <td class="inc-c-fecha">${incEsc(fmtFecha(p.fechaPresup))}</td>
+      <td class="inc-c-fecha col-hide-m">${incEsc(fmtFecha(p.fechaRechazo))}</td>
+      <td><span class="inc-cat">${incEsc(p.area||'—')}</span></td>
+      <td style="text-align:right;white-space:nowrap;font-weight:700">${eur(p.importe)}</td>
+      <td class="col-hide-m">${incEsc(p.doctor||'—')}</td>
+      <td class="col-hide-m">${incEsc(p.coordinadora||'—')}</td>
+      <td style="text-align:right">${dCol}</td>
+      <td class="col-hide-m">${pac}</td>
+      <td class="inc-c-det col-hide-m">${incEsc(incPreview(mot))}</td>
+    </tr>`;
+  }).join('');
+  return filtros+`<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Presupuestado</th><th class="col-hide-m">Rechazado</th><th>Área</th><th style="text-align:right">Importe</th><th class="col-hide-m">Doctor</th><th class="col-hide-m">Coordinadora</th><th style="text-align:right">Días</th><th class="col-hide-m">Paciente</th><th class="col-hide-m">Motivos</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function presAnalisisView(){
+  const all=presFiltered();
+  if(!all.length) return presListView===presListView ? `<div class="muted" style="padding:20px;text-align:center">Aún no hay datos para analizar con esos filtros.</div>`:'';
+  return presKpis(all)
+    + presBars('Por qué se rechazan · nº de casos por motivo', presTallyMotivos(all))
+    + presBars('Importe perdido por motivo', presSumMotivos(all), true)
+    + presBars('Casos por área', presTally(all,'area'))
+    + presBars('Importe perdido por área', presSum(all,'area'), true)
+    + presBars('Casos por doctor', presTally(all,'doctor'))
+    + presBars('Importe perdido por doctor', presSum(all,'doctor'), true)
+    + presBars('Casos por coordinadora', presTally(all,'coordinadora'));
+}
+
+/* ---- filtros ---- */
+function setPresF(field,v){ S.presF[field]=v; render(); }
+function clearPresF(){ S.presF={area:'',doctor:'',coord:'',motivo:'',desde:'',hasta:''}; render(); }
+
+/* ---- alta / edición ---- */
+function presToggleMotivo(v){ if(!Array.isArray(F.motivos)) F.motivos=[]; const i=F.motivos.indexOf(v); if(i>=0) F.motivos.splice(i,1); else F.motivos.push(v); render(); }
+function motivoChips(){
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">`+PRES_MOTIVOS.map(m=>{
+    const on=(F.motivos||[]).includes(m);
+    const st=on?'background:#333F48;color:#fff;border-color:#333F48':'background:#fff;color:#333F48;border-color:var(--line)';
+    return `<button type="button" onclick="presToggleMotivo('${incEsc(m).replace(/'/g,"\\'")}')" style="${st};border:1.5px solid;border-radius:20px;padding:7px 13px;font-size:13px;font-weight:600;cursor:pointer">${on?'✓ ':''}${incEsc(m)}</button>`;
+  }).join('')+`</div>`;
+}
+
+function openPres(){
+  F={type:'pres_nuevo', fechaPresup:'', fechaRechazo:todayStr(), importe:'', area:'', pacCod:'', pacNombre:'', doctor:'', coordinadora:'', motivos:[], explicacion:''};
+  S.modal='pres_nuevo'; render();
+}
+function presFormBody(){
+  return `
+    <div class="fld" style="margin-top:0"><label>Paciente</label>
+      <div style="display:flex;gap:8px">
+        <input class="inp" style="max-width:120px" placeholder="Nº" value="${incEsc(F.pacCod||'')}" oninput="setInp('pacCod',this.value)">
+        <input class="inp" placeholder="Nombre" value="${incEsc(F.pacNombre||'')}" oninput="setInp('pacNombre',this.value)">
+      </div></div>
+    <div class="fld"><label>Área del tratamiento</label>
+      <select class="inp" onchange="setSel('area',this.value)"><option value="">Elige área…</option>${PRES_AREAS.map(a=>`<option ${F.area===a?'selected':''}>${a}</option>`).join('')}</select></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="fld" style="flex:1;min-width:150px"><label>Fecha presupuestado</label>
+        <input class="inp" type="date" value="${incEsc(F.fechaPresup||'')}" oninput="setInp('fechaPresup',this.value)"></div>
+      <div class="fld" style="flex:1;min-width:150px"><label>Fecha de rechazo</label>
+        <input class="inp" type="date" value="${incEsc(F.fechaRechazo||'')}" oninput="setInp('fechaRechazo',this.value)"></div>
+      <div class="fld" style="flex:1;min-width:130px"><label>Importe (€)</label>
+        <input class="inp" type="number" inputmode="decimal" min="0" step="1" placeholder="0" value="${incEsc(F.importe||'')}" oninput="setInp('importe',this.value)"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="fld" style="flex:1;min-width:180px"><label>Doctor que lo entregó</label>
+        <select class="inp" onchange="setSel('doctor',this.value)"><option value="">Elige…</option>${DOCTORS.map(d=>`<option ${F.doctor===d?'selected':''}>${incEsc(d)}</option>`).join('')}</select></div>
+      <div class="fld" style="flex:1;min-width:180px"><label>Coordinadora</label>
+        <select class="inp" onchange="setSel('coordinadora',this.value)"><option value="">Elige…</option>${COORDINADORAS.map(c=>`<option ${F.coordinadora===c?'selected':''}>${incEsc(c)}</option>`).join('')}</select></div>
+    </div>
+    <div class="fld"><label>Motivo(s) del rechazo</label>${motivoChips()}</div>
+    <div class="fld"><label>Explicación (texto libre)</label>
+      <textarea class="inp" rows="3" oninput="setInp('explicacion',this.value)" placeholder="Qué dijo el paciente, contexto, lo que se intentó…">${incEsc(F.explicacion||'')}</textarea></div>`;
+}
+function presValid(){
+  if(!F.area){ toast('Elige el área'); return false; }
+  if(!F.fechaPresup){ toast('Pon la fecha de presupuestado'); return false; }
+  if(!F.fechaRechazo){ toast('Pon la fecha de rechazo'); return false; }
+  if(F.fechaRechazo < F.fechaPresup){ toast('La fecha de rechazo no puede ser anterior a la de presupuestado'); return false; }
+  const imp=parseFloat(String(F.importe).replace(',','.'));
+  if(!(imp>0)){ toast('Pon el importe del presupuesto'); return false; }
+  if(!(F.motivos||[]).length){ toast('Marca al menos un motivo de rechazo'); return false; }
+  return true;
+}
+function presNuevoModalContent(){
+  const ready=F.area && F.fechaPresup && F.fechaRechazo && parseFloat(String(F.importe).replace(',','.'))>0 && (F.motivos||[]).length;
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Presupuesto rechazado</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Registra el presupuesto que se ha caído. Cuanto mejor anotemos el <strong>motivo</strong> y el <strong>importe</strong>, mejor entenderemos qué pasa y cuánto perdemos.</div>
+      ${presFormBody()}
+      <div class="note" style="margin-top:8px">${ready?'✓ Listo para registrar.':'Faltan: área, fechas, importe y al menos un motivo.'}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitPres()">Registrar</button>
+      </div>
+    </div></div></div>`;
+}
+function commitPres(){
+  if(!presValid()) return;
+  const p={ id:uid(), fechaPresup:F.fechaPresup, fechaRechazo:F.fechaRechazo,
+    importe:parseFloat(String(F.importe).replace(',','.')), area:F.area,
+    pacCod:(F.pacCod||'').trim(), pacNombre:(F.pacNombre||'').trim(), doctor:F.doctor||'',
+    coordinadora:F.coordinadora||'', motivos:(F.motivos||[]).slice(),
+    explicacion:(F.explicacion||'').trim(), registradoPor:S.user.nombre, ts:now() };
+  S.presupuestos.unshift(p);
+  closeModal(); render();
+  srvPresInsert(p, 'Presupuesto registrado');
+}
+
+function openPresDet(id){
+  const p=(S.presupuestos||[]).find(x=>x.id===id); if(!p) return;
+  F={type:'pres_det', id};
+  S.modal='pres_det'; render();
+}
+function presDetModalContent(){
+  const p=(S.presupuestos||[]).find(x=>x.id===F.id)||{};
+  const d=presDias(p);
+  const mot=(p.motivos||[]).map(m=>`<span class="inc-cat" style="margin:0 6px 6px 0;display:inline-block">${incEsc(m)}</span>`).join('');
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Presupuesto rechazado</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="inc-top" style="margin-bottom:10px;align-items:center">
+        <span class="inc-cat">${incEsc(p.area||'—')}</span>
+        <span style="font-weight:800;font-size:18px;color:#C0392B">${eur(p.importe)}</span>
+        ${d!=null?`<span class="muted" style="font-size:12px">${d} días hasta el rechazo</span>`:''}
+      </div>
+      <div class="inc-meta" style="margin:0 0 10px">Presupuestado el ${incEsc(fmtFecha(p.fechaPresup))} · Rechazado el ${incEsc(fmtFecha(p.fechaRechazo))}</div>
+      <div class="inc-meta" style="margin:0 0 10px">${p.pacNombre?`Paciente: ${incEsc(p.pacNombre)}${p.pacCod?` (${incEsc(p.pacCod)})`:''} · `:''}Doctor: ${incEsc(p.doctor||'—')} · Coordinadora: ${incEsc(p.coordinadora||'—')}</div>
+      <div style="margin:12px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B">Motivos</div>
+      <div>${mot||'<span class="muted">—</span>'}</div>
+      ${p.explicacion?`<div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px;margin-top:12px">${incEsc(p.explicacion)}</div>`:''}
+      <div class="inc-meta" style="margin-top:10px;font-size:12px">Registrado por ${incEsc(p.registradoPor||'—')}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="openPresEdit('${p.id}')">Editar</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      </div>
+    </div></div></div>`;
+}
+
+function openPresEdit(id){
+  const p=(S.presupuestos||[]).find(x=>x.id===id); if(!p) return;
+  F={type:'pres_edit', id, fechaPresup:p.fechaPresup||'', fechaRechazo:p.fechaRechazo||'', importe:p.importe||'',
+     area:p.area||'', pacCod:p.pacCod||'', pacNombre:p.pacNombre||'', doctor:p.doctor||'', coordinadora:p.coordinadora||'',
+     motivos:(p.motivos||[]).slice(), explicacion:p.explicacion||''};
+  S.modal='pres_edit'; render();
+}
+function presEditModalContent(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Editar presupuesto</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${presFormBody()}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitPresEdit()">Guardar cambios</button>
+      </div>
+    </div></div></div>`;
+}
+function commitPresEdit(){
+  if(!presValid()) return;
+  const p=(S.presupuestos||[]).find(x=>x.id===F.id); if(!p) return;
+  p.fechaPresup=F.fechaPresup; p.fechaRechazo=F.fechaRechazo;
+  p.importe=parseFloat(String(F.importe).replace(',','.')); p.area=F.area;
+  p.pacCod=(F.pacCod||'').trim(); p.pacNombre=(F.pacNombre||'').trim();
+  p.doctor=F.doctor||''; p.coordinadora=F.coordinadora||'';
+  p.motivos=(F.motivos||[]).slice(); p.explicacion=(F.explicacion||'').trim();
+  closeModal(); render();
+  srvPresUpdate(p.id, p, 'Presupuesto actualizado');
+}
+
+/* ---- export ---- */
+function exportPres(){
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar Excel'); return; }
+  const data=presFiltered();
+  if(!data.length){ toast('No hay presupuestos que exportar'); return; }
+  const head=["Presupuestado","Rechazado","Días","Área","Importe (€)","Doctor","Coordinadora","Nº paciente","Paciente","Motivos","Explicación","Registrado por"];
+  const rows=[head];
+  data.forEach(p=>rows.push([
+    fmtFecha(p.fechaPresup), fmtFecha(p.fechaRechazo), presDias(p)??"", p.area||"",
+    Number((Number(p.importe)||0).toFixed(2)), p.doctor||"", p.coordinadora||"",
+    p.pacCod||"", p.pacNombre||"", (p.motivos||[]).join(" · "), p.explicacion||"", p.registradoPor||"" ]));
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:12},{wch:6},{wch:18},{wch:12},{wch:20},{wch:16},{wch:12},{wch:22},{wch:40},{wch:46},{wch:16}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Presupuestos rechazados");
+  XLSX.writeFile(wb,`presupuestos_rechazados_${new Date().toISOString().slice(0,10)}.xlsx`); toast('Presupuestos exportados');
+}
+
+/* ---- enganches al núcleo (envoltura: gana la última) ---- */
+const _modalContent_pres = modalContent;
+modalContent = function(){
+  if(F.type==='pres_nuevo') return presNuevoModalContent();
+  if(F.type==='pres_det')   return presDetModalContent();
+  if(F.type==='pres_edit')  return presEditModalContent();
+  return _modalContent_pres();
+};
+const _appView_pres = appView;
+appView = function(){
+  if(S.module==='presupuestos'){ if(!canAccess('presupuestos')){ S.module=null; return homeView(); } return presupuestosView(); }
+  return _appView_pres();
+};
+
+/* ===== FIN PRESUPUESTOS ===== */
+
+
+
+/* ===== MÓDULO TAREAS ===== */
+/* ============================================================================
+   LUCAI · TAREAS DEL EQUIPO
+   Buzón de tareas: cada persona ve las recibidas y las emitidas, las va
+   terminando (al marcarlas Hecha se archivan y desaparecen del activo) y
+   tiene un calendario semanal. Dirección ve además todas las del equipo.
+   Para todo el equipo (cualquier usuario con sesión).
+   ============================================================================ */
+
+const TAR_PRIOS   = ['Alta','Media','Baja'];
+const TAR_ESTADOS = ['Pendiente','En curso','Hecha'];
+const TAR_DOW     = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const tarUsers    = () => USERS.map(u=>u.nombre);
+
+/* estado del módulo */
+if(!Array.isArray(S.tareas)) S.tareas = [
+  {id:uid(), titulo:'Cerrar el seguimiento de presupuestos pendientes de mayo', descripcion:'Repasar uno a uno y dejar anotado el estado de cada contacto.', prioridad:'Alta', fechaLimite:'2026-06-09', deQuien:'David Lucas', paraQuien:'Encarna Garcia', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Revisar la agenda de la semana y cuadrar huecos de urgencias', descripcion:'Dejar dos huecos diarios reservados para urgencias.', prioridad:'Media', fechaLimite:'2026-06-08', deQuien:'David Lucas', paraQuien:'Noemi Martinez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Preparar el listado de revisiones de ortodoncia del mes', descripcion:'Sacar de Odontonet los controles pendientes y ordenarlos por fecha.', prioridad:'Media', fechaLimite:'2026-06-10', deQuien:'David Lucas', paraQuien:'Cristina Vazquez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Confirmar por WhatsApp las citas de mañana', descripcion:'Mandar el recordatorio a todos los pacientes del día siguiente.', prioridad:'Alta', fechaLimite:'2026-06-07', deQuien:'David Lucas', paraQuien:'Dessire Perez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Actualizar los datos de contacto de pacientes nuevos', descripcion:'Revisar teléfonos y correos de las altas de la última semana.', prioridad:'Baja', fechaLimite:'2026-06-12', deQuien:'David Lucas', paraQuien:'Irene Garcia', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Pasarme el importe perdido de implantes para la reunión', descripcion:'Lo necesito del panel de presupuestos rechazados.', prioridad:'Media', fechaLimite:'2026-06-09', deQuien:'Encarna Garcia', paraQuien:'David Lucas', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Validar el nuevo guion de llamada de seguimiento', descripcion:'Lo he ajustado con los motivos de rechazo más frecuentes.', prioridad:'Media', fechaLimite:'2026-06-11', deQuien:'Noemi Martinez', paraQuien:'David Lucas', estado:'En curso', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Revisar conmigo el protocolo de primera visita', descripcion:'Quiero proponer un par de cambios en la acogida.', prioridad:'Baja', fechaLimite:'2026-06-13', deQuien:'Cristina Vazquez', paraQuien:'David Lucas', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Llamar a los pacientes que no acudieron esta semana', descripcion:'Reagendar y anotar el motivo de la ausencia.', prioridad:'Alta', fechaLimite:'2026-06-08', deQuien:'Encarna Garcia', paraQuien:'Dessire Perez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Reordenar el archivo de consentimientos firmados', descripcion:'Por orden de fecha y separados por tratamiento.', prioridad:'Baja', fechaLimite:'2026-06-12', deQuien:'Encarna Garcia', paraQuien:'Irene Garcia', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Recordar revisiones de higiene a pacientes de junio', descripcion:'Tanda de recordatorios de la higienista.', prioridad:'Media', fechaLimite:'2026-06-10', deQuien:'Noemi Martinez', paraQuien:'Dessire Perez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Coordinar el cambio de turnos de la semana que viene', descripcion:'Cuadrar vacaciones y descansos del equipo de recepción.', prioridad:'Media', fechaLimite:'2026-06-11', deQuien:'Noemi Martinez', paraQuien:'Cristina Vazquez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Preparar la sala 2 para los casos de implantes', descripcion:'Material e instrumental listo para las cirugías.', prioridad:'Alta', fechaLimite:'2026-06-08', deQuien:'Cristina Vazquez', paraQuien:'Irene Garcia', estado:'En curso', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Faltan recordatorios de dos pacientes, los hago yo?', descripcion:'Te aviso por si los quieres repartir.', prioridad:'Baja', fechaLimite:'2026-06-09', deQuien:'Dessire Perez', paraQuien:'Encarna Garcia', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Pedir material de papelería para recepción', descripcion:'Folios, sobres y tarjetas de cita.', prioridad:'Baja', fechaLimite:'2026-06-13', deQuien:'Irene Garcia', paraQuien:'Noemi Martinez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Montar la reunión semanal de coordinación', descripcion:'Convocar y preparar el orden del día.', prioridad:'Media', fechaLimite:'2026-06-12', deQuien:'David Lucas', paraQuien:'Encarna Garcia', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Subir las fotos de ortodoncia a las fichas', descripcion:'Asociar cada serie de fotos a su paciente.', prioridad:'Baja', fechaLimite:'2026-06-14', deQuien:'David Lucas', paraQuien:'Cristina Vazquez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Llamar a los rechazos por precio para ofrecer financiación', descripcion:'Empezar por los importes más altos de implantes.', prioridad:'Alta', fechaLimite:'2026-06-10', deQuien:'David Lucas', paraQuien:'Noemi Martinez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Repartir las llamadas de seguimiento de esta semana', descripcion:'Dividir la lista entre atención al paciente.', prioridad:'Media', fechaLimite:'2026-06-08', deQuien:'Encarna Garcia', paraQuien:'Noemi Martinez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Hay un paciente con queja sobre la espera, te lo paso', descripcion:'Quiere hablar con dirección, lo dejo en tu buzón.', prioridad:'Alta', fechaLimite:'2026-06-06', deQuien:'Dessire Perez', paraQuien:'David Lucas', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'El teléfono de la sala de espera falla, aviso a mantenimiento?', descripcion:'Se corta al recibir llamadas.', prioridad:'Media', fechaLimite:'2026-06-05', deQuien:'Irene Garcia', paraQuien:'Encarna Garcia', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Encuesta de satisfacción a los pacientes de la semana', descripcion:'Enviar el enlace por WhatsApp tras la visita.', prioridad:'Media', fechaLimite:'2026-06-13', deQuien:'David Lucas', paraQuien:'Dessire Perez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Revisado el listado de ortodoncia, te lo dejo en la carpeta', descripcion:'Hecho y ordenado por fecha de control.', prioridad:'Baja', fechaLimite:'2026-06-06', deQuien:'Cristina Vazquez', paraQuien:'David Lucas', estado:'Hecha', ts:'DEMO', fechaHecha:'2026-06-06'},
+  {id:uid(), titulo:'Seguimiento de presupuestos de la semana terminado', descripcion:'Todos contactados y anotados en el panel.', prioridad:'Media', fechaLimite:'2026-06-04', deQuien:'Encarna Garcia', paraQuien:'David Lucas', estado:'Hecha', ts:'DEMO', fechaHecha:'2026-06-05'},
+  {id:uid(), titulo:'Imprimir los consentimientos para las cirugías de mañana', descripcion:'Dos implantes y una extracción.', prioridad:'Alta', fechaLimite:'2026-06-07', deQuien:'Noemi Martinez', paraQuien:'Irene Garcia', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Coordinar la formación de comunicación del equipo', descripcion:'Fijar fecha y avisar a todo el equipo.', prioridad:'Media', fechaLimite:'2026-06-16', deQuien:'David Lucas', paraQuien:'Cristina Vazquez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Avisar a los pacientes del cambio de doctor del jueves', descripcion:'Llamar a los afectados y reconfirmar.', prioridad:'Alta', fechaLimite:'2026-06-11', deQuien:'Cristina Vazquez', paraQuien:'Dessire Perez', estado:'Pendiente', ts:'DEMO', fechaHecha:null},
+  {id:uid(), titulo:'Propuesta para mejorar el circuito de recepción', descripcion:'Idea para reducir la espera en hora punta.', prioridad:'Baja', fechaLimite:'2026-06-18', deQuien:'Irene Garcia', paraQuien:'David Lucas', estado:'Pendiente', ts:'DEMO', fechaHecha:null}
+];
+S.tarVerHechas = S.tarVerHechas || false;
+S.tarWeek = S.tarWeek || 0;
+S.tarF = S.tarF || {estado:'',prio:'',de:'',para:''};
+
+/* activar módulo en el hub */
+(function(){ const m=MODULES.find(x=>x.id==='tareas');
+  if(m){ m.estado='activo'; m.desc='Buzón de tareas del equipo: prioridad, fecha límite, recibidas y emitidas, calendario semanal. Termínalas y se archivan.'; } })();
+
+/* ---- persistencia ---- */
+const _loadFromDB_tar = loadFromDB;
+loadFromDB = async function(){
+  await _loadFromDB_tar();
+  try{
+    const r = await sbc.from('tar_tareas').select('*').order('created_at',{ascending:false});
+    if(r.data){
+      S.tareas = r.data.map(x=>({
+        id:x.id, titulo:x.titulo, descripcion:x.descripcion, prioridad:x.prioridad||'Media',
+        fechaLimite:x.fecha_limite, deQuien:x.de_quien, paraQuien:x.para_quien,
+        estado:x.estado||'Pendiente', ts:x.ts, fechaHecha:x.fecha_hecha,
+        mensajes: Array.isArray(x.mensajes) ? x.mensajes : (function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
+        vistos: (x.vistos && typeof x.vistos==='object' && !Array.isArray(x.vistos)) ? x.vistos : (function(){ try{ return x.vistos?JSON.parse(x.vistos):{}; }catch(_){ return {}; } })()
+      }));
+    }
+  }catch(e){ console.error('loadTareas', e); }
+};
+async function srvTarInsert(t, okMsg){
+  try{
+    const { error } = await sbc.from('tar_tareas').insert({
+      id:t.id, titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
+      fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
+      estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) });
+    if(error) throw error;
+  }catch(e){ console.error('srvTarInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvTarUpdate(id, t, okMsg){
+  try{
+    const { error } = await sbc.from('tar_tareas').update({
+      titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
+      fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
+      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('srvTarUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvTarDelete(id, okMsg){
+  try{ const { error } = await sbc.from('tar_tareas').delete().eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvTarDelete', e); await syncAll(); toast('No se pudo eliminar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+
+/* ---- cálculos / helpers ---- */
+function tarDParse(s){ if(!s) return null; const p=String(s).slice(0,10).split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
+function tarIso(d){ const p=x=>String(x).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+function tarMonday(offset){ const t=tarDParse(todayStr()); const day=(t.getDay()+6)%7; const m=new Date(t); m.setDate(t.getDate()-day+(offset||0)*7); return m; }
+function tarActiva(t){ return t.estado!=='Hecha'; }
+function tarVencida(t){ return tarActiva(t) && t.fechaLimite && t.fechaLimite < todayStr(); }
+function tarDiasRest(t){ if(!t.fechaLimite) return null; const d=Math.round((tarDParse(t.fechaLimite)-tarDParse(todayStr()))/86400000); return d; }
+function tarPrioChip(p){ return `<span class="inc-imp imp-${p||'Media'}">${p||'Media'}</span>`; }
+function tarEstadoChip(e){
+  const st = e==='Hecha' ? 'background:#6E8E00;color:#fff' : e==='En curso' ? 'background:#5A6770;color:#fff' : 'background:#EAE3D7;color:#333F48';
+  return `<span style="${st};font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px">${e||'Pendiente'}</span>`;
+}
+function tarLimiteCell(t){
+  if(!t.fechaLimite) return '<span class="muted">—</span>';
+  const f=fmtFecha(t.fechaLimite);
+  if(t.estado==='Hecha') return `<span class="muted">${f}</span>`;
+  const d=tarDiasRest(t);
+  if(d<0)  return `<span style="font-weight:700;color:#C0392B">${f} · vencida</span>`;
+  if(d===0) return `<span style="font-weight:700;color:#B8860B">${f} · hoy</span>`;
+  if(d<=2) return `<span style="font-weight:700;color:#B8860B">${f} · ${d} d</span>`;
+  return f;
+}
+
+/* ---- vista principal ---- */
+function tareasView(){
+  const me=S.user.nombre, admin=isAdmin();
+  const subs = admin ? ['tar_recibidas','tar_emitidas','tar_semana','tar_todas'] : ['tar_recibidas','tar_emitidas','tar_semana'];
+  const sub = subs.includes(S.sub) ? S.sub : 'tar_recibidas';
+  const lbl = {tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_semana:'Semana',tar_todas:'Todas (equipo)'};
+  const seg = `<div class="seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
+  let body='';
+  if(sub==='tar_semana') body=tarSemanaView();
+  else if(sub==='tar_todas') body=tarTodasView();
+  else body=tarBuzonView(sub==='tar_emitidas'?'emitidas':'recibidas');
+  const acts=`<div class="actions"><button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
+  return `${moduleHeader('Tareas del equipo', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:14px">
+      <div><div class="section-title">Tareas</div>
+      <div class="section-sub" style="margin:0">Manda tareas con prioridad y fecha de entrega. El objetivo es ir terminándolas: al marcarlas hechas se archivan.</div></div>
+      ${acts}
+    </div>
+    ${tarResumenBanner()}
+    ${seg}
+    ${body}
+  </div></main>
+  ${S.modal?modalContent():''}`;
+}
+
+function tarKpis(arr){
+  const act=arr.filter(tarActiva);
+  const venc=act.filter(tarVencida).length;
+  const hoy=act.filter(t=>t.fechaLimite===todayStr()).length;
+  return `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;opacity:.7">Activas</div><div style="font-size:28px;font-weight:700">${act.length}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;color:#8A949B">Vencidas</div><div style="font-size:28px;font-weight:700;color:#C0392B">${venc}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;color:#8A949B">Para hoy</div><div style="font-size:28px;font-weight:700;color:#B8860B">${hoy}</div></div>
+  </div>`;
+}
+
+function tarBuzonView(modo){
+  const me=S.user.nombre;
+  const all=(S.tareas||[]).filter(t=> modo==='emitidas' ? t.deQuien===me : t.paraQuien===me);
+  const toggle=`<label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#6C757D;cursor:pointer;margin:0 0 14px">
+    <input type="checkbox" ${S.tarVerHechas?'checked':''} onchange="toggleTarHechas()"> Ver también las hechas/archivadas</label>`;
+  const list=all.filter(t=> S.tarVerHechas ? true : tarActiva(t))
+    .sort((a,b)=>{ const av=tarActiva(a)?0:1, bv=tarActiva(b)?0:1; if(av!==bv) return av-bv; return String(a.fechaLimite||'').localeCompare(String(b.fechaLimite||'')); });
+  if(!all.length) return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${modo==='emitidas'?'No has mandado ninguna tarea todavía. Usa “Nueva tarea”.':'No tienes tareas en tu buzón. ¡Buen trabajo!'}</div>`;
+  if(!list.length) return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">Nada activo aquí. Marca “ver hechas” para ver el archivo.</div>`;
+  const otro = modo==='emitidas' ? 'Para' : 'De';
+  const rows=list.map(t=>{
+    const persona = modo==='emitidas' ? t.paraQuien : t.deQuien;
+    const quick = (modo==='recibidas' && tarActiva(t))
+      ? `<button class="btn btn-ghost btn-sm" style="color:#6E8E00;border-color:#6E8E00" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">✓ Hecha</button>` : '';
+    return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
+      <td>${tarPrioChip(t.prioridad)}</td>
+      <td style="font-weight:600">${incEsc(t.titulo)}</td>
+      <td class="col-hide-m">${incEsc(persona||'—')}</td>
+      <td>${tarLimiteCell(t)}</td>
+      <td class="col-hide-m">${tarEstadoChip(t.estado)}</td>
+      <td style="text-align:right;white-space:nowrap">${quick}</td>
+    </tr>`;
+  }).join('');
+  return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Prior.</th><th>Tarea</th><th class="col-hide-m">${otro}</th><th>Entrega</th><th class="col-hide-m">Estado</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function tarTodasView(){
+  const f=S.tarF, all=S.tareas||[];
+  const filt=all.filter(t=>{
+    if(f.estado && t.estado!==f.estado) return false;
+    if(f.prio && t.prioridad!==f.prio) return false;
+    if(f.de && t.deQuien!==f.de) return false;
+    if(f.para && t.paraQuien!==f.para) return false;
+    return true;
+  }).sort((a,b)=>{ const av=tarActiva(a)?0:1,bv=tarActiva(b)?0:1; if(av!==bv) return av-bv; return String(a.fechaLimite||'').localeCompare(String(b.fechaLimite||'')); });
+  const u=tarUsers();
+  const filtros=`<div class="inc-filters">
+    <select class="inp" onchange="setTarF('estado',this.value)"><option value="">Todos los estados</option>${TAR_ESTADOS.map(s=>`<option ${f.estado===s?'selected':''}>${s}</option>`).join('')}</select>
+    <select class="inp" onchange="setTarF('prio',this.value)"><option value="">Toda prioridad</option>${TAR_PRIOS.map(p=>`<option ${f.prio===p?'selected':''}>${p}</option>`).join('')}</select>
+    <select class="inp" onchange="setTarF('de',this.value)"><option value="">Cualquier emisor</option>${u.map(n=>`<option ${f.de===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>
+    <select class="inp" onchange="setTarF('para',this.value)"><option value="">Cualquier responsable</option>${u.map(n=>`<option ${f.para===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>
+    ${(f.estado||f.prio||f.de||f.para)?`<button class="btn btn-ghost btn-sm" onclick="clearTarF()">Limpiar</button>`:''}
+    <button class="btn btn-ghost btn-sm" onclick="exportTareas()">Exportar Excel</button>
+    <span class="muted" style="font-size:12px">${filt.length} tarea(s)</span>
+  </div>`;
+  if(!filt.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay tareas con esos filtros.</div>`;
+  const rows=filt.map(t=>`<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
+    <td>${tarPrioChip(t.prioridad)}</td>
+    <td style="font-weight:600">${incEsc(t.titulo)}</td>
+    <td class="col-hide-m">${incEsc(t.deQuien||'—')}</td>
+    <td>${incEsc(t.paraQuien||'—')}</td>
+    <td>${tarLimiteCell(t)}</td>
+    <td>${tarEstadoChip(t.estado)}</td>
+  </tr>`).join('');
+  return filtros+`<div class="inctable-wrap"><table class="inctable">
+    <thead><tr><th>Prior.</th><th>Tarea</th><th class="col-hide-m">De</th><th>Para</th><th>Entrega</th><th>Estado</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function tarSemanaView(){
+  const me=S.user.nombre, admin=isAdmin();
+  const mias=(S.tareas||[]).filter(t=> admin ? true : (t.paraQuien===me || t.deQuien===me));
+  const mon=tarMonday(S.tarWeek);
+  const dom=new Date(mon); dom.setDate(mon.getDate()+6);
+  const rango=`${mon.getDate()}/${mon.getMonth()+1} – ${dom.getDate()}/${dom.getMonth()+1}`;
+  const nav=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn btn-ghost btn-sm" onclick="tarWeekNav(-1)">‹ Semana anterior</button>
+    <div style="font-weight:700">${S.tarWeek===0?'Esta semana':rango} <span class="muted" style="font-weight:400;font-size:13px">(${rango})</span></div>
+    <button class="btn btn-ghost btn-sm" onclick="tarWeekNav(1)">Semana siguiente ›</button>
+    ${S.tarWeek!==0?`<button class="btn btn-ghost btn-sm" onclick="tarWeekNav(0,true)">Hoy</button>`:''}
+    <span class="muted" style="font-size:12px">${admin?'Vista de todo el equipo':'Tus tareas (recibidas y emitidas)'}</span>
+  </div>`;
+  const cells=[];
+  for(let i=0;i<7;i++){
+    const d=new Date(mon); d.setDate(mon.getDate()+i); const iso=tarIso(d);
+    const esHoy=iso===todayStr();
+    const dia=(S.tareas?mias:[]).filter(t=>t.fechaLimite===iso)
+      .sort((a,b)=>TAR_PRIOS.indexOf(a.prioridad)-TAR_PRIOS.indexOf(b.prioridad));
+    const chips=dia.map(t=>{
+      const col = t.estado==='Hecha' ? '#6E8E00' : t.prioridad==='Alta' ? '#C0392B' : t.prioridad==='Media' ? '#B8860B' : '#8A949B';
+      const tach = t.estado==='Hecha' ? 'text-decoration:line-through;opacity:.6' : '';
+      const quien = admin ? (t.paraQuien||'') : (t.paraQuien===me?('→ yo'):('→ '+t.paraQuien));
+      return `<div onclick="openTarDet('${t.id}')" title="${incEsc(t.titulo)}" style="cursor:pointer;border-left:3px solid ${col};background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-bottom:6px;font-size:12px;line-height:1.3;${tach}">
+        <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${incEsc(t.titulo)}</div>
+        <div class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${incEsc(quien)}</div>
+      </div>`;
+    }).join('') || '<div class="muted" style="font-size:11px;padding:4px 0">—</div>';
+    cells.push(`<div style="background:${esHoy?'#F4F0E9':'#FAF8F3'};border:1px solid ${esHoy?'#B8A88F':'var(--line)'};border-radius:10px;padding:8px;min-height:120px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:${esHoy?'#333F48':'#8A949B'};font-weight:700;margin-bottom:6px">${TAR_DOW[i]} ${d.getDate()}${esHoy?' · hoy':''}</div>
+      ${chips}</div>`);
+  }
+  return nav+`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;min-width:760px">${cells.join('')}</div></div>`;
+}
+
+/* ---- interacciones ---- */
+function toggleTarHechas(){ S.tarVerHechas=!S.tarVerHechas; render(); }
+function setTarF(field,v){ S.tarF[field]=v; render(); }
+function clearTarF(){ S.tarF={estado:'',prio:'',de:'',para:''}; render(); }
+function tarWeekNav(delta,reset){ S.tarWeek = reset ? 0 : (S.tarWeek+delta); render(); }
+
+function tarMarcar(id,estado){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  t.estado=estado;
+  t.fechaHecha = estado==='Hecha' ? todayStr() : null;
+  render();
+  srvTarUpdate(id, t, estado==='Hecha'?'Tarea terminada y archivada':'Tarea actualizada');
+}
+function tarEliminar(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  if(!(isAdmin() || t.deQuien===S.user.nombre)){ toast('Solo puede eliminarla quien la creó o Dirección'); return; }
+  S.tareas=S.tareas.filter(x=>x.id!==id); closeModal(); render();
+  srvTarDelete(id, 'Tarea eliminada');
+}
+
+/* ---- alta / edición ---- */
+function openTarea(){
+  F={type:'tar_nuevo', titulo:'', descripcion:'', prioridad:'Media', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre};
+  S.modal='tar_nuevo'; render();
+}
+function tarFormBody(){
+  const u=tarUsers();
+  const puedeFecha = !F.deQuien || F.deQuien===S.user.nombre; // la fecha solo la cambia quien emitió
+  return `
+    <div class="fld" style="margin-top:0"><label>Tarea (título)</label>
+      <input class="inp" value="${incEsc(F.titulo||'')}" oninput="setInp('titulo',this.value)" placeholder="Qué hay que hacer, en una frase."></div>
+    <div class="fld"><label>Detalle (opcional)</label>
+      <textarea class="inp" rows="3" oninput="setInp('descripcion',this.value)" placeholder="Contexto, dónde, con qué, lo que haga falta para hacerla bien.">${incEsc(F.descripcion||'')}</textarea></div>
+    <div class="fld"><label>Para quién</label>
+      <select class="inp" onchange="setSel('paraQuien',this.value)"><option value="">Elige a quién se la mandas…</option>${u.map(n=>`<option ${F.paraQuien===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="fld" style="flex:1;min-width:150px"><label>Prioridad</label>
+        <select class="inp" onchange="setSel('prioridad',this.value)">${TAR_PRIOS.map(p=>`<option ${(F.prioridad||'Media')===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      <div class="fld" style="flex:1;min-width:170px"><label>Fecha de entrega</label>
+        <input class="inp" type="date" value="${incEsc(F.fechaLimite||'')}" oninput="setInp('fechaLimite',this.value)" ${puedeFecha?'':'disabled style="background:#F4F0E9;color:#8A949B"'}>
+        ${puedeFecha?'':'<div class="muted" style="font-size:12px;margin-top:4px">Solo la cambia quien emitió la tarea.</div>'}</div>
+    </div>`;
+}
+function tarValid(){
+  if(!(F.titulo||'').trim()){ toast('Pon un título a la tarea'); return false; }
+  if(!F.paraQuien){ toast('Elige a quién se la mandas'); return false; }
+  if(!F.fechaLimite){ toast('Pon la fecha de entrega'); return false; }
+  return true;
+}
+function tarNuevoModalContent(){
+  const ready=(F.titulo||'').trim() && F.paraQuien && F.fechaLimite;
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Nueva tarea</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Manda una tarea a alguien del equipo. La <strong>prioridad</strong> y la <strong>fecha de entrega</strong> son lo que hace que se le dé importancia.</div>
+      ${tarFormBody()}
+      <div class="note" style="margin-top:8px">${ready?'✓ Lista para enviar.':'Faltan: título, a quién y fecha de entrega.'}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitTarea()">Enviar tarea</button>
+      </div>
+    </div></div></div>`;
+}
+function commitTarea(){
+  if(!tarValid()) return;
+  const t={ id:uid(), titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
+    prioridad:F.prioridad||'Media', fechaLimite:F.fechaLimite, deQuien:S.user.nombre,
+    paraQuien:F.paraQuien, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{} };
+  S.tareas.unshift(t); closeModal(); render();
+  srvTarInsert(t, 'Tarea enviada');
+}
+
+function openTarDet(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  F={type:'tar_det', id}; S.modal='tar_det'; render();
+  const me=S.user.nombre;
+  if(tarNuevosPara(t,me)>0){ if(!t.vistos||typeof t.vistos!=='object'||Array.isArray(t.vistos)) t.vistos={}; t.vistos[me]=now(); srvTarUpdate(id, t); }
+}
+function tarDetModalContent(){
+  const t=(S.tareas||[]).find(x=>x.id===F.id)||{};
+  const me=S.user.nombre, admin=isAdmin();
+  const soyPara=t.paraQuien===me, soyDe=t.deQuien===me;
+  const d=tarDiasRest(t);
+  const limTxt = !t.fechaLimite ? 'sin fecha' : (t.estado==='Hecha' ? fmtFecha(t.fechaLimite) : (d<0?`${fmtFecha(t.fechaLimite)} · vencida hace ${-d} d`:(d===0?`${fmtFecha(t.fechaLimite)} · hoy`:`${fmtFecha(t.fechaLimite)} · faltan ${d} d`)));
+  let acciones='';
+  if((soyPara||admin) && tarActiva(t)){
+    if(t.estado==='Pendiente') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','En curso')">Marcar en curso</button>`;
+    acciones+=`<button class="btn btn-primary" onclick="tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`;
+  }
+  if((soyPara||soyDe||admin) && t.estado==='Hecha') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','Pendiente')">Reabrir</button>`;
+  if(soyDe||admin) acciones+=`<button class="btn btn-ghost" onclick="openTarEdit('${t.id}')">Editar</button>`;
+  if(soyDe||admin) acciones+=`<button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="tarEliminar('${t.id}')">Eliminar</button>`;
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Tarea</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="inc-top" style="margin-bottom:10px;align-items:center">${tarPrioChip(t.prioridad)} ${tarEstadoChip(t.estado)} ${tarVencida(t)?'<span class="inc-imp imp-Alta">Vencida</span>':''}</div>
+      <div style="font-family:var(--serif);font-size:19px;margin-bottom:8px">${incEsc(t.titulo||'')}</div>
+      <div class="inc-meta" style="margin:0 0 6px">De ${incEsc(t.deQuien||'—')} · Para ${incEsc(t.paraQuien||'—')}</div>
+      <div class="inc-meta" style="margin:0 0 10px">Entrega: ${incEsc(limTxt)}${t.fechaHecha?` · Hecha el ${incEsc(fmtFecha(t.fechaHecha))}`:''}</div>
+      ${t.descripcion?`<div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(t.descripcion)}</div>`:''}
+      ${tarThreadHtml(t)}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
+        ${acciones}
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      </div>
+    </div></div></div>`;
+}
+function tarThreadHtml(t){
+  const me=S.user.nombre, admin=isAdmin();
+  const puede = admin || t.deQuien===me || t.paraQuien===me;
+  const msgs=Array.isArray(t.mensajes)?t.mensajes:[];
+  const list = msgs.length ? msgs.map(mm=>{
+    const mine=mm.de===me;
+    return `<div style="margin-bottom:8px;display:flex;${mine?'justify-content:flex-end':''}">
+      <div style="max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px">
+        <div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(mm.de||'—')} · ${incEsc(tarMsgTime(mm.ts))}</div>
+        <div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div>
+      </div></div>`;
+  }).join('') : `<div class="muted" style="font-size:13px">Aún no hay mensajes. Escribe el primero para aclarar o comentar la tarea.</div>`;
+  const compose = puede ? `<div style="display:flex;gap:8px;margin-top:10px">
+      <input class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}">
+      <button class="btn btn-primary" onclick="tarAddMsg('${t.id}')">Enviar</button>
+    </div>` : '';
+  return `<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+    <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Conversación</div>
+    <div style="max-height:240px;overflow-y:auto">${list}</div>
+    ${compose}</div>`;
+}
+function tarMsgTime(ts){ ts=String(ts||''); const d=ts.slice(0,10).split('-'); const hm=ts.slice(11,16); return (d.length===3?`${d[2]}/${d[1]}`:ts)+(hm?` ${hm}`:''); }
+function tarAddMsg(id){
+  const txt=(F.msgDraft||'').trim(); if(!txt) return;
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const me=S.user.nombre;
+  if(!(isAdmin()||t.deQuien===me||t.paraQuien===me)){ toast('No puedes escribir en esta tarea'); return; }
+  if(!Array.isArray(t.mensajes)) t.mensajes=[];
+  t.mensajes.push({de:me, texto:txt, ts:now()});
+  F.msgDraft=''; render();
+  srvTarUpdate(id, t);
+}
+function openTarEdit(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  if(!(isAdmin()||t.deQuien===S.user.nombre)){ toast('Solo puede editarla quien la creó o Dirección'); return; }
+  F={type:'tar_edit', id, titulo:t.titulo||'', descripcion:t.descripcion||'', prioridad:t.prioridad||'Media', fechaLimite:t.fechaLimite||'', paraQuien:t.paraQuien||'', deQuien:t.deQuien||''};
+  S.modal='tar_edit'; render();
+}
+function tarEditModalContent(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Editar tarea</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${tarFormBody()}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitTarEdit()">Guardar cambios</button>
+      </div>
+    </div></div></div>`;
+}
+function commitTarEdit(){
+  if(!tarValid()) return;
+  const t=(S.tareas||[]).find(x=>x.id===F.id); if(!t) return;
+  t.titulo=(F.titulo||'').trim(); t.descripcion=(F.descripcion||'').trim();
+  t.prioridad=F.prioridad||'Media'; t.paraQuien=F.paraQuien;
+  if(t.deQuien===S.user.nombre) t.fechaLimite=F.fechaLimite; // la fecha de entrega solo la cambia quien emitió
+  closeModal(); render();
+  srvTarUpdate(t.id, t, 'Tarea actualizada');
+}
+
+/* ---- export ---- */
+function exportTareas(){
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar Excel'); return; }
+  const f=S.tarF;
+  const data=(S.tareas||[]).filter(t=>{
+    if(f.estado && t.estado!==f.estado) return false;
+    if(f.prio && t.prioridad!==f.prio) return false;
+    if(f.de && t.deQuien!==f.de) return false;
+    if(f.para && t.paraQuien!==f.para) return false;
+    return true;
+  });
+  if(!data.length){ toast('No hay tareas que exportar'); return; }
+  const head=["Tarea","Prioridad","Estado","De","Para","Fecha entrega","Hecha el","Detalle"];
+  const rows=[head];
+  data.forEach(t=>rows.push([t.titulo||"",t.prioridad||"",t.estado||"",t.deQuien||"",t.paraQuien||"",fmtFecha(t.fechaLimite),t.fechaHecha?fmtFecha(t.fechaHecha):"",t.descripcion||""]));
+  const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:38},{wch:10},{wch:11},{wch:18},{wch:18},{wch:13},{wch:12},{wch:46}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Tareas");
+  XLSX.writeFile(wb,`tareas_${new Date().toISOString().slice(0,10)}.xlsx`); toast('Tareas exportadas');
+}
+
+/* ---- enganches al núcleo (envoltura: gana la última) ---- */
+const _canAccess_tar = canAccess;
+canAccess = function(id){ if(id==='tareas') return !!S.user; return _canAccess_tar(id); };
+const _modalContent_tar = modalContent;
+modalContent = function(){
+  if(F.type==='tar_nuevo') return tarNuevoModalContent();
+  if(F.type==='tar_det')   return tarDetModalContent();
+  if(F.type==='tar_edit')  return tarEditModalContent();
+  return _modalContent_tar();
+};
+const _appView_tar = appView;
+appView = function(){
+  if(S.module==='tareas'){ if(!canAccess('tareas')){ S.module=null; return homeView(); } return tareasView(); }
+  return _appView_tar();
+};
+
+/* ===== FIN TAREAS ===== */
+
+
+
+/* ===== TAREAS · AVISOS Y PRIORIZACIÓN ===== */
+/* Resumen al entrar (vencidas / hoy / mensajes nuevos) + contador en el hub. */
+
+function tarNuevosPara(t, me){
+  const v=((t.vistos&&typeof t.vistos==='object')?t.vistos[me]:'')||'';
+  return (t.mensajes||[]).filter(mm=>mm.de!==me && String(mm.ts)>v).length;
+}
+function tarMisNuevos(me){
+  return (S.tareas||[]).filter(t=>t.deQuien===me||t.paraQuien===me).reduce((s,t)=>s+tarNuevosPara(t,me),0);
+}
+function tarResumenBanner(){
+  const me=S.user.nombre, first=me.split(' ')[0];
+  const mias=(S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t));
+  const venc=mias.filter(tarVencida).length;
+  const hoy=mias.filter(t=>t.fechaLimite===todayStr()).length;
+  const pend=mias.length;
+  const nuevos=tarMisNuevos(me);
+  if(!pend && !nuevos) return `<div class="note" style="margin-top:0">${first}, no tienes tareas pendientes ni mensajes nuevos. Todo al día.</div>`;
+  const partes=[];
+  if(venc) partes.push(`<strong style="color:#C0392B">${venc} vencida${venc>1?'s':''}</strong>`);
+  if(hoy) partes.push(`<strong style="color:#B8860B">${hoy} para hoy</strong>`);
+  const resto=pend-venc-hoy;
+  if(resto>0) partes.push(`${resto} por delante`);
+  if(nuevos) partes.push(`<strong>${nuevos} mensaje${nuevos>1?'s':''} nuevo${nuevos>1?'s':''}</strong>`);
+  const cierre = venc ? 'Empieza por lo vencido.' : (hoy ? 'Prioriza lo de hoy.' : (nuevos? 'Echa un ojo a los mensajes.':'Vas con margen.'));
+  return `<div class="note" style="margin-top:0">${first}, tienes ${partes.join(' · ')}. ${cierre}</div>`;
+}
+
+/* contador en la tarjeta de Tareas del inicio (gana la última) */
+const _homeView_avisos = homeView;
+homeView = function(){
+  let html=_homeView_avisos();
+  try{
+    const me=S.user&&S.user.nombre;
+    if(me){
+      const pend=(S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t)).length;
+      const venc=(S.tareas||[]).filter(t=>t.paraQuien===me && tarVencida(t)).length;
+      const nuevos=tarMisNuevos(me);
+      if(pend||nuevos){
+        const col=venc?'#C0392B':'#5A6770';
+        const txt=`${pend}${nuevos?` · ${nuevos}✉`:''}`;
+        const badge=`<span title="${pend} pendientes${nuevos?`, ${nuevos} mensajes nuevos`:''}" style="margin-left:auto;background:${col};color:#fff;font-size:11px;font-weight:800;border-radius:20px;padding:3px 9px">${txt}</span>`;
+        html=html.replace(/(onclick="setModule\('tareas'\)">\s*<div class="mc-top">)([\s\S]*?)(<\/div>)/, (m,a,b,c)=> a+b+badge+c);
+      }
+    }
+  }catch(e){ console.error('hub badge tareas', e); }
+  return html;
+};
+
+/* ===== FIN AVISOS ===== */
+
 
 boot();
 
