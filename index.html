@@ -370,6 +370,22 @@
   .tabs{width:100%;max-width:100vw;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
   main,.wrap{width:100%;max-width:100%}
 }
+
+/* === movil: la tabla SIGUE siendo tabla y se desliza de lado con el dedo (no tarjetas) === */
+@media(max-width:720px){
+  .matrix{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+  .matrix table{display:table;width:100%;min-width:680px}
+  .matrix thead{display:table-header-group}
+  .matrix tbody{display:table-row-group}
+  .matrix tr{display:table-row;border:none;border-radius:0;margin:0;background:transparent;padding:0}
+  .matrix thead tr:not(.filterrow){display:table-row}
+  .matrix thead tr.filterrow{display:table-row}
+  .matrix thead tr.filterrow th{display:table-cell;flex:none}
+  .matrix th,.matrix td{display:table-cell;border:none;border-bottom:1px solid #f1ece3;
+    padding:9px 12px;text-align:left;justify-content:flex-start;white-space:nowrap}
+  .matrix td::before{display:none}
+  .matrix td.empty{text-align:center}
+}
 </style>
 
 <body>
