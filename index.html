@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-1">
+<meta name="lucai-version" content="2026-06-08-2">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -18,7 +18,7 @@
     var cur=document.querySelector('meta[name=lucai-version]');
     cur=cur?cur.getAttribute('content'):'';
     var base=location.href.split('#')[0].split('?')[0];
-    fetch(base+'?cb='+Date.now(),{cache:'no-store'})
+    fetch(base+'?cb='+Date.now(),{cache:'no-store',headers:{'Range':'bytes=0-2047'}})
       .then(function(r){ return r.text(); })
       .then(function(t){
         var m=t.match(/name="lucai-version"\s+content="([^"]+)"/);
@@ -476,6 +476,10 @@ const USERS = [
   {id:5, nombre:"Dessire Perez", rol:"Atención paciente", pin:"4444"},
   {id:6, nombre:"Irene Garcia", rol:"Atención paciente", pin:"5555"},
 ];
+
+/* Telegram — avisos al móvil. Se rellenan tras crear el bot y la Edge Function. */
+const TG_BOT='';   // usuario del bot, SIN @  (p.ej. LucaiAvisosBot)
+const TG_FN='';    // URL de la Edge Function (p.ej. https://xxxx.supabase.co/functions/v1/telegram)
 const DOCTORS = ["Dra. Laura Fernández","Dr. Javier Ruiz","Dra. Ana Gómez"];
 const CATEGORIAS = ["RMR","Ortodoncia","Implantología","Endodoncia","Anestesia","Fungible","Higiene y prevención"];
 const PROVEEDORES_SEED = ["Ortoplus","Dentaurum","American Orthodontics","BioHorizons","Dentsply Sirona","Inibsa","Henry Schein","GACD"];
@@ -1842,7 +1846,7 @@ async function _autoSync(){
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _autoSync(); });
 window.addEventListener('focus', function(){ _autoSync(); });
 window.addEventListener('pageshow', function(){ _autoSync(); });
-setInterval(function(){ _autoSync(); }, 5000);
+setInterval(function(){ _autoSync(); }, 20000);
 /* ===== FIN CAPA ROBUSTA ===== */
 
 /* ===== MÓDULO INCIDENCIAS ===== */
@@ -1867,7 +1871,7 @@ if(!Array.isArray(S.incidencias)) S.incidencias=[];
 /* añadir la carga de incidencias a loadFromDB (envolviendo la versión robusta) */
 const _loadFromDB_base = loadFromDB;
 loadFromDB = async function(){
-  await _loadFromDB_base();
+  const _prev = _loadFromDB_base();
   try{
     const inc = await sbc.from('inc_incidencias').select('*').order('created_at',{ascending:false});
     if(inc.data) S.incidencias = inc.data.map(r=>({
@@ -1876,6 +1880,7 @@ loadFromDB = async function(){
       pacCod:r.pac_cod, pacNombre:r.pac_nombre, revisada:r.revisada===true,
       notaDir:r.nota_dir, revPor:r.rev_por, revTs:r.rev_ts, origen:r.origen }));
   }catch(e){ console.error('loadIncidencias', e); }
+  await _prev;
 };
 
 /* ---- guardado en servidor ---- */
@@ -2453,7 +2458,7 @@ if(!Array.isArray(S.partes))  S.partes=[];
 /* añadir equipos y partes a loadFromDB */
 const _loadFromDB_eq = loadFromDB;
 loadFromDB = async function(){
-  await _loadFromDB_eq();
+  const _prev = _loadFromDB_eq();
   try{
     const [eq, pa] = await Promise.all([
       sbc.from('eq_equipos').select('*').order('nombre'),
@@ -2467,6 +2472,7 @@ loadFromDB = async function(){
       estado:r.estado, proveedor:r.proveedor, coste:(r.coste==null?null:Number(r.coste)), factura:r.factura,
       fechaCierre:r.fecha_cierre, fechaEstado:r.fecha_estado, notas:r.notas }));
   }catch(e){ console.error('loadEquipos', e); }
+  await _prev;
 };
 
 /* ---- guardado ---- */
@@ -3084,7 +3090,7 @@ S.presF = S.presF || {area:'',doctor:'',coord:'',motivo:'',desde:'',hasta:''};
 /* ---- persistencia ---- */
 const _loadFromDB_pres = loadFromDB;
 loadFromDB = async function(){
-  await _loadFromDB_pres();
+  const _prev = _loadFromDB_pres();
   try{
     const r = await sbc.from('pres_presupuestos').select('*').order('created_at',{ascending:false});
     if(r.data){
@@ -3097,6 +3103,7 @@ loadFromDB = async function(){
       }));
     }
   }catch(e){ console.error('loadPresupuestos', e); }
+  await _prev;
 };
 
 async function srvPresInsert(p, okMsg){
@@ -3472,7 +3479,7 @@ S.tarF = S.tarF || {estado:'',prio:'',de:'',para:''};
 /* ---- persistencia ---- */
 const _loadFromDB_tar = loadFromDB;
 loadFromDB = async function(){
-  await _loadFromDB_tar();
+  const _prev = _loadFromDB_tar();
   try{
     const r = await sbc.from('tar_tareas').select('*').order('created_at',{ascending:false});
     if(r.data){
@@ -3485,6 +3492,7 @@ loadFromDB = async function(){
       }));
     }
   }catch(e){ console.error('loadTareas', e); }
+  await _prev;
 };
 async function srvTarInsert(t, okMsg){
   try{
@@ -3546,7 +3554,7 @@ function tareasView(){
   if(sub==='tar_semana') body=tarSemanaView();
   else if(sub==='tar_todas') body=tarTodasView();
   else body=tarBuzonView(sub==='tar_emitidas'?'emitidas':'recibidas');
-  const acts=`<div class="actions"><button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
+  const acts=`<div class="actions">${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
   <main><div class="wrap">
     <div class="toolbar" style="margin-bottom:14px">
@@ -3739,6 +3747,7 @@ function commitTarea(){
     paraQuien:F.paraQuien, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{} };
   S.tareas.unshift(t); closeModal(); render();
   srvTarInsert(t, 'Tarea enviada');
+  tgNotify(t.paraQuien, `📋 Nueva tarea de ${t.deQuien}: "${t.titulo}" · prioridad ${t.prioridad}${t.fechaLimite?` · entrega ${fmtFecha(t.fechaLimite)}`:''}`);
 }
 
 function openTarDet(id){
@@ -3808,6 +3817,8 @@ function tarAddMsg(id){
   t.mensajes.push({de:me, texto:txt, ts:now()});
   F.msgDraft=''; render();
   srvTarUpdate(id, t);
+  const otros=[...new Set([t.deQuien,t.paraQuien].filter(n=>n && n!==me))];
+  otros.forEach(n=>tgNotify(n, `💬 ${me} en "${t.titulo}": ${txt}`));
 }
 function openTarEdit(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
@@ -3990,6 +4001,17 @@ function tarAlertModal(){
 }
 
 /* ===== FIN CABECERA AVISOS TAREAS ===== */
+
+
+
+/* ===== TELEGRAM · enlace de vinculación y envío de avisos ===== */
+function tgB64(s){ try{ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }catch(_){ return ''; } }
+function tgLink(){ return (TG_BOT && S.user) ? `https://t.me/${TG_BOT}?start=${tgB64(S.user.nombre)}` : ''; }
+function tgNotify(para, texto){
+  if(!TG_FN || !para || !texto) return;
+  try{ fetch(TG_FN, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'notify', para, texto})}).catch(function(){}); }catch(_){}
+}
+/* ===== FIN TELEGRAM ===== */
 
 
 boot();
