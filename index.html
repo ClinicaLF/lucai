@@ -1756,6 +1756,11 @@ function commitSegui(){
   srvSegui(seg, 'Seguimiento registrado');
 }
 
+
+/* ---- refresco automatico al volver a la app (ver cambios de otros dispositivos) ---- */
+function _autoSync(){ if(DEVICE && LOADED && S.user && !S.modal) syncAll(); }
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _autoSync(); });
+window.addEventListener('focus', _autoSync);
 /* ===== FIN CAPA ROBUSTA ===== */
 
 boot();
