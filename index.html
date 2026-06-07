@@ -7,6 +7,30 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
+<meta name="lucai-version" content="2026-06-08-1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<script>
+/* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
+   Evita que el móvil se quede con una versión vieja en caché. */
+(function(){
+  try{
+    if(navigator.onLine===false) return;
+    var cur=document.querySelector('meta[name=lucai-version]');
+    cur=cur?cur.getAttribute('content'):'';
+    var base=location.href.split('#')[0].split('?')[0];
+    fetch(base+'?cb='+Date.now(),{cache:'no-store'})
+      .then(function(r){ return r.text(); })
+      .then(function(t){
+        var m=t.match(/name="lucai-version"\s+content="([^"]+)"/);
+        var net=m?m[1]:'';
+        if(net && cur && net!==cur){
+          var sp=new URLSearchParams(location.search);
+          if(sp.get('v')!==net){ sp.set('v',net); location.replace(location.pathname+'?'+sp.toString()+location.hash); }
+        }
+      }).catch(function(){});
+  }catch(e){}
+})();
+</script>
 <title>Lucai · Laura Fernández</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
