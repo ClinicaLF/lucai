@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-3">
+<meta name="lucai-version" content="2026-06-08-7">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4012,6 +4012,121 @@ function tgNotify(para, texto){
   try{ fetch(TG_FN, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'notify', para, texto})}).catch(function(){}); }catch(_){}
 }
 /* ===== FIN TELEGRAM ===== */
+
+
+
+
+/* ===== ASISTENTE IA · "Pregúntale a Lucai" ===== */
+/* Cajita de preguntas. De momento responde sobre las tareas del usuario.
+   La clave vive en la Edge Function "ia" (Supabase), nunca en este HTML. */
+
+const IA_FN = 'https://wnwuvgrpmokwkelqhzuz.supabase.co/functions/v1/quick-task';
+
+if(!Array.isArray(S.iaChat)) S.iaChat = [];
+
+/* alta del módulo en el hub */
+(function(){
+  if(!MODULES.find(x=>x.id==='asistente')){
+    MODULES.push({ id:'asistente', ini:'IA', nombre:'Asistente de Lucai',
+      desc:'Pregúntale en lenguaje normal sobre tus tareas: qué tienes hoy, qué es lo más urgente, qué llevas vencido.',
+      estado:'activo' });
+  }
+})();
+
+/* acceso: cualquiera que haya entrado */
+const _canAccess_ia = canAccess;
+canAccess = function(id){ if(id==='asistente') return !!S.user; return _canAccess_ia(id); };
+
+/* construir el contexto que se le manda: las tareas activas del usuario */
+function iaContexto(){
+  const me = S.user.nombre;
+  const hoy = (typeof todayStr==='function') ? todayStr() : new Date().toISOString().slice(0,10);
+  const mias = (S.tareas||[]).filter(t=> t.paraQuien===me && (typeof tarActiva==='function' ? tarActiva(t) : t.estado!=='Hecha'));
+  const cab = `HOY es ${hoy}. Usa esta fecha para decidir qué está VENCIDA (fecha anterior a hoy), qué VENCE HOY y qué es futura. "Vencida", "pasada", "atrasada" y "sin terminar de antes" significan lo mismo.\n`;
+  if(!mias.length) return cab + 'No tiene tareas pendientes asignadas.';
+  const filas = mias.map(t=>{
+    let temp = 'sin fecha';
+    if(t.fechaLimite){ temp = t.fechaLimite < hoy ? 'VENCIDA' : (t.fechaLimite===hoy ? 'VENCE HOY' : 'futura'); }
+    return `- ${t.titulo} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp}) | estado: ${t.estado||'Pendiente'} | se la mandó: ${t.deQuien||'—'}`;
+  }).join('\n');
+  return cab + 'Tareas de ' + me + ':\n' + filas;
+}
+
+async function iaSend(textoFijo){
+  const box = el('iaInput');
+  const q = (textoFijo!=null ? textoFijo : (box ? box.value : '')).trim();
+  if(!q || S.iaLoading) return;
+  S.iaChat.push({ q:q, a:null });
+  S.iaLoading = true;
+  render();
+  try{
+    const r = await fetch(IA_FN, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ pregunta:q, contexto:iaContexto(), usuario:S.user.nombre })
+    });
+    const data = await r.json().catch(()=>({}));
+    const last = S.iaChat[S.iaChat.length-1];
+    last.a = (data && data.respuesta) ? data.respuesta : 'No he recibido respuesta.';
+  }catch(e){
+    const last = S.iaChat[S.iaChat.length-1];
+    last.a = 'No he podido conectar con la IA. Revisa la conexión e inténtalo de nuevo.';
+  }
+  S.iaLoading = false;
+  render();
+  setTimeout(()=>{ const sc=el('iaScroll'); if(sc) sc.scrollTop=sc.scrollHeight; }, 30);
+}
+function iaSugerencia(t){ iaSend(t); }
+function iaLimpiar(){ S.iaChat=[]; render(); }
+
+function iaBurbujas(){
+  if(!S.iaChat.length){
+    return `<div class="muted" style="text-align:center;padding:26px 8px">Escribe tu pregunta abajo, o toca una sugerencia.</div>`;
+  }
+  let h='';
+  S.iaChat.forEach(m=>{
+    h += `<div style="display:flex;justify-content:flex-end;margin:8px 0"><div style="max-width:80%;background:#EAF1D8;border:1px solid #D4E3B0;border-radius:14px 14px 4px 14px;padding:9px 12px;font-size:14px;white-space:pre-wrap">${incEsc(m.q)}</div></div>`;
+    if(m.a!=null){
+      h += `<div style="display:flex;justify-content:flex-start;margin:8px 0"><div style="max-width:85%;background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:14px;white-space:pre-wrap">${incEsc(m.a)}</div></div>`;
+    }
+  });
+  if(S.iaLoading){
+    h += `<div style="display:flex;justify-content:flex-start;margin:8px 0"><div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:9px 12px;font-size:14px;color:var(--grey-2)">Pensando…</div></div>`;
+  }
+  return h;
+}
+
+function asistenteView(){
+  const sugs = ['¿Qué tengo que hacer hoy?','¿Qué es lo más urgente?','¿Tengo algo vencido?','Resúmeme mis tareas'];
+  return `${moduleHeader('Asistente de Lucai', false)}
+  <main><div class="wrap">
+    <div><div class="section-title">Pregúntale a Lucai</div>
+      <div class="section-sub">Responde en lenguaje normal sobre tus tareas. Puede equivocarse: para algo importante, compruébalo.</div></div>
+
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin:6px 0 12px">
+      ${sugs.map(s=>`<button class="btn btn-ghost btn-sm" onclick="iaSugerencia('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('')}
+      ${S.iaChat.length?`<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="iaLimpiar()">Limpiar</button>`:''}
+    </div>
+
+    <div id="iaScroll" style="background:var(--arena-1);border:1px solid var(--line);border-radius:14px;padding:12px;min-height:200px;max-height:48vh;overflow:auto">
+      ${iaBurbujas()}
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <input id="iaInput" class="inp" style="flex:1" placeholder="Escribe tu pregunta…"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();iaSend()}">
+      <button class="btn btn-primary" onclick="iaSend()" ${S.iaLoading?'disabled':''}>Enviar</button>
+    </div>
+  </div></main>`;
+}
+
+/* enganche a appView (gana la última) */
+const _appView_ia = appView;
+appView = function(){
+  if(S.module==='asistente'){ if(!canAccess('asistente')){ S.module=null; return homeView(); } return asistenteView(); }
+  return _appView_ia();
+};
+
+/* ===== FIN ASISTENTE IA ===== */
 
 
 boot();
