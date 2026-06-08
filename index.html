@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-7">
+<meta name="lucai-version" content="2026-06-08-8">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4040,16 +4040,46 @@ canAccess = function(id){ if(id==='asistente') return !!S.user; return _canAcces
 /* construir el contexto que se le manda: las tareas activas del usuario */
 function iaContexto(){
   const me = S.user.nombre;
+  const admin = (typeof isAdmin==='function') ? isAdmin() : false;
   const hoy = (typeof todayStr==='function') ? todayStr() : new Date().toISOString().slice(0,10);
-  const mias = (S.tareas||[]).filter(t=> t.paraQuien===me && (typeof tarActiva==='function' ? tarActiva(t) : t.estado!=='Hecha'));
-  const cab = `HOY es ${hoy}. Usa esta fecha para decidir qué está VENCIDA (fecha anterior a hoy), qué VENCE HOY y qué es futura. "Vencida", "pasada", "atrasada" y "sin terminar de antes" significan lo mismo.\n`;
-  if(!mias.length) return cab + 'No tiene tareas pendientes asignadas.';
-  const filas = mias.map(t=>{
-    let temp = 'sin fecha';
-    if(t.fechaLimite){ temp = t.fechaLimite < hoy ? 'VENCIDA' : (t.fechaLimite===hoy ? 'VENCE HOY' : 'futura'); }
-    return `- ${t.titulo} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp}) | estado: ${t.estado||'Pendiente'} | se la mandó: ${t.deQuien||'—'}`;
-  }).join('\n');
-  return cab + 'Tareas de ' + me + ':\n' + filas;
+  const activa = t => (typeof tarActiva==='function' ? tarActiva(t) : t.estado!=='Hecha');
+  const temp = f => !f ? 'sin fecha' : (f<hoy?'VENCIDA':(f===hoy?'VENCE HOY':'futura'));
+  const out = [];
+  out.push(`HOY es ${hoy}. Usa esta fecha para saber qué está VENCIDA (anterior a hoy), qué VENCE HOY y qué es futura. "Vencida", "pasada", "atrasada" o "sin terminar de antes" significan lo mismo.`);
+  out.push(`Usuario: ${me}${admin?' (Dirección)':''}.`);
+
+  // 1) Mis tareas pendientes (las que me han mandado)
+  const recib = (S.tareas||[]).filter(t=> t.paraQuien===me && activa(t));
+  out.push('\n[MIS TAREAS PENDIENTES]');
+  if(!recib.length) out.push('(ninguna)');
+  else recib.forEach(t=> out.push(`- ${t.titulo} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'} | me la mandó: ${t.deQuien||'—'}`));
+
+  // 2) Tareas que YO he encargado a otros
+  const emit = (S.tareas||[]).filter(t=> t.deQuien===me && t.paraQuien!==me && activa(t));
+  out.push('\n[TAREAS QUE YO HE ENCARGADO A OTROS]');
+  if(!emit.length) out.push('(ninguna)');
+  else emit.forEach(t=> out.push(`- ${t.titulo} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'}`));
+
+  // 3) Incidencias sin revisar (sin datos de pacientes)
+  const incs = (S.incidencias||[]).filter(i=> !i.revisada).slice(0,25);
+  out.push('\n[INCIDENCIAS SIN REVISAR] (sin datos de pacientes)');
+  if(!incs.length) out.push('(ninguna sin revisar)');
+  else incs.forEach(i=> out.push(`- ${i.fecha||i.ts||'?'} | categoría: ${i.categoria||'—'} | importancia: ${i.importancia||'—'} | la reportó: ${i.reporta||'—'}`));
+
+  // 4) Presupuestos rechazados — solo Dirección, sin datos de pacientes
+  if(admin){
+    const pres = (S.presupuestos||[]);
+    out.push('\n[PRESUPUESTOS RECHAZADOS] (solo Dirección · sin datos de pacientes)');
+    if(!pres.length) out.push('(ninguno registrado)');
+    else {
+      const total = pres.reduce((s,p)=> s + (Number(p.importe)||0), 0);
+      out.push(`Total: ${pres.length} rechazos · importe perdido aprox. ${total} €.`);
+      pres.slice(0,40).forEach(p=> out.push(`- ${p.fechaRechazo||p.fechaPresup||'?'} | área: ${p.area||'—'} | importe: ${Number(p.importe)||0} € | doctor: ${p.doctor||'—'} | coord.: ${p.coordinadora||'—'} | motivos: ${(p.motivos||[]).join('; ')||'—'}`));
+      if(pres.length>40) out.push(`...y ${pres.length-40} más.`);
+    }
+  }
+
+  return out.join('\n');
 }
 
 async function iaSend(textoFijo){
