@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-50">
+<meta name="lucai-version" content="2026-06-08-51">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4601,7 +4601,7 @@ async function iaSend(textoFijo){
       if(!started){ started=true; last.a=''; last._live=true; S.iaLoading=false; render(); scrollDown(); }
       last.a += chunk;
       const liveEl=document.getElementById('iaLiveMsg');
-      if(liveEl){ liveEl.textContent=last.a; } else { render(); }
+      if(liveEl){ liveEl.innerHTML=iaFormat(last.a); } else { render(); }
       scrollDown();
     }
     clearTimeout(killer);
@@ -4618,6 +4618,12 @@ async function iaSend(textoFijo){
 function iaSugerencia(t){ iaSend(t); }
 function iaLimpiar(){ S.iaChat=[]; render(); }
 
+function iaFormat(t){
+  let s = incEsc(t||'');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');   // **negrita**
+  s = s.replace(/(^|\n)\s*[-•]\s+/g, '$1• ');                    // viñetas limpias
+  return s;
+}
 function iaBurbujas(){
   if(!S.iaChat.length){
     const nombre = (S.user&&S.user.nombre) ? S.user.nombre.split(' ')[0] : '';
@@ -4632,8 +4638,8 @@ function iaBurbujas(){
   S.iaChat.forEach(m=>{
     h += `<div style="display:flex;justify-content:flex-end;margin:8px 0"><div style="max-width:80%;background:#EAF1D8;border:1px solid #D4E3B0;border-radius:14px 14px 4px 14px;padding:9px 12px;font-size:14px;white-space:pre-wrap">${incEsc(m.q)}</div></div>`;
     if(m.a!=null){
-      const liveId = m._live ? ' id="iaLiveMsg"' : '';
-      h += `<div style="display:flex;justify-content:flex-start;margin:8px 0"><div style="max-width:85%;background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:14px;white-space:pre-wrap"><span${liveId}>${incEsc(m.a)}</span></div></div>`;
+      const inner = m._live ? `<span id="iaLiveMsg">${incEsc(m.a)}</span>` : iaFormat(m.a);
+      h += `<div style="display:flex;justify-content:flex-start;margin:8px 0"><div style="max-width:85%;background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:14px;line-height:1.5;white-space:pre-wrap">${inner}</div></div>`;
     }
   });
   if(S.iaLoading){
