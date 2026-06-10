@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-31">
+<meta name="lucai-version" content="2026-06-08-32">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4394,29 +4394,42 @@ function iaContexto(){
   const hoy = (typeof todayStr==='function') ? todayStr() : new Date().toISOString().slice(0,10);
   const activa = t => (typeof tarActiva==='function' ? tarActiva(t) : t.estado!=='Hecha');
   const temp = f => !f ? 'sin fecha' : (f<hoy?'VENCIDA':(f===hoy?'VENCE HOY':'futura'));
+  const dias = f => { if(!f) return null; return Math.round((new Date(f+'T00:00:00')-new Date(hoy+'T00:00:00'))/86400000); };
   const out = [];
-  out.push(`HOY es ${hoy}. Usa esta fecha para saber qué está VENCIDA (anterior a hoy), qué VENCE HOY y qué es futura. "Vencida", "pasada", "atrasada" o "sin terminar de antes" significan lo mismo.`);
+  out.push(`HOY es ${hoy}. Úsala para saber qué está VENCIDA (fecha anterior a hoy), qué VENCE HOY y qué es futura. "Vencida", "pasada" o "atrasada" significan lo mismo.`);
   out.push(`Usuario: ${me}${admin?' (Dirección)':''}.`);
 
-  // 1) Mis tareas pendientes (las que me han mandado)
-  const recib = (S.tareas||[]).filter(t=> t.paraQuien===me && activa(t));
-  out.push('\n[MIS TAREAS PENDIENTES]');
-  if(!recib.length) out.push('(ninguna)');
-  else recib.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'} | tiempo dedicado: ${tarFmtMin(tarTotalMin(t))} | me la mandó: ${t.deQuien||'—'}`));
+  const recib = (S.tareas||[]).filter(t=> t.paraQuien===me);
+  const act = recib.filter(activa);
+  const porHacer = act.filter(t=>t.estado!=='En espera');
+  const espera = act.filter(t=>t.estado==='En espera');
+  const venc = porHacer.filter(t=> t.fechaLimite && t.fechaLimite<hoy);
+  const hoyT = porHacer.filter(t=> t.fechaLimite===hoy);
+  out.push(`\n[RESUMEN] ${porHacer.length} por hacer · ${espera.length} en espera de otros · ${venc.length} vencidas · ${hoyT.length} para hoy.`);
 
-  // 2) Tareas que YO he encargado a otros
+  out.push('\n[MIS TAREAS POR HACER] (dependen de mí ahora)');
+  if(!porHacer.length) out.push('(ninguna)');
+  else porHacer.forEach(t=>{ const d=dias(t.fechaLimite); const det = d!=null ? (d<0?`, hace ${-d} d`:(d===0?', hoy':`, en ${d} d`)) : ''; out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}${det}) | estado: ${t.estado||'Pendiente'} | la mandó: ${t.deQuien||'—'} | tiempo ya dedicado: ${tarFmtMin(tarTotalMin(t))}`); });
+
+  out.push('\n[EN ESPERA DE OTROS] (ya hice mi parte, espero respuesta)');
+  if(!espera.length) out.push('(ninguna)');
+  else espera.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)})`));
+
+  const d7=new Date(hoy+'T00:00:00'); d7.setDate(d7.getDate()-7); const hace7=d7.toISOString().slice(0,10);
+  const hechasRec = recib.filter(t=> t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=hace7);
+  out.push('\n[TERMINADAS EN LOS ÚLTIMOS 7 DÍAS]');
+  out.push(hechasRec.length ? hechasRec.map(t=>`- ${t.titulo} (${t.fechaHecha})`).join('\n') : '(ninguna)');
+
   const emit = (S.tareas||[]).filter(t=> t.deQuien===me && t.paraQuien!==me && activa(t));
   out.push('\n[TAREAS QUE YO HE ENCARGADO A OTROS]');
   if(!emit.length) out.push('(ninguna)');
-  else emit.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'} | tiempo dedicado: ${tarFmtMin(tarTotalMin(t))}`));
+  else emit.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'}`));
 
-  // 3) Incidencias sin revisar (sin datos de pacientes)
   const incs = (S.incidencias||[]).filter(i=> !i.revisada).slice(0,25);
   out.push('\n[INCIDENCIAS SIN REVISAR] (sin datos de pacientes)');
   if(!incs.length) out.push('(ninguna sin revisar)');
   else incs.forEach(i=> out.push(`- ${i.fecha||i.ts||'?'} | categoría: ${i.categoria||'—'} | importancia: ${i.importancia||'—'} | la reportó: ${i.reporta||'—'}`));
 
-  // 4) Presupuestos rechazados — solo Dirección, sin datos de pacientes
   if(admin){
     const pres = (S.presupuestos||[]);
     out.push('\n[PRESUPUESTOS RECHAZADOS] (solo Dirección · sin datos de pacientes)');
