@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-10">
+<meta name="lucai-version" content="2026-06-08-11">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -600,7 +600,7 @@ const SUPABASE_KEY = 'sb_publishable_z-TexwPd_srvBHfWL2vnyA_zTOpi0ue';
 const sbc = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let DEVICE = false, LOADED = false;
 const CLINICA = 'centro';
-const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','seguimientos'];
+const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','seguimientos','tarAreas'];
 let _persistT = null;
 
 async function boot(){
@@ -3475,6 +3475,10 @@ if(!Array.isArray(S.tareas)) S.tareas = [
 S.tarVerHechas = S.tarVerHechas || false;
 S.tarWeek = S.tarWeek || 0;
 S.tarF = S.tarF || {estado:'',prio:'',de:'',para:'',area:''};
+if(!Array.isArray(S.tarAreas) || !S.tarAreas.length) S.tarAreas = TAR_AREAS.slice();
+S.tarBuzonArea = S.tarBuzonArea || '';
+function tarAreas(){ return (Array.isArray(S.tarAreas)&&S.tarAreas.length) ? S.tarAreas : TAR_AREAS; }
+function _tarPersistAreas(){ try{ if(typeof _persistSoon==='function') _persistSoon(); else if(typeof persistNow==='function') persistNow(); }catch(_){ } }
 
 /* activar módulo en el hub */
 (function(){ const m=MODULES.find(x=>x.id==='tareas');
@@ -3561,7 +3565,7 @@ function tareasView(){
   if(sub==='tar_semana') body=tarSemanaView();
   else if(sub==='tar_todas') body=tarTodasView();
   else body=tarBuzonView(sub==='tar_emitidas'?'emitidas':'recibidas');
-  const acts=`<div class="actions">${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
+  const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
   <main><div class="wrap">
     <div class="toolbar" style="margin-bottom:14px">
@@ -3592,12 +3596,16 @@ function tarAreaChip(a){ if(!a) a='General'; return `<span style="display:inline
 function tarBuzonView(modo){
   const me=S.user.nombre;
   const all=(S.tareas||[]).filter(t=> modo==='emitidas' ? t.deQuien===me : t.paraQuien===me);
-  const toggle=`<label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#6C757D;cursor:pointer;margin:0 0 14px">
-    <input type="checkbox" ${S.tarVerHechas?'checked':''} onchange="toggleTarHechas()"> Ver también las hechas/archivadas</label>`;
-  const list=all.filter(t=> S.tarVerHechas ? true : tarActiva(t))
+  const af = S.tarBuzonArea||'';
+  const toggle=`<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px">
+    <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#6C757D;cursor:pointer;margin:0">
+      <input type="checkbox" ${S.tarVerHechas?'checked':''} onchange="toggleTarHechas()"> Ver también las hechas/archivadas</label>
+    <select class="inp" style="max-width:220px;margin:0" onchange="setTarBuzonArea(this.value)"><option value="">Todas las áreas</option>${tarAreas().map(a=>`<option ${af===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>
+  </div>`;
+  const list=all.filter(t=> (S.tarVerHechas ? true : tarActiva(t)) && (!af || (t.area||'General')===af))
     .sort((a,b)=>{ const av=tarActiva(a)?0:1, bv=tarActiva(b)?0:1; if(av!==bv) return av-bv; return String(a.fechaLimite||'').localeCompare(String(b.fechaLimite||'')); });
   if(!all.length) return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${modo==='emitidas'?'No has mandado ninguna tarea todavía. Usa “Nueva tarea”.':'No tienes tareas en tu buzón. ¡Buen trabajo!'}</div>`;
-  if(!list.length) return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">Nada activo aquí. Marca “ver hechas” para ver el archivo.</div>`;
+  if(!list.length) return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${af?'No hay tareas activas en esa área.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</div>`;
   const otro = modo==='emitidas' ? 'Para' : 'De';
   const rows=list.map(t=>{
     const persona = modo==='emitidas' ? t.paraQuien : t.deQuien;
@@ -3631,7 +3639,7 @@ function tarTodasView(){
   const filtros=`<div class="inc-filters">
     <select class="inp" onchange="setTarF('estado',this.value)"><option value="">Todos los estados</option>${TAR_ESTADOS.map(s=>`<option ${f.estado===s?'selected':''}>${s}</option>`).join('')}</select>
     <select class="inp" onchange="setTarF('prio',this.value)"><option value="">Toda prioridad</option>${TAR_PRIOS.map(p=>`<option ${f.prio===p?'selected':''}>${p}</option>`).join('')}</select>
-    <select class="inp" onchange="setTarF('area',this.value)"><option value="">Toda área</option>${TAR_AREAS.map(a=>`<option ${f.area===a?'selected':''}>${a}</option>`).join('')}</select>
+    <select class="inp" onchange="setTarF('area',this.value)"><option value="">Toda área</option>${tarAreas().map(a=>`<option ${f.area===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>
     <select class="inp" onchange="setTarF('de',this.value)"><option value="">Cualquier emisor</option>${u.map(n=>`<option ${f.de===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>
     <select class="inp" onchange="setTarF('para',this.value)"><option value="">Cualquier responsable</option>${u.map(n=>`<option ${f.para===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>
     ${(f.estado||f.prio||f.area||f.de||f.para)?`<button class="btn btn-ghost btn-sm" onclick="clearTarF()">Limpiar</button>`:''}
@@ -3708,8 +3716,56 @@ function tarEliminar(id){
 }
 
 /* ---- alta / edición ---- */
+function setTarBuzonArea(v){ S.tarBuzonArea=v; render(); }
+function openTarAreas(){ if(!isAdmin()){ toast('Solo Dirección puede gestionar las áreas'); return; } F={type:'tar_areas', nuevaArea:''}; S.modal='tar_areas'; render(); }
+function tarAreasModalContent(){
+  const areas=tarAreas();
+  const filas=areas.map((a,i)=>{
+    const fija = a==='General';
+    return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input class="inp" style="flex:1" value="${incEsc(a)}" ${fija?'disabled style="background:#F4F0E9;color:#8A949B;flex:1"':''} onchange="tarAreaRename(${i}, this.value)">
+      ${fija?'<span class="muted" style="font-size:12px;width:64px;text-align:center">por defecto</span>':`<button class="btn btn-ghost btn-sm" onclick="tarAreaDelete(${i})">Borrar</button>`}
+    </div>`;
+  }).join('');
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Áreas de tareas</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Crea, renombra o borra las áreas. Las verá todo el equipo al crear tareas. “General” no se puede borrar (es la de por defecto).</div>
+      ${filas}
+      <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
+        <input class="inp" style="flex:1" placeholder="Nueva área…" value="${incEsc(F.nuevaArea||'')}" oninput="setInp('nuevaArea',this.value)">
+        <button class="btn btn-primary" onclick="tarAreaAdd()">Añadir</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      </div>
+    </div></div></div>`;
+}
+function tarAreaAdd(){
+  const v=(F.nuevaArea||'').trim();
+  if(!v){ toast('Escribe un nombre de área'); return; }
+  if(tarAreas().some(a=>a.toLowerCase()===v.toLowerCase())){ toast('Esa área ya existe'); return; }
+  S.tarAreas=tarAreas().slice(); S.tarAreas.push(v); F.nuevaArea=''; _tarPersistAreas(); render(); toast('Área añadida');
+}
+function tarAreaRename(i, val){
+  const areas=tarAreas().slice(); if(i<0||i>=areas.length) return;
+  const old=areas[i], v=(val||'').trim();
+  if(old==='General') return;
+  if(!v){ toast('El nombre no puede estar vacío'); render(); return; }
+  if(v===old) return;
+  if(areas.some((a,j)=>j!==i && a.toLowerCase()===v.toLowerCase())){ toast('Ya hay un área con ese nombre'); render(); return; }
+  areas[i]=v; S.tarAreas=areas; _tarPersistAreas();
+  (S.tareas||[]).forEach(t=>{ if((t.area||'General')===old){ t.area=v; srvTarUpdate(t.id, t); } });
+  render(); toast('Área renombrada');
+}
+function tarAreaDelete(i){
+  const areas=tarAreas().slice(); if(i<0||i>=areas.length) return;
+  if(areas[i]==='General'){ toast('No se puede borrar General'); return; }
+  if(areas.length<=1){ toast('Debe quedar al menos un área'); return; }
+  areas.splice(i,1); S.tarAreas=areas; _tarPersistAreas(); render(); toast('Área borrada');
+}
 function openTarea(){
-  F={type:'tar_nuevo', titulo:'', descripcion:'', prioridad:'Media', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre};
+  F={type:'tar_nuevo', titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre};
   S.modal='tar_nuevo'; render();
 }
 function tarFormBody(){
@@ -3726,7 +3782,7 @@ function tarFormBody(){
       <div class="fld" style="flex:1;min-width:150px"><label>Prioridad</label>
         <select class="inp" onchange="setSel('prioridad',this.value)">${TAR_PRIOS.map(p=>`<option ${(F.prioridad||'Media')===p?'selected':''}>${p}</option>`).join('')}</select></div>
       <div class="fld" style="flex:1;min-width:150px"><label>Área</label>
-        <select class="inp" onchange="setSel('area',this.value)">${TAR_AREAS.map(a=>`<option ${(F.area||'General')===a?'selected':''}>${a}</option>`).join('')}</select></div>
+        <select class="inp" onchange="setSel('area',this.value)">${(function(){const a=tarAreas().slice(); if(F.area&&!a.includes(F.area)) a.unshift(F.area); return a;})().map(a=>`<option ${(F.area||'General')===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select></div>
       <div class="fld" style="flex:1;min-width:170px"><label>Fecha de entrega</label>
         <input class="inp" type="date" value="${incEsc(F.fechaLimite||'')}" oninput="setInp('fechaLimite',this.value)" ${puedeFecha?'':'disabled style="background:#F4F0E9;color:#8A949B"'}>
         ${puedeFecha?'':'<div class="muted" style="font-size:12px;margin-top:4px">Solo la cambia quien emitió la tarea.</div>'}</div>
@@ -3886,6 +3942,7 @@ canAccess = function(id){ if(id==='tareas') return !!S.user; return _canAccess_t
 const _modalContent_tar = modalContent;
 modalContent = function(){
   if(F.type==='tar_nuevo') return tarNuevoModalContent();
+  if(F.type==='tar_areas') return tarAreasModalContent();
   if(F.type==='tar_det')   return tarDetModalContent();
   if(F.type==='tar_edit')  return tarEditModalContent();
   return _modalContent_tar();
