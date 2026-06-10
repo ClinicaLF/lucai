@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-44">
+<meta name="lucai-version" content="2026-06-08-45">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4567,23 +4567,38 @@ async function iaSend(textoFijo){
   const q = (textoFijo!=null ? textoFijo : (box ? box.value : '')).trim();
   if(!q || S.iaLoading) return;
   S.iaChat.push({ q:q, a:null });
-  S.iaLoading = true;
-  render();
+  S.iaLoading = true; render();
+  const last = S.iaChat[S.iaChat.length-1];
+  const scrollDown=()=>{ const sc=el('iaScroll'); if(sc) sc.scrollTop=sc.scrollHeight; };
   try{
     const r = await fetch(IA_FN, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ pregunta:q, contexto:iaContexto(q), usuario:S.user.nombre })
     });
-    const data = await r.json().catch(()=>({}));
-    const last = S.iaChat[S.iaChat.length-1];
-    last.a = (data && data.respuesta) ? data.respuesta : 'No he recibido respuesta.';
+    const ct = (r.headers.get('content-type')||'');
+    if(!r.ok || ct.includes('application/json') || !r.body || !r.body.getReader){
+      // respuesta entera (error, o función sin streaming): comportamiento clásico
+      const data = await r.json().catch(()=>({}));
+      last.a = (data && data.respuesta) ? data.respuesta
+             : (data && data.error ? ('Vaya, ha habido un error: '+data.error) : 'No he recibido respuesta.');
+      last._live=false; S.iaLoading=false; render(); setTimeout(scrollDown,30); return;
+    }
+    // streaming: la respuesta va apareciendo poco a poco
+    last.a=''; last._live=true; S.iaLoading=false; render();
+    const reader=r.body.getReader(); const dec=new TextDecoder();
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      last.a += dec.decode(value, {stream:true});
+      const liveEl=document.getElementById('iaLiveMsg');
+      if(liveEl){ liveEl.textContent=last.a; scrollDown(); } else { render(); scrollDown(); }
+    }
+    if(!last.a) last.a='No he recibido respuesta.';
+    last._live=false; render(); setTimeout(scrollDown,30);
   }catch(e){
-    const last = S.iaChat[S.iaChat.length-1];
-    last.a = 'No he podido conectar con la IA. Revisa la conexión e inténtalo de nuevo.';
+    last.a = (last.a && last.a.length) ? last.a : 'No he podido conectar con la IA. Revisa la conexión e inténtalo de nuevo.';
+    last._live=false; S.iaLoading=false; render(); setTimeout(scrollDown,30);
   }
-  S.iaLoading = false;
-  render();
-  setTimeout(()=>{ const sc=el('iaScroll'); if(sc) sc.scrollTop=sc.scrollHeight; }, 30);
 }
 function iaSugerencia(t){ iaSend(t); }
 function iaLimpiar(){ S.iaChat=[]; render(); }
@@ -4602,7 +4617,8 @@ function iaBurbujas(){
   S.iaChat.forEach(m=>{
     h += `<div style="display:flex;justify-content:flex-end;margin:8px 0"><div style="max-width:80%;background:#EAF1D8;border:1px solid #D4E3B0;border-radius:14px 14px 4px 14px;padding:9px 12px;font-size:14px;white-space:pre-wrap">${incEsc(m.q)}</div></div>`;
     if(m.a!=null){
-      h += `<div style="display:flex;justify-content:flex-start;margin:8px 0"><div style="max-width:85%;background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:14px;white-space:pre-wrap">${incEsc(m.a)}</div></div>`;
+      const liveId = m._live ? ' id="iaLiveMsg"' : '';
+      h += `<div style="display:flex;justify-content:flex-start;margin:8px 0"><div style="max-width:85%;background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:14px;white-space:pre-wrap"><span${liveId}>${incEsc(m.a)}</span></div></div>`;
     }
   });
   if(S.iaLoading){
