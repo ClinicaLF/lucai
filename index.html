@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-11">
+<meta name="lucai-version" content="2026-06-08-12">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3496,6 +3496,7 @@ loadFromDB = async function(){
         area:x.area||'General',
         fechaLimite:x.fecha_limite, deQuien:x.de_quien, paraQuien:x.para_quien,
         estado:x.estado||'Pendiente', ts:x.ts, fechaHecha:x.fecha_hecha,
+        tiempos: Array.isArray(x.tiempos) ? x.tiempos : (function(){ try{ return x.tiempos?JSON.parse(x.tiempos):[]; }catch(_){ return []; } })(),
         mensajes: Array.isArray(x.mensajes) ? x.mensajes : (function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
         vistos: (x.vistos && typeof x.vistos==='object' && !Array.isArray(x.vistos)) ? x.vistos : (function(){ try{ return x.vistos?JSON.parse(x.vistos):{}; }catch(_){ return {}; } })()
       }));
@@ -3509,7 +3510,7 @@ async function srvTarInsert(t, okMsg){
       id:t.id, titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
       area:t.area||'General',
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
-      estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) });
+      estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]) });
     if(error) throw error;
   }catch(e){ console.error('srvTarInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
@@ -3520,7 +3521,7 @@ async function srvTarUpdate(id, t, okMsg){
       titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
       area:t.area||'General',
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
-      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) }).eq('id', id);
+      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]) }).eq('id', id);
     if(error) throw error;
   }catch(e){ console.error('srvTarUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
@@ -3613,7 +3614,7 @@ function tarBuzonView(modo){
       ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>` : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
       <td>${tarPrioChip(t.prioridad)}</td>
-      <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}${tarAreaChip(t.area)}</td>
+      <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}${tarAreaChip(t.area)}${tarTiempoChip(t)}</td>
       <td class="col-hide-m">${incEsc(persona||'—')}</td>
       <td>${tarLimiteCell(t)}</td>
       <td class="col-hide-m">${tarEstadoChip(t.estado)}</td>
@@ -3649,7 +3650,7 @@ function tarTodasView(){
   if(!filt.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay tareas con esos filtros.</div>`;
   const rows=filt.map(t=>`<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
     <td>${tarPrioChip(t.prioridad)}</td>
-    <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}${tarAreaChip(t.area)}</td>
+    <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}${tarAreaChip(t.area)}${tarTiempoChip(t)}</td>
     <td class="col-hide-m">${incEsc(t.deQuien||'—')}</td>
     <td>${incEsc(t.paraQuien||'—')}</td>
     <td>${tarLimiteCell(t)}</td>
@@ -3812,7 +3813,7 @@ function commitTarea(){
   if(!tarValid()) return;
   const t={ id:uid(), titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
     prioridad:F.prioridad||'Media', area:F.area||'General', fechaLimite:F.fechaLimite, deQuien:S.user.nombre,
-    paraQuien:F.paraQuien, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{} };
+    paraQuien:F.paraQuien, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[] };
   S.tareas.unshift(t); closeModal(); render();
   srvTarInsert(t, 'Tarea enviada');
   tgNotify(t.paraQuien, `📋 Nueva tarea de ${t.deQuien}: "${t.titulo}" · prioridad ${t.prioridad}${t.fechaLimite?` · entrega ${fmtFecha(t.fechaLimite)}`:''}`);
@@ -3848,6 +3849,7 @@ function tarDetModalContent(){
       <div class="inc-meta" style="margin:0 0 10px">Entrega: ${incEsc(limTxt)}${t.fechaHecha?` · Hecha el ${incEsc(fmtFecha(t.fechaHecha))}`:''}</div>
       ${t.descripcion?`<div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(t.descripcion)}</div>`:''}
       ${tarThreadHtml(t)}
+      ${tarTiempoHtml(t)}
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
         ${acciones}
         <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
@@ -3887,6 +3889,50 @@ function tarAddMsg(id){
   srvTarUpdate(id, t);
   const otros=[...new Set([t.deQuien,t.paraQuien].filter(n=>n && n!==me))];
   otros.forEach(n=>tgNotify(n, `💬 ${me} en "${t.titulo}": ${txt}`));
+}
+function tarFmtMin(m){ m=Math.max(0,Math.round(Number(m)||0)); const h=Math.floor(m/60), mm=m%60; return h ? (mm?`${h}h ${mm}m`:`${h}h`) : `${mm}m`; }
+function tarTotalMin(t){ return (Array.isArray(t.tiempos)?t.tiempos:[]).reduce((s,e)=>s+(Number(e.min)||0),0); }
+function tarTiempoChip(t){ const m=tarTotalMin(t); return m>0?`<span style="display:inline-block;font-size:11px;font-weight:500;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:middle">${tarFmtMin(m)}</span>`:''; }
+function tarTiempoHtml(t){
+  const me=S.user.nombre, admin=isAdmin();
+  const puede = admin || t.deQuien===me || t.paraQuien===me;
+  const ents=Array.isArray(t.tiempos)?t.tiempos:[];
+  const total=tarTotalMin(t);
+  const list = ents.length ? ents.map((e,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed var(--line)">
+      <div style="font-size:13px"><strong>${tarFmtMin(e.min)}</strong> <span class="muted">· ${incEsc(fmtFecha(e.fecha))} · ${incEsc(e.quien||'—')}${e.nota?` · ${incEsc(e.nota)}`:''}</span></div>
+      ${puede?`<button class="btn btn-ghost btn-sm" title="Quitar este apunte" onclick="tarDelTiempo('${t.id}',${i})">×</button>`:''}
+    </div>`).join('') : `<div class="muted" style="font-size:13px">Sin tiempo registrado todavía.</div>`;
+  const form = puede ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
+      <div class="fld" style="margin:0"><label style="font-size:12px">Minutos</label><input class="inp" type="number" min="1" style="width:90px" value="${incEsc(F.tMin||'')}" oninput="setInp('tMin',this.value)" placeholder="30"></div>
+      <div class="fld" style="margin:0"><label style="font-size:12px">Día</label><input class="inp" type="date" style="width:150px" value="${incEsc(F.tFecha||todayStr())}" oninput="setInp('tFecha',this.value)"></div>
+      <div class="fld" style="margin:0;flex:1;min-width:120px"><label style="font-size:12px">Nota (opcional)</label><input class="inp" value="${incEsc(F.tNota||'')}" oninput="setInp('tNota',this.value)" placeholder="Qué hiciste"></div>
+      <button class="btn btn-primary" onclick="tarAddTiempo('${t.id}')">Añadir tiempo</button>
+    </div>` : '';
+  return `<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B">Tiempo dedicado</div>
+      <div style="font-weight:700">${tarFmtMin(total)}${ents.length?` · ${ents.length} apunte${ents.length>1?'s':''}`:''}</div>
+    </div>
+    ${list}
+    ${form}</div>`;
+}
+function tarAddTiempo(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const me=S.user.nombre;
+  if(!(isAdmin()||t.deQuien===me||t.paraQuien===me)){ toast('No puedes registrar tiempo en esta tarea'); return; }
+  const min=Math.round(Number(F.tMin)||0);
+  if(!min || min<=0){ toast('Pon los minutos (un número mayor que 0)'); return; }
+  if(!Array.isArray(t.tiempos)) t.tiempos=[];
+  t.tiempos.push({ min:min, fecha:(F.tFecha||todayStr()), quien:me, nota:(F.tNota||'').trim()||null, ts:now() });
+  F.tMin=''; F.tNota=''; render();
+  srvTarUpdate(id, t, `Tiempo añadido (${tarFmtMin(min)})`);
+}
+function tarDelTiempo(id, idx){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t||!Array.isArray(t.tiempos)) return;
+  const me=S.user.nombre;
+  if(!(isAdmin()||t.deQuien===me||t.paraQuien===me)){ toast('No puedes editar el tiempo de esta tarea'); return; }
+  if(idx<0||idx>=t.tiempos.length) return;
+  t.tiempos.splice(idx,1); render(); srvTarUpdate(id, t, 'Apunte de tiempo borrado');
 }
 function openTarEdit(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
@@ -3928,10 +3974,10 @@ function exportTareas(){
     return true;
   });
   if(!data.length){ toast('No hay tareas que exportar'); return; }
-  const head=["Tarea","Área","Prioridad","Estado","De","Para","Fecha entrega","Hecha el","Detalle"];
+  const head=["Tarea","Área","Prioridad","Estado","De","Para","Fecha entrega","Hecha el","Tiempo (min)","Tiempo total","Detalle"];
   const rows=[head];
-  data.forEach(t=>rows.push([t.titulo||"",t.area||"General",t.prioridad||"",t.estado||"",t.deQuien||"",t.paraQuien||"",fmtFecha(t.fechaLimite),t.fechaHecha?fmtFecha(t.fechaHecha):"",t.descripcion||""]));
-  const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:38},{wch:14},{wch:10},{wch:11},{wch:18},{wch:18},{wch:13},{wch:12},{wch:46}];
+  data.forEach(t=>rows.push([t.titulo||"",t.area||"General",t.prioridad||"",t.estado||"",t.deQuien||"",t.paraQuien||"",fmtFecha(t.fechaLimite),t.fechaHecha?fmtFecha(t.fechaHecha):"",tarTotalMin(t),tarFmtMin(tarTotalMin(t)),t.descripcion||""]));
+  const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:38},{wch:14},{wch:10},{wch:11},{wch:18},{wch:18},{wch:13},{wch:12},{wch:11},{wch:11},{wch:46}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Tareas");
   XLSX.writeFile(wb,`tareas_${new Date().toISOString().slice(0,10)}.xlsx`); toast('Tareas exportadas');
 }
@@ -4122,13 +4168,13 @@ function iaContexto(){
   const recib = (S.tareas||[]).filter(t=> t.paraQuien===me && activa(t));
   out.push('\n[MIS TAREAS PENDIENTES]');
   if(!recib.length) out.push('(ninguna)');
-  else recib.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'} | me la mandó: ${t.deQuien||'—'}`));
+  else recib.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'} | tiempo dedicado: ${tarFmtMin(tarTotalMin(t))} | me la mandó: ${t.deQuien||'—'}`));
 
   // 2) Tareas que YO he encargado a otros
   const emit = (S.tareas||[]).filter(t=> t.deQuien===me && t.paraQuien!==me && activa(t));
   out.push('\n[TAREAS QUE YO HE ENCARGADO A OTROS]');
   if(!emit.length) out.push('(ninguna)');
-  else emit.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'}`));
+  else emit.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'} | tiempo dedicado: ${tarFmtMin(tarTotalMin(t))}`));
 
   // 3) Incidencias sin revisar (sin datos de pacientes)
   const incs = (S.incidencias||[]).filter(i=> !i.revisada).slice(0,25);
