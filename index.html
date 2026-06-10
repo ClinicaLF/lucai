@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-32">
+<meta name="lucai-version" content="2026-06-08-38">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -37,6 +37,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
+  @keyframes lucaiPop{ 0%{opacity:0;transform:translateY(10px) scale(.92)} 60%{opacity:1;transform:translateY(-2px) scale(1.02)} 100%{opacity:1;transform:translateY(0) scale(1)} }
   :root{
     --arena-1:#F4F0E9; --arena-2:#EAE3D7; --white:#FFFFFF;
     --ink:#333F48; --ink-soft:#3d4a55; --grey:#6C757D; --grey-2:#8A949B;
@@ -749,13 +750,13 @@ function pinPress(n){
   if(S.pin.length>=4) return;
   S.pin+=n; S.err="";
   if(S.pin.length===4){
-    if(S.pin===S.pinUser.pin){ S.user=S.pinUser; S.pinUser=null; S.pin=""; S.module=null; S.alert=""; S.iaOpen=false; S.iaSaludo=true; clearTimeout(window._iaSaludoT); window._iaSaludoT=setTimeout(()=>{ if(S.iaSaludo){ S.iaSaludo=false; render(); } }, 10000); render(); resetIdle(); }
+    if(S.pin===S.pinUser.pin){ S.user=S.pinUser; S.pinUser=null; S.pin=""; S.module=null; S.alert=""; S.iaOpen=false; clearTimeout(window._iaSaludoShow); window._iaSaludoShow=setTimeout(()=>{ if(typeof lucaiSaludoShow==='function') lucaiSaludoShow(); }, 600); render(); resetIdle(); }
     else { S.err="PIN incorrecto"; S.pin=""; render(); return; }
   }
   render();
 }
 function pinDel(){ S.pin=S.pin.slice(0,-1); S.err=""; render(); }
-function logout(){ S.user=null; S.pin=""; S.module=null; S.sub="stock"; clearTimeout(window._idle); window._idle=null; render(); }
+function logout(){ if(typeof lucaiSaludoHide==='function') lucaiSaludoHide(true); clearTimeout(window._iaSaludoShow); S.user=null; S.pin=""; S.module=null; S.sub="stock"; clearTimeout(window._idle); window._idle=null; render(); }
 const SESION_MIN = 5; // minutos de inactividad antes de cerrar sesión
 function resetIdle(){
   if(!S.user) return;
@@ -4395,6 +4396,7 @@ function iaContexto(){
   const activa = t => (typeof tarActiva==='function' ? tarActiva(t) : t.estado!=='Hecha');
   const temp = f => !f ? 'sin fecha' : (f<hoy?'VENCIDA':(f===hoy?'VENCE HOY':'futura'));
   const dias = f => { if(!f) return null; return Math.round((new Date(f+'T00:00:00')-new Date(hoy+'T00:00:00'))/86400000); };
+  const dsc = t => { const d=(t.descripcion||'').trim(); return d ? ` | nota: "${d.length>320?d.slice(0,320)+'…':d}"` : ''; };
   const out = [];
   out.push(`HOY es ${hoy}. Úsala para saber qué está VENCIDA (fecha anterior a hoy), qué VENCE HOY y qué es futura. "Vencida", "pasada" o "atrasada" significan lo mismo.`);
   out.push(`Usuario: ${me}${admin?' (Dirección)':''}.`);
@@ -4409,11 +4411,11 @@ function iaContexto(){
 
   out.push('\n[MIS TAREAS POR HACER] (dependen de mí ahora)');
   if(!porHacer.length) out.push('(ninguna)');
-  else porHacer.forEach(t=>{ const d=dias(t.fechaLimite); const det = d!=null ? (d<0?`, hace ${-d} d`:(d===0?', hoy':`, en ${d} d`)) : ''; out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}${det}) | estado: ${t.estado||'Pendiente'} | la mandó: ${t.deQuien||'—'} | tiempo ya dedicado: ${tarFmtMin(tarTotalMin(t))}`); });
+  else porHacer.forEach(t=>{ const d=dias(t.fechaLimite); const det = d!=null ? (d<0?`, hace ${-d} d`:(d===0?', hoy':`, en ${d} d`)) : ''; out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}${det}) | estado: ${t.estado||'Pendiente'} | la mandó: ${t.deQuien||'—'} | tiempo ya dedicado: ${tarFmtMin(tarTotalMin(t))}${dsc(t)}`); });
 
   out.push('\n[EN ESPERA DE OTROS] (ya hice mi parte, espero respuesta)');
   if(!espera.length) out.push('(ninguna)');
-  else espera.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)})`));
+  else espera.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)})${dsc(t)}`));
 
   const d7=new Date(hoy+'T00:00:00'); d7.setDate(d7.getDate()-7); const hace7=d7.toISOString().slice(0,10);
   const hechasRec = recib.filter(t=> t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=hace7);
@@ -4423,7 +4425,7 @@ function iaContexto(){
   const emit = (S.tareas||[]).filter(t=> t.deQuien===me && t.paraQuien!==me && activa(t));
   out.push('\n[TAREAS QUE YO HE ENCARGADO A OTROS]');
   if(!emit.length) out.push('(ninguna)');
-  else emit.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'}`));
+  else emit.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'}${dsc(t)}`));
 
   const incs = (S.incidencias||[]).filter(i=> !i.revisada).slice(0,25);
   out.push('\n[INCIDENCIAS SIN REVISAR] (sin datos de pacientes)');
@@ -4439,6 +4441,44 @@ function iaContexto(){
       out.push(`Total: ${pres.length} rechazos · importe perdido aprox. ${total} €.`);
       pres.slice(0,40).forEach(p=> out.push(`- ${p.fechaRechazo||p.fechaPresup||'?'} | área: ${p.area||'—'} | importe: ${Number(p.importe)||0} € | doctor: ${p.doctor||'—'} | coord.: ${p.coordinadora||'—'} | motivos: ${(p.motivos||[]).join('; ')||'—'}`));
       if(pres.length>40) out.push(`...y ${pres.length-40} más.`);
+    }
+  }
+
+  const arts = (typeof activeArts==='function') ? activeArts() : (S.articulos||[]).filter(a=>a.activo!==false);
+  out.push('\n[MATERIAL / ALMACÉN] (almacén único de la clínica · sin datos de pacientes)');
+  if(!arts.length) out.push('(no hay artículos registrados)');
+  else {
+    const valor = arts.reduce((s,a)=> s + (Number(a.stock)||0)*(Number(a.cost)||0), 0);
+    const pedir = (typeof lowItems==='function') ? lowItems() : arts.filter(a=>a.aviso!==false && a.stock<=a.min);
+    const sinStock = arts.filter(a=> (Number(a.stock)||0)===0);
+    const cad = (typeof cadItems==='function') ? cadItems() : [];
+    const pedPend = (S.pedidos||[]).filter(p=> p.estado!=='recibido');
+    out.push(`Resumen: ${arts.length} artículos activos · valor almacenado ≈ ${Math.round(valor)} € · ${pedir.length} para pedir · ${sinStock.length} sin stock · ${cad.length} por caducar/caducados · ${pedPend.length} pedidos sin recibir.`);
+
+    out.push('· PARA PEDIR (bajo mínimo):');
+    if(!pedir.length) out.push('  (nada bajo mínimo)');
+    else pedir.forEach(a=> out.push(`  - ${a.nombre} [${a.cod}] | ${a.categoria||'—'} | stock ${a.stock}/mín ${a.min} | proveedor: ${a.proveedor||'—'}`));
+
+    if(cad.length){
+      out.push('· CADUCIDAD (caducado o caduca pronto):');
+      cad.forEach(a=>{ const dd=(typeof diasHasta==='function')?diasHasta(a.caduca):null; out.push(`  - ${a.nombre} [${a.cod}] | caduca ${a.caduca} (${dd==null?'?':(dd<0?`caducado hace ${-dd} d`:`en ${dd} d`)}) | stock ${a.stock}`); });
+    }
+
+    if(pedPend.length){
+      out.push('· PEDIDOS SIN RECIBIR:');
+      pedPend.forEach(p=>{ const lin=(p.lineas||[]).map(l=>{ const a=(typeof art==='function')?art(l.cod):null; return `${a?a.nombre:l.cod} x${l.cant}`; }).join(', '); out.push(`  - #${String(p.id).slice(-4)} | ${p.ts||'?'} | proveedor: ${p.proveedor||'—'} | ${lin||'—'}`); });
+    }
+
+    out.push('· INVENTARIO COMPLETO (artículo [cód] | categoría | stock/mín | estado | proveedor | precio ref | caduca):');
+    arts.slice(0,250).forEach(a=>{ const est=(typeof estadoOf==='function')?estadoOf(a):''; out.push(`  - ${a.nombre} [${a.cod}] | ${a.categoria||'—'} | ${a.stock}/${a.min} | ${est} | ${a.proveedor||'—'} | ${Number(a.precioRef)||0} € | ${a.caduca||'sin caducidad'}`); });
+    if(arts.length>250) out.push(`  ...y ${arts.length-250} artículos más (consulta la app para el resto).`);
+
+    if((S.proveedores||[]).length) out.push(`· PROVEEDORES: ${(S.proveedores||[]).join(', ')}.`);
+
+    const movs=(S.movimientos||[]).filter(m=>!m.anulado).slice(0,30);
+    if(movs.length){
+      out.push('· MOVIMIENTOS RECIENTES (entradas/salidas/mermas · sin datos de pacientes):');
+      movs.forEach(m=> out.push(`  - ${m.ts||'?'} | ${m.tipo} | ${m.nombre||m.cod} x${m.cant} | motivo: ${m.motivo||'—'}${m.valorPerdido?` | pérdida ${Math.round(m.valorPerdido)} €`:''} | por: ${m.user||'—'}`));
     }
   }
 
@@ -5120,6 +5160,7 @@ homeView = function(){
 (function(){ const i=MODULES.findIndex(m=>m.id==='asistente'); if(i>=0) MODULES.splice(i,1); })();
 
 function iaToggle(){
+  if(typeof lucaiSaludoHide==='function') lucaiSaludoHide(true);
   S.iaOpen=!S.iaOpen; S.iaSaludo=false; render();
   if(S.iaOpen) setTimeout(()=>{ const s=el('iaScroll'); if(s) s.scrollTop=s.scrollHeight; const i=el('iaInput'); if(i) i.focus(); }, 60);
 }
@@ -5127,36 +5168,27 @@ function iaSaludoCerrar(){ S.iaSaludo=false; render(); }
 function iaSaludoAbrir(){ S.iaSaludo=false; iaToggle(); }
 function lucaiIcon(sz){ sz=sz||28; return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z"/><circle cx="8.5" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11.5" r="1.1" fill="currentColor" stroke="none"/></svg>`; }
 /* Para usar tu propia foto: pon aquí la URL de una imagen (cuadrada). Si lo dejas vacío, se usa el avatar dibujado. */
-const LUCAI_AVATAR_URL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiIgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2Ij4KPGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI0E4QzQwMCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzZFOEUwMCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPgo8Y2lyY2xlIGN4PSI0OCIgY3k9IjQ4IiByPSI0OCIgZmlsbD0idXJsKCNiZykiLz4KPGxpbmUgeDE9IjQ4IiB5MT0iMTYiIHgyPSI0OCIgeTI9IjI3IiBzdHJva2U9IiNFQUYxRDgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxjaXJjbGUgY3g9IjQ4IiBjeT0iMTMuNSIgcj0iNC4yIiBmaWxsPSIjRUFGMUQ4Ii8+CjxyZWN0IHg9IjE3IiB5PSI0NiIgd2lkdGg9IjYuNSIgaGVpZ2h0PSIxNSIgcng9IjMuMiIgZmlsbD0iI0VBRjFEOCIvPgo8cmVjdCB4PSI3Mi41IiB5PSI0NiIgd2lkdGg9IjYuNSIgaGVpZ2h0PSIxNSIgcng9IjMuMiIgZmlsbD0iI0VBRjFEOCIvPgo8cmVjdCB4PSIyNCIgeT0iMzAiIHdpZHRoPSI0OCIgaGVpZ2h0PSI0MyIgcng9IjE2IiBmaWxsPSIjZmZmZmZmIi8+CjxyZWN0IHg9IjMwIiB5PSIzOCIgd2lkdGg9IjM2IiBoZWlnaHQ9IjI3IiByeD0iMTEiIGZpbGw9IiNGMkY2RTYiLz4KPGNpcmNsZSBjeD0iNDAiIGN5PSI1MCIgcj0iNS4yIiBmaWxsPSIjMzMzRjQ4Ii8+CjxjaXJjbGUgY3g9IjU2IiBjeT0iNTAiIHI9IjUuMiIgZmlsbD0iIzMzM0Y0OCIvPgo8Y2lyY2xlIGN4PSI0Mi4xIiBjeT0iNDcuOSIgcj0iMS43IiBmaWxsPSIjZmZmZmZmIi8+CjxjaXJjbGUgY3g9IjU4LjEiIGN5PSI0Ny45IiByPSIxLjciIGZpbGw9IiNmZmZmZmYiLz4KPGNpcmNsZSBjeD0iMzIuNSIgY3k9IjU4LjUiIHI9IjMiIGZpbGw9IiNDQkUwOEEiLz4KPGNpcmNsZSBjeD0iNjMuNSIgY3k9IjU4LjUiIHI9IjMiIGZpbGw9IiNDQkUwOEEiLz4KPHBhdGggZD0iTTQwIDU5IHE4IDYuNSAxNiAwIiBzdHJva2U9IiMzMzNGNDgiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPg==';
+const LUCAI_AVATAR_URL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiIgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2Ij4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjAiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjQThDNDAwIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzZFOEUwMCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZW5hbWVsIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNFQUYxRDgiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxjaXJjbGUgY3g9IjQ4IiBjeT0iNDgiIHI9IjQ4IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDwhLS0gZGllbnRlIC0tPgogIDxwYXRoIGQ9Ik0zMCAzMAogICAgICAgICAgIEMzMCAyMSAzOSAxOCA0OCAxOAogICAgICAgICAgIEM1NyAxOCA2NiAyMSA2NiAzMAogICAgICAgICAgIEM2OCA0MSA2NSA1MCA2MiA2MAogICAgICAgICAgIEM2MCA2NyA1NSA2OSA1MyA2MgogICAgICAgICAgIEM1MS41IDU3IDUwIDU1IDQ4IDU1CiAgICAgICAgICAgQzQ2IDU1IDQ0LjUgNTcgNDMgNjIKICAgICAgICAgICBDNDEgNjkgMzYgNjcgMzQgNjAKICAgICAgICAgICBDMzEgNTAgMjggNDEgMzAgMzAgWiIKICAgICAgICBmaWxsPSJ1cmwoI2VuYW1lbCkiIHN0cm9rZT0iI0UyRTlDRiIgc3Ryb2tlLXdpZHRoPSIxIi8+CiAgPCEtLSBub3RjaCBzdXBlcmlvciAtLT4KICA8cGF0aCBkPSJNNDQgMjAgcTQgNCA4IDAiIHN0cm9rZT0iI0UyRTlDRiIgc3Ryb2tlLXdpZHRoPSIxLjYiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwhLS0gb2pvcyAtLT4KICA8Y2lyY2xlIGN4PSI0MSIgY3k9IjQwIiByPSI0LjQiIGZpbGw9IiMzMzNGNDgiLz4KICA8Y2lyY2xlIGN4PSI1NSIgY3k9IjQwIiByPSI0LjQiIGZpbGw9IiMzMzNGNDgiLz4KICA8Y2lyY2xlIGN4PSI0Mi43IiBjeT0iMzguNCIgcj0iMS41IiBmaWxsPSIjZmZmZmZmIi8+CiAgPGNpcmNsZSBjeD0iNTYuNyIgY3k9IjM4LjQiIHI9IjEuNSIgZmlsbD0iI2ZmZmZmZiIvPgogIDwhLS0gbW9mbGV0ZXMgLS0+CiAgPGNpcmNsZSBjeD0iMzUuNSIgY3k9IjQ3IiByPSIyLjYiIGZpbGw9IiNDQkUwOEEiLz4KICA8Y2lyY2xlIGN4PSI2MC41IiBjeT0iNDciIHI9IjIuNiIgZmlsbD0iI0NCRTA4QSIvPgogIDwhLS0gc29ucmlzYSAtLT4KICA8cGF0aCBkPSJNNDIgNDcgcTYgNS41IDEyIDAiIHN0cm9rZT0iIzMzM0Y0OCIgc3Ryb2tlLXdpZHRoPSIyLjYiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwhLS0gYnJpbGxvIGRpZW50ZSBsaW1waW8gLS0+CiAgPGcgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjIuMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgIDxsaW5lIHgxPSI2OSIgeTE9IjI2IiB4Mj0iNjkiIHkyPSIzMyIvPgogICAgPGxpbmUgeDE9IjY1LjUiIHkxPSIyOS41IiB4Mj0iNzIuNSIgeTI9IjI5LjUiLz4KICA8L2c+Cjwvc3ZnPgo=';
 function lucaiAvatar(sz){
   sz=sz||40;
   if(LUCAI_AVATAR_URL){ return `<img src="${LUCAI_AVATAR_URL}" alt="Lucai" style="width:${sz}px;height:${sz}px;border-radius:50%;object-fit:cover;display:block">`; }
-  return `<svg width="${sz}" height="${sz}" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="24" cy="24" r="24" fill="#6E8E00"/>
-    <circle cx="24" cy="10.2" r="1.9" fill="#EAF1D8"/>
-    <rect x="23.2" y="11.8" width="1.6" height="4.2" rx="0.8" fill="#EAF1D8"/>
-    <rect x="11.5" y="15.5" width="25" height="21" rx="8" fill="#fff"/>
-    <circle cx="19" cy="26" r="2.7" fill="#333F48"/>
-    <circle cx="29" cy="26" r="2.7" fill="#333F48"/>
-    <circle cx="20" cy="25" r="0.85" fill="#fff"/>
-    <circle cx="30" cy="25" r="0.85" fill="#fff"/>
-    <path d="M18.5 31.4c1.8 1.8 9.2 1.8 11 0" stroke="#333F48" stroke-width="1.9" stroke-linecap="round"/>
-    <rect x="9.5" y="23" width="2.4" height="5" rx="1.2" fill="#EAF1D8"/>
-    <rect x="36.1" y="23" width="2.4" height="5" rx="1.2" fill="#EAF1D8"/>
+  return `<svg width="${sz}" height="${sz}" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="48" cy="48" r="48" fill="#6E8E00"/>
+    <path d="M30 30 C30 21 39 18 48 18 C57 18 66 21 66 30 C68 41 65 50 62 60 C60 67 55 69 53 62 C51.5 57 50 55 48 55 C46 55 44.5 57 43 62 C41 69 36 67 34 60 C31 50 28 41 30 30 Z" fill="#fff"/>
+    <circle cx="41" cy="40" r="4.4" fill="#333F48"/>
+    <circle cx="55" cy="40" r="4.4" fill="#333F48"/>
+    <circle cx="42.7" cy="38.4" r="1.5" fill="#fff"/>
+    <circle cx="56.7" cy="38.4" r="1.5" fill="#fff"/>
+    <circle cx="35.5" cy="47" r="2.6" fill="#CBE08A"/>
+    <circle cx="60.5" cy="47" r="2.6" fill="#CBE08A"/>
+    <path d="M42 47 q6 5.5 12 0" stroke="#333F48" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    <g stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="69" y1="26" x2="69" y2="33"/><line x1="65.5" y1="29.5" x2="72.5" y2="29.5"/></g>
   </svg>`;
 }
 function iaFloatHtml(){
   if(!S.user || S.modal) return '';
   const nombre = S.user.nombre ? S.user.nombre.split(' ')[0] : '';
   const sugs = ['¿Qué tengo que hacer hoy?','¿Qué es lo más urgente?','¿Tengo algo vencido?','Resúmeme mis tareas'];
-  const saludo = (S.iaSaludo && !S.iaOpen) ? `
-  <div style="position:fixed;right:18px;bottom:88px;z-index:1190;max-width:min(300px,calc(100vw - 40px))">
-    <div onclick="iaSaludoAbrir()" style="display:flex;gap:9px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:16px 16px 4px 16px;box-shadow:0 12px 34px rgba(51,63,72,.2);padding:11px 12px;cursor:pointer">
-      <span style="flex:0 0 auto;display:flex">${lucaiAvatar(36)}</span>
-      <div style="font-size:13px;line-height:1.45">¡Hola${nombre?', '+incEsc(nombre):''}! Te damos la bienvenida a <strong>Centro Odontológico Laura Fernández</strong>. Soy <strong>Lucai</strong>; si necesitas algo, pregúntame aquí.</div>
-      <button onclick="event.stopPropagation();iaSaludoCerrar()" style="background:none;border:none;color:#8A949B;font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto;padding:0 2px">×</button>
-    </div>
-  </div>` : '';
   const panel = S.iaOpen ? `
   <div style="position:fixed;right:18px;bottom:88px;z-index:1200;width:min(380px,calc(100vw - 32px));background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 44px rgba(51,63,72,.24);display:flex;flex-direction:column;max-height:min(70vh,560px);overflow:hidden">
     <div style="background:#333F48;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -5177,7 +5209,36 @@ function iaFloatHtml(){
     </div>
   </div>` : '';
   const fab = `<button onclick="iaToggle()" title="Pregúntale a Lucai" style="position:fixed;right:18px;bottom:18px;z-index:1200;width:58px;height:58px;border-radius:50%;border:none;padding:0;background:${S.iaOpen?'#333F48':'transparent'};color:#fff;box-shadow:0 8px 24px rgba(51,63,72,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1;overflow:hidden">${S.iaOpen?'×':lucaiAvatar(58)}</button>`;
-  return saludo+panel+fab;
+  return panel+fab;
+}
+function lucaiSaludoShow(){
+  lucaiSaludoHide(true);
+  if(!S.user) return;
+  const nombre = S.user.nombre ? S.user.nombre.split(' ')[0] : '';
+  const d = document.createElement('div');
+  d.id = 'lucaiSaludo';
+  d.style.cssText = 'position:fixed;right:18px;bottom:88px;z-index:1190;max-width:min(300px,calc(100vw - 40px));opacity:0;transform:translateY(12px) scale(.9);transition:opacity .38s ease, transform .42s cubic-bezier(.2,.85,.3,1.12);transform-origin:bottom right';
+  d.innerHTML = `<div style="display:flex;gap:9px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:16px 16px 4px 16px;box-shadow:0 12px 34px rgba(51,63,72,.2);padding:11px 12px;cursor:pointer">
+      <span style="flex:0 0 auto;display:flex">${lucaiAvatar(36)}</span>
+      <div style="font-size:13px;line-height:1.45">¡Hola${nombre?', '+incEsc(nombre):''}! Te damos la bienvenida a <strong>Centro Odontológico Laura Fernández</strong>. Soy <strong>Lucai</strong>; si necesitas algo, pregúntame aquí.</div>
+      <span class="lucaiSalX" style="color:#8A949B;font-size:18px;line-height:1;flex:0 0 auto;padding:0 2px">×</span>
+    </div>`;
+  d.onclick = function(e){
+    if(e.target && e.target.classList && e.target.classList.contains('lucaiSalX')){ lucaiSaludoHide(); return; }
+    lucaiSaludoHide(); S.iaSaludo=false; if(!S.iaOpen) iaToggle();
+  };
+  document.body.appendChild(d);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ d.style.opacity='1'; d.style.transform='translateY(0) scale(1)'; }));
+  clearTimeout(window._iaSaludoT);
+  window._iaSaludoT = setTimeout(()=>lucaiSaludoHide(), 4500);
+}
+function lucaiSaludoHide(instant){
+  clearTimeout(window._iaSaludoT);
+  const d = document.getElementById('lucaiSaludo');
+  if(!d) return;
+  if(instant){ d.remove(); return; }
+  d.style.opacity='0'; d.style.transform='translateY(8px) scale(.95)';
+  setTimeout(()=>{ const x=document.getElementById('lucaiSaludo'); if(x) x.remove(); }, 380);
 }
 const _appView_fab = appView;
 appView = function(){
