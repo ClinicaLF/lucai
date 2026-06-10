@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-18">
+<meta name="lucai-version" content="2026-06-08-24">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3437,7 +3437,7 @@ appView = function(){
    ============================================================================ */
 
 const TAR_PRIOS   = ['Alta','Media','Baja'];
-const TAR_ESTADOS = ['Pendiente','En curso','Hecha'];
+const TAR_ESTADOS = ['Pendiente','En curso','En espera','Hecha'];
 const TAR_AREAS   = ['General','Personal','Agenda','Contabilidad','Mantenimiento','Clínica','Marketing'];
 const TAR_DOW     = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const tarUsers    = () => USERS.map(u=>u.nombre);
@@ -3538,12 +3538,23 @@ function tarDParse(s){ if(!s) return null; const p=String(s).slice(0,10).split('
 function tarIso(d){ const p=x=>String(x).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 function tarMonday(offset){ const t=tarDParse(todayStr()); const day=(t.getDay()+6)%7; const m=new Date(t); m.setDate(t.getDate()-day+(offset||0)*7); return m; }
 function tarActiva(t){ return t.estado!=='Hecha'; }
+function tarPorHacer(t){ return tarActiva(t) && t.estado!=='En espera'; }
 function tarVencida(t){ return tarActiva(t) && t.fechaLimite && t.fechaLimite < todayStr(); }
 function tarDiasRest(t){ if(!t.fechaLimite) return null; const d=Math.round((tarDParse(t.fechaLimite)-tarDParse(todayStr()))/86400000); return d; }
 function tarPrioChip(p){ return `<span class="inc-imp imp-${p||'Media'}">${p||'Media'}</span>`; }
+function tarEstadoLabel(e){ return e==='Hecha' ? 'Cerrada' : (e||'Pendiente'); }
+function tarEstadoCss(e){
+  if(e==='Hecha') return 'background:#6E8E00;color:#fff';
+  if(e==='En curso') return 'background:#5A6770;color:#fff';
+  if(e==='En espera') return 'background:#F3E2C0;color:#8A5A00';
+  return 'background:#EAE3D7;color:#333F48';
+}
 function tarEstadoChip(e){
-  const st = e==='Hecha' ? 'background:#6E8E00;color:#fff' : e==='En curso' ? 'background:#5A6770;color:#fff' : 'background:#EAE3D7;color:#333F48';
-  return `<span style="${st};font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px">${e||'Pendiente'}</span>`;
+  return `<span style="${tarEstadoCss(e)};font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px">${tarEstadoLabel(e)}</span>`;
+}
+function tarEstadoSelect(t){
+  const opts=['Pendiente','En curso','En espera','Hecha'];
+  return `<select class="inp" style="${tarEstadoCss(t.estado)};border:none;font-weight:700;padding:4px 10px;font-size:12px;max-width:150px;border-radius:20px;cursor:pointer" onclick="event.stopPropagation()" onchange="tarMarcar('${t.id}',this.value)">${opts.map(s=>`<option value="${s}" ${t.estado===s?'selected':''} style="background:#fff;color:#333F48">${tarEstadoLabel(s)}</option>`).join('')}</select>`;
 }
 function tarLimiteCell(t){
   if(!t.fechaLimite) return '<span class="muted">—</span>';
@@ -3555,17 +3566,28 @@ function tarLimiteCell(t){
   if(d<=2) return `<span style="font-weight:700;color:#B8860B">${f} · ${d} d</span>`;
   return f;
 }
+function tarFechaEdit(t){
+  if(t.estado==='Hecha') return tarLimiteCell(t);
+  const d=tarDiasRest(t);
+  const hint = t.fechaLimite ? (d<0?`<span style="color:#C0392B;font-weight:700;font-size:11px">vencida</span>`:(d===0?`<span style="color:#B8860B;font-weight:700;font-size:11px">hoy</span>`:(d<=2?`<span style="color:#B8860B;font-size:11px">${d} d</span>`:''))) : '';
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap" onclick="event.stopPropagation()">
+    <input type="date" class="inp" style="padding:4px 6px;width:140px;font-size:13px" value="${t.fechaLimite||''}" onchange="tarSetFecha('${t.id}',this.value)">
+    <button class="btn btn-ghost btn-sm" title="Posponer un día" onclick="tarPosponer('${t.id}',1)">+1 día</button>
+    ${hint}
+  </div>`;
+}
 
 /* ---- vista principal ---- */
 function tareasView(){
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_recibidas','tar_emitidas','tar_semana','tar_todas'] : ['tar_recibidas','tar_emitidas','tar_semana'];
+  const subs = admin ? ['tar_recibidas','tar_emitidas','tar_semana','tar_todas','tar_resumen'] : ['tar_recibidas','tar_emitidas','tar_semana','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_recibidas';
-  const lbl = {tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_semana:'Semana',tar_todas:'Todas (equipo)'};
+  const lbl = {tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_semana:'Semana',tar_todas:'Todas (equipo)',tar_resumen:'Resumen'};
   const seg = `<div class="seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
   else if(sub==='tar_todas') body=tarTodasView();
+  else if(sub==='tar_resumen') body=tarResumenView();
   else body=tarBuzonView(sub==='tar_emitidas'?'emitidas':'recibidas');
   const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
@@ -3585,12 +3607,15 @@ function tareasView(){
 
 function tarKpis(arr){
   const act=arr.filter(tarActiva);
+  const porHacer=act.filter(t=>t.estado!=='En espera').length;
+  const espera=act.filter(t=>t.estado==='En espera').length;
   const venc=act.filter(tarVencida).length;
-  const hoy=act.filter(t=>t.fechaLimite===todayStr()).length;
+  const hoy=act.filter(t=>t.estado!=='En espera' && t.fechaLimite===todayStr()).length;
   return `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px">
-    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;opacity:.7">Activas</div><div style="font-size:28px;font-weight:700">${act.length}</div></div>
-    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;color:#8A949B">Vencidas</div><div style="font-size:28px;font-weight:700;color:#C0392B">${venc}</div></div>
-    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:120px"><div style="font-size:12px;color:#8A949B">Para hoy</div><div style="font-size:28px;font-weight:700;color:#B8860B">${hoy}</div></div>
+    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:110px"><div style="font-size:12px;opacity:.7">Por hacer</div><div style="font-size:28px;font-weight:700">${porHacer}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:110px"><div style="font-size:12px;color:#8A949B">En espera</div><div style="font-size:28px;font-weight:700;color:#8A5A00">${espera}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:110px"><div style="font-size:12px;color:#8A949B">Vencidas</div><div style="font-size:28px;font-weight:700;color:#C0392B">${venc}</div></div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:110px"><div style="font-size:12px;color:#8A949B">Para hoy</div><div style="font-size:28px;font-weight:700;color:#B8860B">${hoy}</div></div>
   </div>`;
 }
 
@@ -3598,34 +3623,62 @@ function tarAreaChip(a){ if(!a) a='General'; return `<span style="display:inline
 function tarBuzonView(modo){
   const me=S.user.nombre;
   const all=(S.tareas||[]).filter(t=> modo==='emitidas' ? t.deQuien===me : t.paraQuien===me);
-  const af = S.tarBuzonArea||'';
+  const bf = S.tarBuzF = S.tarBuzF || {prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc'};
   const toggle=`<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px">
     <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#6C757D;cursor:pointer;margin:0">
       <input type="checkbox" ${S.tarVerHechas?'checked':''} onchange="toggleTarHechas()"> Ver también las hechas/archivadas</label>
-    <select class="inp" style="max-width:220px;margin:0" onchange="setTarBuzonArea(this.value)"><option value="">Todas las áreas</option>${tarAreas().map(a=>`<option ${af===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>
   </div>`;
-  const list=all.filter(t=> (S.tarVerHechas ? true : tarActiva(t)) && (!af || (t.area||'General')===af))
-    .sort((a,b)=>{ const av=tarActiva(a)?0:1, bv=tarActiva(b)?0:1; if(av!==bv) return av-bv; return String(a.fechaLimite||'').localeCompare(String(b.fechaLimite||'')); });
+  const q=(bf.q||'').toLowerCase();
+  const list=all.filter(t=>
+      (S.tarVerHechas ? true : tarActiva(t)) &&
+      (!bf.prio || t.prioridad===bf.prio) &&
+      (!bf.cat || (t.area||'General')===bf.cat) &&
+      (!bf.persona || (modo==='emitidas'?t.paraQuien:t.deQuien)===bf.persona) &&
+      (!bf.estado || t.estado===bf.estado) &&
+      (!q || (t.titulo||'').toLowerCase().includes(q)))
+    .sort((a,b)=>{ const rk=t=>(!tarActiva(t)?2:(t.estado==='En espera'?1:0)); const ra=rk(a),rb=rk(b); if(ra!==rb) return ra-rb; return (bf.sortDir==='desc'?-1:1)*String(a.fechaLimite||'9999').localeCompare(String(b.fechaLimite||'9999')); });
   if(!all.length) return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${modo==='emitidas'?'No has mandado ninguna tarea todavía. Usa “Nueva tarea”.':'No tienes tareas en tu buzón. ¡Buen trabajo!'}</div>`;
-  if(!list.length) return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${af?'No hay tareas activas en esa área.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</div>`;
   const otro = modo==='emitidas' ? 'Para' : 'De';
+  const personas=[...new Set(all.map(t=> modo==='emitidas'?t.paraQuien:t.deQuien).filter(Boolean))].sort();
+  const ss=`class="inp" style="margin:4px 0 0;padding:3px 6px;font-size:12px;max-width:150px"`;
+  const selPrio=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('prio',this.value)"><option value="">Todas</option>${TAR_PRIOS.map(p=>`<option ${bf.prio===p?'selected':''}>${p}</option>`).join('')}</select>`;
+  const selCat=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('cat',this.value)"><option value="">Todas</option>${tarAreas().map(a=>`<option ${bf.cat===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>`;
+  const selPersona=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('persona',this.value)"><option value="">Todos</option>${personas.map(n=>`<option ${bf.persona===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>`;
+  const selEstado=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('estado',this.value)"><option value="">Todos</option>${TAR_ESTADOS.map(s=>`<option ${bf.estado===s?'selected':''}>${s}</option>`).join('')}</select>`;
+  const search=`<input ${ss} placeholder="Buscar…" value="${incEsc(bf.q||'')}" onchange="setTarBuzF('q',this.value)">`;
+  const arrow = bf.sortDir==='desc'?'▼':'▲';
+  const hayFiltro = bf.prio||bf.cat||bf.persona||bf.estado||bf.q;
+  const clear = hayFiltro?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()">Limpiar</button>`:'';
+  const thead=`<thead><tr>
+      <th style="vertical-align:top">Prior.<div>${selPrio}</div></th>
+      <th style="vertical-align:top">Tarea<div>${search}</div></th>
+      <th class="col-hide-m" style="vertical-align:top">Categoría<div>${selCat}</div></th>
+      <th class="col-hide-m" style="vertical-align:top">${otro}<div>${selPersona}</div></th>
+      <th style="vertical-align:top;cursor:pointer" title="Ordenar por fecha" onclick="tarBuzSort()">Entrega ${arrow}</th>
+      <th class="col-hide-m" style="vertical-align:top">Estado<div>${selEstado}</div></th>
+      <th style="vertical-align:top">${clear}</th>
+    </tr></thead>`;
+  if(!list.length) return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable">${thead}<tbody><tr><td colspan="7" class="muted" style="padding:20px;text-align:center">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</td></tr></tbody></table></div>`;
   const rows=list.map(t=>{
     const persona = modo==='emitidas' ? t.paraQuien : t.deQuien;
     const quick = (modo==='recibidas' && tarActiva(t))
-      ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>` : '';
+      ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
+      : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
       <td>${tarPrioChip(t.prioridad)}</td>
-      <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}${tarAreaChip(t.area)}${tarTiempoChip(t)}</td>
+      <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}</td>
+      <td class="col-hide-m" style="color:#5A6770;font-size:13px">${incEsc(t.area||'General')}</td>
       <td class="col-hide-m">${incEsc(persona||'—')}</td>
-      <td>${tarLimiteCell(t)}</td>
-      <td class="col-hide-m">${tarEstadoChip(t.estado)}</td>
+      <td>${tarFechaEdit(t)}</td>
+      <td class="col-hide-m">${tarEstadoSelect(t)}</td>
       <td style="text-align:right;white-space:nowrap">${quick}</td>
     </tr>`;
   }).join('');
-  return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable">
-    <thead><tr><th>Prior.</th><th>Tarea</th><th class="col-hide-m">${otro}</th><th>Entrega</th><th class="col-hide-m">Estado</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
+  return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable">${thead}<tbody>${rows}</tbody></table></div>`;
 }
+function setTarBuzF(field,v){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc'}; S.tarBuzF[field]=v; render(); }
+function clearTarBuzF(){ S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:(S.tarBuzF&&S.tarBuzF.sortDir)||'asc'}; render(); }
+function tarBuzSort(){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc'}; S.tarBuzF.sortDir = S.tarBuzF.sortDir==='desc'?'asc':'desc'; render(); }
 
 function tarTodasView(){
   const f=S.tarF, all=S.tareas||[];
@@ -3651,14 +3704,15 @@ function tarTodasView(){
   if(!filt.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay tareas con esos filtros.</div>`;
   const rows=filt.map(t=>`<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
     <td>${tarPrioChip(t.prioridad)}</td>
-    <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}${tarAreaChip(t.area)}${tarTiempoChip(t)}</td>
+    <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}</td>
+    <td class="col-hide-m" style="color:#5A6770;font-size:13px">${incEsc(t.area||'General')}</td>
     <td class="col-hide-m">${incEsc(t.deQuien||'—')}</td>
     <td>${incEsc(t.paraQuien||'—')}</td>
-    <td>${tarLimiteCell(t)}</td>
+    <td>${tarFechaEdit(t)}</td>
     <td>${tarEstadoChip(t.estado)}</td>
   </tr>`).join('');
   return filtros+`<div class="inctable-wrap"><table class="inctable">
-    <thead><tr><th>Prior.</th><th>Tarea</th><th class="col-hide-m">De</th><th>Para</th><th>Entrega</th><th>Estado</th></tr></thead>
+    <thead><tr><th>Prior.</th><th>Tarea</th><th class="col-hide-m">Categoría</th><th class="col-hide-m">De</th><th>Para</th><th>Entrega</th><th>Estado</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -3675,26 +3729,140 @@ function tarSemanaView(){
     ${S.tarWeek!==0?`<button class="btn btn-ghost btn-sm" onclick="tarWeekNav(0,true)">Hoy</button>`:''}
     <span class="muted" style="font-size:12px">${admin?'Vista de todo el equipo':'Tus tareas (recibidas y emitidas)'}</span>
   </div>`;
-  const cells=[];
+  const tarjeta=(t)=>{
+    const col = t.estado==='Hecha' ? '#6E8E00' : t.prioridad==='Alta' ? '#C0392B' : t.prioridad==='Media' ? '#B8860B' : '#8A949B';
+    const tach = t.estado==='Hecha' ? 'text-decoration:line-through;opacity:.55' : '';
+    const quien = admin ? (t.paraQuien||'') : (t.paraQuien===me?'para mí':('para '+t.paraQuien));
+    const activa = tarActiva(t), recibida = t.paraQuien===me;
+    let btns='';
+    if(activa) btns += `<button class="btn btn-ghost btn-sm" title="Posponer un día" onclick="event.stopPropagation();tarPosponer('${t.id}',1)">+1d</button>`;
+    if(activa && (recibida||admin)) btns += `<button class="btn btn-ghost btn-sm" title="Marcar hecha" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Hecha</button>`;
+    return `<div onclick="openTarDet('${t.id}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-left:3px solid ${col};border-radius:8px;padding:7px 10px;${tach}">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tarNuevosPara(t,me)?'<span style="color:#6E8E00">● </span>':''}${incEsc(t.titulo)}</div>
+        <div class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${incEsc(quien)}${(t.area&&t.area!=='General')?' · '+incEsc(t.area):''}${t.estado==='En espera'?' · <span style="color:#8A5A00;font-weight:600">en espera</span>':''}</div>
+      </div>
+      <div onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-shrink:0">${btns}</div>
+    </div>`;
+  };
+  const bandas=[];
   for(let i=0;i<7;i++){
     const d=new Date(mon); d.setDate(mon.getDate()+i); const iso=tarIso(d);
     const esHoy=iso===todayStr();
-    const dia=(S.tareas?mias:[]).filter(t=>t.fechaLimite===iso)
-      .sort((a,b)=>TAR_PRIOS.indexOf(a.prioridad)-TAR_PRIOS.indexOf(b.prioridad));
-    const chips=dia.map(t=>{
-      const col = t.estado==='Hecha' ? '#6E8E00' : t.prioridad==='Alta' ? '#C0392B' : t.prioridad==='Media' ? '#B8860B' : '#8A949B';
-      const tach = t.estado==='Hecha' ? 'text-decoration:line-through;opacity:.6' : '';
-      const quien = admin ? (t.paraQuien||'') : (t.paraQuien===me?('→ yo'):('→ '+t.paraQuien));
-      return `<div onclick="openTarDet('${t.id}')" title="${incEsc(t.titulo)}" style="cursor:pointer;border-left:3px solid ${col};background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-bottom:6px;font-size:12px;line-height:1.3;${tach}">
-        <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tarNuevosPara(t,me)?'<span style="color:#6E8E00">● </span>':''}${incEsc(t.titulo)}</div>
-        <div class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${incEsc(quien)}</div>
-      </div>`;
-    }).join('') || '<div class="muted" style="font-size:11px;padding:4px 0">—</div>';
-    cells.push(`<div style="background:${esHoy?'#F4F0E9':'#FAF8F3'};border:1px solid ${esHoy?'#B8A88F':'var(--line)'};border-radius:10px;padding:8px;min-height:120px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:${esHoy?'#333F48':'#8A949B'};font-weight:700;margin-bottom:6px">${TAR_DOW[i]} ${d.getDate()}${esHoy?' · hoy':''}</div>
-      ${chips}</div>`);
+    const dia=mias.filter(t=>t.fechaLimite===iso).sort((a,b)=>TAR_PRIOS.indexOf(a.prioridad)-TAR_PRIOS.indexOf(b.prioridad));
+    const tareas = dia.length ? dia.map(tarjeta).join('') : '<div class="muted" style="font-size:12px;padding:3px 0">Sin tareas</div>';
+    bandas.push(`<div style="display:flex;gap:12px;align-items:flex-start;background:${esHoy?'#F4F0E9':'#FAF8F3'};border:1px solid ${esHoy?'#B8A88F':'var(--line)'};border-radius:10px;padding:10px 12px;margin-bottom:8px">
+      <div style="flex:0 0 64px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;color:${esHoy?'#333F48':'#8A949B'};padding-top:2px">
+        ${TAR_DOW[i]} ${d.getDate()}${esHoy?'<div style="font-size:10px;color:#6E8E00;margin-top:1px">HOY</div>':''}
+      </div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">${tareas}</div>
+    </div>`);
   }
-  return nav+`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;min-width:760px">${cells.join('')}</div></div>`;
+  const sinFecha=mias.filter(t=>!t.fechaLimite && tarActiva(t)).sort((a,b)=>TAR_PRIOS.indexOf(a.prioridad)-TAR_PRIOS.indexOf(b.prioridad));
+  const bloqueSinFecha = sinFecha.length ? `<div style="display:flex;gap:12px;align-items:flex-start;background:#FAF8F3;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-top:4px">
+      <div style="flex:0 0 64px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;color:#8A949B;padding-top:2px">Sin fecha</div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">${sinFecha.map(tarjeta).join('')}</div>
+    </div>` : '';
+  return nav+bandas.join('')+bloqueSinFecha;
+}
+
+/* ---- resumen del día / panel de equipo ---- */
+function setTarResPeriodo(p){ S.tarResPeriodo=p; render(); }
+function tarSemRango(){ const mon=tarMonday(0); const dom=new Date(mon); dom.setDate(mon.getDate()+6); return [tarIso(mon), tarIso(dom)]; }
+function tarTiemposDe(persona, desde, hasta){
+  const out=[];
+  (S.tareas||[]).forEach(t=>{ (Array.isArray(t.tiempos)?t.tiempos:[]).forEach(e=>{
+    if(persona && e.quien!==persona) return;
+    const f=e.fecha||'';
+    if(desde && f<desde) return;
+    if(hasta && f>hasta) return;
+    out.push({min:Number(e.min)||0, fecha:f, area:t.area||'General', titulo:t.titulo, quien:e.quien});
+  });});
+  return out;
+}
+function tarBar(label, valueLabel, pct, color){
+  return `<div style="margin-bottom:9px">
+    <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-bottom:3px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${incEsc(label)}</span><span style="color:#5A6770;white-space:nowrap;font-weight:600">${valueLabel}</span></div>
+    <div style="background:#EFEAE0;border-radius:6px;height:10px;overflow:hidden"><div style="width:${Math.max(pct,2)}%;height:100%;background:${color}"></div></div>
+  </div>`;
+}
+function tarResKpi(label, value, color){ return `<div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 16px;min-width:104px"><div style="font-size:12px;color:#8A949B">${label}</div><div style="font-size:24px;font-weight:700;${color?`color:${color}`:''}">${value}</div></div>`; }
+function tarMiResumen(me, desde, hasta, perLabel){
+  const ent=tarTiemposDe(me, desde, hasta);
+  const total=ent.reduce((s,e)=>s+e.min,0);
+  const porHacer=(S.tareas||[]).filter(t=>t.paraQuien===me && tarPorHacer(t)).length;
+  const espera=(S.tareas||[]).filter(t=>t.paraQuien===me && t.estado==='En espera').length;
+  const terminadas=(S.tareas||[]).filter(t=>t.paraQuien===me && t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=desde && t.fechaHecha<=hasta).length;
+  const areaMap={}; ent.forEach(e=>{ areaMap[e.area]=(areaMap[e.area]||0)+e.min; });
+  const areas=Object.entries(areaMap).sort((a,b)=>b[1]-a[1]);
+  const maxA=areas.length?areas[0][1]:0;
+  const areasHtml = areas.length? areas.map(([a,m])=>tarBar(a, tarFmtMin(m), maxA?Math.round(m/maxA*100):0, '#6E8E00')).join('') : '<div class="muted" style="font-size:13px">No has registrado tiempo en este periodo. Apúntalo desde el detalle de cada tarea.</div>';
+  const kpis=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    ${tarResKpi('Tiempo '+perLabel, tarFmtMin(total), '#6E8E00')}
+    ${tarResKpi('Terminadas', terminadas, '#333F48')}
+    ${tarResKpi('Por hacer', porHacer, '#333F48')}
+    ${tarResKpi('En espera', espera, '#8A5A00')}
+  </div>`;
+  return `<div style="background:#FAF8F3;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:18px">
+    <div style="font-family:var(--serif);font-size:18px;margin-bottom:12px">Tu resumen · ${perLabel}</div>
+    ${kpis}
+    <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:10px">En qué has invertido el tiempo (por área)</div>
+    ${areasHtml}
+  </div>`;
+}
+function tarEquipoPanel(desde, hasta, perLabel){
+  const people=[...new Set((S.tareas||[]).flatMap(t=>[t.paraQuien,t.deQuien]).filter(Boolean).concat(USERS.map(u=>u.nombre)))];
+  const datos=people.map(p=>{
+    const ent=tarTiemposDe(p, desde, hasta);
+    const tiempo=ent.reduce((s,e)=>s+e.min,0);
+    const porHacer=(S.tareas||[]).filter(t=>t.paraQuien===p && tarPorHacer(t)).length;
+    const vencidas=(S.tareas||[]).filter(t=>t.paraQuien===p && tarVencida(t)).length;
+    const espera=(S.tareas||[]).filter(t=>t.paraQuien===p && t.estado==='En espera').length;
+    const terminadas=(S.tareas||[]).filter(t=>t.paraQuien===p && t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=desde && t.fechaHecha<=hasta).length;
+    return {p,tiempo,porHacer,vencidas,espera,terminadas};
+  });
+  const porTiempo=[...datos].sort((a,b)=>b.tiempo-a.tiempo);
+  const maxT=porTiempo.length?porTiempo[0].tiempo:0;
+  const tiempoPersona = porTiempo.some(d=>d.tiempo>0)
+    ? porTiempo.filter(d=>d.tiempo>0).map(d=>tarBar(d.p, tarFmtMin(d.tiempo), maxT?Math.round(d.tiempo/maxT*100):0, '#6E8E00')).join('')
+    : '<div class="muted" style="font-size:13px">Nadie ha registrado tiempo en este periodo.</div>';
+  const allEnt=tarTiemposDe('', desde, hasta);
+  const areaMap={}; allEnt.forEach(e=>{ areaMap[e.area]=(areaMap[e.area]||0)+e.min; });
+  const areas=Object.entries(areaMap).sort((a,b)=>b[1]-a[1]);
+  const maxA=areas.length?areas[0][1]:0;
+  const areaHtml = areas.length? areas.map(([a,m])=>tarBar(a, tarFmtMin(m), maxA?Math.round(m/maxA*100):0, '#5A6770')).join('') : '<div class="muted" style="font-size:13px">Sin tiempo registrado en este periodo.</div>';
+  const cargaRows=[...datos].sort((a,b)=>(b.vencidas-a.vencidas)||(b.porHacer-a.porHacer)).map(d=>`<tr>
+    <td style="font-weight:600">${incEsc(d.p)}</td>
+    <td style="text-align:center">${d.porHacer}</td>
+    <td style="text-align:center;${d.vencidas?'color:#C0392B;font-weight:700':''}">${d.vencidas}</td>
+    <td style="text-align:center;${d.espera?'color:#8A5A00':''}">${d.espera}</td>
+    <td style="text-align:center">${d.terminadas}</td>
+  </tr>`).join('');
+  const espTasks=(S.tareas||[]).filter(t=>t.estado==='En espera').sort((a,b)=>String(a.fechaLimite||'').localeCompare(String(b.fechaLimite||'')));
+  const vencTasks=(S.tareas||[]).filter(t=>tarVencida(t)).sort((a,b)=>String(a.fechaLimite||'').localeCompare(String(b.fechaLimite||'')));
+  const atascHtml = (espTasks.length||vencTasks.length)? `
+    ${vencTasks.length?`<div style="font-size:13px;font-weight:600;color:#C0392B;margin:2px 0 4px">Vencidas (${vencTasks.length})</div>${vencTasks.slice(0,8).map(t=>`<div onclick="openTarDet('${t.id}')" style="cursor:pointer;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line)">${incEsc(t.titulo)} · <span class="muted">${incEsc(t.paraQuien||'—')} · vencía ${fmtFecha(t.fechaLimite)}</span></div>`).join('')}`:''}
+    ${espTasks.length?`<div style="font-size:13px;font-weight:600;color:#8A5A00;margin:10px 0 4px">En espera (${espTasks.length})</div>${espTasks.slice(0,8).map(t=>`<div onclick="openTarDet('${t.id}')" style="cursor:pointer;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line)">${incEsc(t.titulo)} · <span class="muted">${incEsc(t.paraQuien||'—')}</span></div>`).join('')}`:''}`
+    : '<div class="muted" style="font-size:13px">Nada atascado ni en espera. Todo fluye.</div>';
+  const card=(titulo, body, sub)=>`<div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:16px">
+    <div style="font-family:var(--serif);font-size:17px;margin-bottom:${sub?'2px':'12px'}">${titulo}</div>
+    ${sub?`<div class="muted" style="font-size:12px;margin-bottom:12px">${sub}</div>`:''}
+    ${body}</div>`;
+  return `<div style="font-family:var(--serif);font-size:20px;margin:8px 0 14px">Panel del equipo · ${perLabel}</div>
+    ${card('Tiempo invertido por persona', tiempoPersona, 'Suma de los apuntes de tiempo del periodo.')}
+    ${card('Tiempo por área (todo el equipo)', areaHtml)}
+    ${card('Carga de trabajo', `<div class="inctable-wrap"><table class="inctable"><thead><tr><th>Persona</th><th style="text-align:center">Por hacer</th><th style="text-align:center">Vencidas</th><th style="text-align:center">En espera</th><th style="text-align:center">Hechas (${perLabel})</th></tr></thead><tbody>${cargaRows}</tbody></table></div>`)}
+    ${card('Atascado / pendiente de alguien', atascHtml)}`;
+}
+function tarResumenView(){
+  const me=S.user.nombre, admin=isAdmin();
+  const per = (S.tarResPeriodo==='hoy')?'hoy':'semana';
+  let desde,hasta,perLabel;
+  if(per==='hoy'){ desde=hasta=todayStr(); perLabel='hoy'; }
+  else { const r=tarSemRango(); desde=r[0]; hasta=r[1]; perLabel='esta semana'; }
+  const pertog=`<div class="seg" style="margin-bottom:16px"><button class="${per==='hoy'?'on':''}" onclick="setTarResPeriodo('hoy')">Hoy</button><button class="${per==='semana'?'on':''}" onclick="setTarResPeriodo('semana')">Esta semana</button></div>`;
+  const mi=tarMiResumen(me, desde, hasta, perLabel);
+  return admin ? (pertog+mi+tarEquipoPanel(desde, hasta, perLabel)) : (pertog+mi);
 }
 
 /* ---- interacciones ---- */
@@ -3702,6 +3870,24 @@ function toggleTarHechas(){ S.tarVerHechas=!S.tarVerHechas; render(); }
 function setTarF(field,v){ S.tarF[field]=v; render(); }
 function clearTarF(){ S.tarF={estado:'',prio:'',de:'',para:'',area:''}; render(); }
 function tarWeekNav(delta,reset){ S.tarWeek = reset ? 0 : (S.tarWeek+delta); render(); }
+function tarAddDias(fechaStr, n){
+  const base = fechaStr ? new Date(fechaStr+'T00:00:00') : new Date(todayStr()+'T00:00:00');
+  base.setDate(base.getDate()+(n||1));
+  const y=base.getFullYear(), m=String(base.getMonth()+1).padStart(2,'0'), d=String(base.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
+function tarPosponer(id, n){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const me=S.user.nombre;
+  if(!(isAdmin()||t.deQuien===me||t.paraQuien===me)){ toast('No puedes cambiar la fecha de esta tarea'); return; }
+  t.fechaLimite = tarAddDias(t.fechaLimite, n||1); render(); srvTarUpdate(id, t, `Pospuesta a ${fmtFecha(t.fechaLimite)}`);
+}
+function tarSetFecha(id, val){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const me=S.user.nombre;
+  if(!(isAdmin()||t.deQuien===me||t.paraQuien===me)){ toast('No puedes cambiar la fecha de esta tarea'); return; }
+  t.fechaLimite = val||''; render(); srvTarUpdate(id, t, val?`Fecha cambiada a ${fmtFecha(val)}`:'Fecha quitada');
+}
 
 function tarMarcar(id,estado){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
@@ -3836,6 +4022,8 @@ function tarDetModalContent(){
   let acciones='';
   if((soyPara||admin) && tarActiva(t)){
     if(t.estado==='Pendiente') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','En curso')">Marcar en curso</button>`;
+    if(t.estado==='En espera') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','En curso')">Reanudar</button>`;
+    else acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','En espera')">Poner en espera</button>`;
     acciones+=`<button class="btn btn-primary" onclick="tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`;
   }
   if((soyPara||soyDe||admin) && t.estado==='Hecha') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','Pendiente')">Reabrir</button>`;
@@ -4022,18 +4210,21 @@ function tarNvBadge(t){
 function tarResumenBanner(){
   const me=S.user.nombre, first=me.split(' ')[0];
   const mias=(S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t));
-  const venc=mias.filter(tarVencida).length;
-  const hoy=mias.filter(t=>t.fechaLimite===todayStr()).length;
-  const pend=mias.length;
+  const porHacer=mias.filter(t=>t.estado!=='En espera');
+  const espera=mias.filter(t=>t.estado==='En espera').length;
+  const venc=porHacer.filter(tarVencida).length;
+  const hoy=porHacer.filter(t=>t.fechaLimite===todayStr()).length;
+  const pend=porHacer.length;
   const nuevos=tarMisNuevos(me);
-  if(!pend && !nuevos) return `<div class="note" style="margin-top:0">${first}, no tienes tareas pendientes ni mensajes nuevos. Todo al día.</div>`;
+  if(!pend && !nuevos && !espera) return `<div class="note" style="margin-top:0">${first}, no tienes tareas pendientes ni mensajes nuevos. Todo al día.</div>`;
   const partes=[];
   if(venc) partes.push(`<strong style="color:#C0392B">${venc} vencida${venc>1?'s':''}</strong>`);
   if(hoy) partes.push(`<strong style="color:#B8860B">${hoy} para hoy</strong>`);
   const resto=pend-venc-hoy;
   if(resto>0) partes.push(`${resto} por delante`);
+  if(espera) partes.push(`<strong style="color:#8A5A00">${espera} en espera</strong>`);
   if(nuevos) partes.push(`<strong>${nuevos} mensaje${nuevos>1?'s':''} nuevo${nuevos>1?'s':''}</strong>`);
-  const cierre = venc ? 'Empieza por lo vencido.' : (hoy ? 'Prioriza lo de hoy.' : (nuevos? 'Echa un ojo a los mensajes.':'Vas con margen.'));
+  const cierre = venc ? 'Empieza por lo vencido.' : (hoy ? 'Prioriza lo de hoy.' : (pend? 'Vas con margen.' : (nuevos?'Echa un ojo a los mensajes.':'Solo te queda lo que está en espera de otros.')));
   return `<div class="note" style="margin-top:0">${first}, tienes ${partes.join(' · ')}. ${cierre}</div>`;
 }
 
@@ -4044,7 +4235,7 @@ homeView = function(){
   try{
     const me=S.user&&S.user.nombre;
     if(me){
-      const pend=(S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t)).length;
+      const pend=(S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t) && t.estado!=='En espera').length;
       const venc=(S.tareas||[]).filter(t=>t.paraQuien===me && tarVencida(t)).length;
       const nuevos=tarMisNuevos(me);
       if(pend||nuevos){
