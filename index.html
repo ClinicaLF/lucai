@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-45">
+<meta name="lucai-version" content="2026-06-08-46">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -5282,21 +5282,23 @@ function iaFloatHtml(){
   if(!S.user || S.modal) return '';
   const nombre = S.user.nombre ? S.user.nombre.split(' ')[0] : '';
   const sugs = ['¿Qué tengo que hacer hoy?','¿Qué es lo más urgente?','¿Tengo algo vencido?','Resúmeme mis tareas'];
+  const sinChat = !(S.iaChat && S.iaChat.length);
   const panel = S.iaOpen ? `
-  <div style="position:fixed;right:18px;bottom:88px;z-index:1200;width:min(380px,calc(100vw - 32px));background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 44px rgba(51,63,72,.24);display:flex;flex-direction:column;max-height:min(70vh,560px);overflow:hidden">
-    <div style="background:#333F48;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+  <div style="position:fixed;right:18px;bottom:88px;z-index:1200;width:min(420px,calc(100vw - 20px));height:min(80vh,620px);background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 44px rgba(51,63,72,.24);display:flex;flex-direction:column;overflow:hidden">
+    <div style="background:#333F48;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex:0 0 auto">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:0 0 auto;display:flex">${lucaiAvatar(36)}</span>
         <div><div style="font-weight:700">Pregúntale a Lucai</div><div style="font-size:11px;opacity:.7">Sobre tus tareas. Puede equivocarse; compruébalo.</div></div>
       </div>
       <button onclick="iaToggle()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1">×</button>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px 0">
+    ${sinChat ? `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px 0;flex:0 0 auto">
       ${sugs.map(s=>`<button class="btn btn-ghost btn-sm" onclick="iaSugerencia('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('')}
-      ${S.iaChat&&S.iaChat.length?`<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="iaLimpiar()">Limpiar</button>`:''}
-    </div>
-    <div id="iaScroll" style="flex:1;overflow:auto;padding:10px 12px;background:var(--arena-1);margin:10px 12px;border:1px solid var(--line);border-radius:12px;min-height:160px">${iaBurbujas()}</div>
-    <div style="display:flex;gap:8px;padding:0 12px 12px">
+    </div>` : `<div style="padding:8px 12px 0;flex:0 0 auto;display:flex;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="iaLimpiar()">Limpiar</button>
+    </div>`}
+    <div id="iaScroll" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:12px;background:var(--arena-1);margin:10px 12px;border:1px solid var(--line);border-radius:12px">${iaBurbujas()}</div>
+    <div style="display:flex;gap:8px;padding:0 12px 12px;flex:0 0 auto">
       <input id="iaInput" class="inp" style="flex:1" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();iaSend()}">
       <button class="btn btn-primary" onclick="iaSend()" ${S.iaLoading?'disabled':''}>Enviar</button>
     </div>
