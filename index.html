@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-51">
+<meta name="lucai-version" content="2026-06-08-52">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3654,7 +3654,7 @@ function tareasView(){
       ${acts}
     </div>
     ${tarResumenBanner()}
-    ${tarMiDiaCard()}
+    ${tarAlDiaCard()}
     ${seg}
     ${body}
   </div></main>
@@ -3951,59 +3951,34 @@ function tarMarcar(id,estado){
   t.estado=estado;
   t.fechaHecha = estado==='Hecha' ? todayStr() : null;
   render();
-  let msg = estado==='Hecha' ? 'Tarea terminada y archivada' : 'Tarea actualizada';
-  if(estado==='Hecha' && t.paraQuien===S.user.nombre){
-    try{ const s=tarMiDiaStats(); if(s.pct===100 && s.denom>0) msg='¡Día redondo! '+tarReconoceFrase(); }catch(_){}
-  }
-  srvTarUpdate(id, t, msg);
+  srvTarUpdate(id, t, estado==='Hecha'?'Tarea terminada y archivada':'Tarea actualizada');
 }
 
-/* ---- progreso personal (privado) ---- */
-function tarMiDiaStats(){
+/* ---- "% de estar al día" (privado, una sola métrica) ---- */
+function tarAlDiaStats(){
   const me=S.user.nombre, hoy=todayStr();
-  const mias=(S.tareas||[]).filter(t=>t.paraQuien===me);
-  const hoyT=mias.filter(t=>t.fechaLimite===hoy);
-  const hechas=hoyT.filter(t=>t.estado==='Hecha').length;
-  const espera=hoyT.filter(t=>t.estado==='En espera').length;
-  const pend=hoyT.filter(t=>t.estado!=='Hecha' && t.estado!=='En espera').length;
-  const denom=hechas+pend; // "en espera de otros" no cuenta en tu contra
-  const pct = denom>0 ? Math.round(hechas/denom*100) : null;
-  const vencidas=mias.filter(t=> t.fechaLimite && t.fechaLimite<hoy && t.estado!=='Hecha' && t.estado!=='En espera').length;
-  return {hechas, pend, espera, denom, pct, vencidas};
+  // tus tareas activas (las hechas se archivan)
+  const activas=(S.tareas||[]).filter(t=> t.paraQuien===me && t.estado!=='Hecha');
+  // atrasadas = deberían estar hechas y no lo están (la espera de otros no cuenta en tu contra)
+  const atrasadas=activas.filter(t=> t.estado!=='En espera' && t.fechaLimite && t.fechaLimite<hoy);
+  const total=activas.length;
+  const pct = total>0 ? Math.round((total-atrasadas.length)/total*100) : 100;
+  return {total, atrasadas:atrasadas.length, pct};
 }
-function tarMiSemanaStats(){
-  const me=S.user.nombre; const r=(typeof tarSemRango==='function')?tarSemRango():[null,null];
-  const desde=r[0], hasta=r[1];
-  const cer=(S.tareas||[]).filter(t=> t.paraQuien===me && t.estado==='Hecha' && t.fechaHecha && String(t.fechaHecha).slice(0,10)>=desde && String(t.fechaHecha).slice(0,10)<=hasta);
-  const aTiempo=cer.filter(t=> !t.fechaLimite || String(t.fechaHecha).slice(0,10)<=t.fechaLimite).length;
-  return {cerradas:cer.length, aTiempo};
-}
-function tarReconoceFrase(){
-  const f=['Día redondo: lo de hoy está cerrado.','Todo lo de hoy, hecho. Bien jugado.','Lista de hoy a cero. Genial.','Has dejado todo lo de hoy cerrado. Bravo.','Día completado. Así da gusto.'];
-  const d=new Date(todayStr()+'T00:00:00'); return f[(d.getDate()+d.getMonth())%f.length];
-}
-function tarMiDiaCard(){
-  const s=tarMiDiaStats(), w=tarMiSemanaStats();
-  const semLine=`<span style="color:#8A949B;font-size:13px">Esta semana: <strong style="color:#5A6770">${w.cerradas}</strong> cerradas${w.cerradas?` · <strong style="color:#6E8E00">${w.aTiempo}</strong> a tiempo`:''}</span>`;
-  let main, semBlock='';
-  if(s.pct===null){
-    main=`<div style="font-size:14px;color:#5A6770">Hoy no tienes tareas con fecha de hoy.${s.vencidas?` Tienes <strong style="color:#B8860B">${s.vencidas}</strong> de antes sin cerrar.`:' Buen momento para adelantar algo.'}</div>`;
-    semBlock=`<div style="margin-top:6px">${semLine}</div>`;
-  } else {
-    const ok=s.pct===100;
-    const bar=`<div style="height:10px;background:#EAE3D7;border-radius:6px;overflow:hidden;margin:8px 0 6px"><div style="height:100%;width:${s.pct}%;background:${ok?'#6E8E00':'#A8C400'};transition:width .4s"></div></div>`;
-    const extra=[];
-    if(s.espera) extra.push(`${s.espera} en espera de otros`);
-    if(s.vencidas) extra.push(`<span style="color:#B8860B">${s.vencidas} de antes sin cerrar</span>`);
-    const pie= ok ? `<span style="color:#6E8E00">✓ ${tarReconoceFrase()}</span>` : (extra.length?extra.join(' · '):'Ánimo, a por ello.');
-    main=`<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
-        <div style="font-size:14px;color:#333F48"><strong>Hoy:</strong> ${s.hechas} de ${s.denom} hechas <strong style="color:${ok?'#6E8E00':'#5A6770'}">(${s.pct}%)</strong></div>
-        ${semLine}
-      </div>${bar}<div style="font-size:13px;color:#8A949B">${pie}</div>`;
-  }
+function tarAlDiaCard(){
+  const s=tarAlDiaStats();
+  const ok = s.atrasadas===0;
+  const color = ok ? '#6E8E00' : (s.pct>=70 ? '#A8C400' : '#C0392B');
+  const bar=`<div style="height:10px;background:#EAE3D7;border-radius:6px;overflow:hidden;margin:8px 0 4px"><div style="height:100%;width:${s.pct}%;background:${color};transition:width .4s"></div></div>`;
+  const sub = ok
+    ? (s.total ? 'Sin tareas atrasadas. ¡Vas al día!' : 'No tienes tareas pendientes.')
+    : `${s.atrasadas} ${s.atrasadas===1?'tarea atrasada':'tareas atrasadas'} que ya deberían estar hechas.`;
   return `<div style="background:#F7F4EE;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:16px">
-    <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:6px">Tu progreso</div>
-    ${main}${semBlock}
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B">Estás al día</div>
+      <div style="font-size:24px;font-weight:800;color:${color}">${s.pct}%</div>
+    </div>${bar}
+    <div style="font-size:13px;color:#8A949B">${sub}</div>
   </div>`;
 }
 function tarEliminar(id){
