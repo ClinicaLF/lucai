@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-17">
+<meta name="lucai-version" content="2026-06-08-18">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4493,7 +4493,12 @@ function commitComunicacion(){
 }
 
 /* detalle */
-function openComDet(id){ const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return; F={type:'com_det', id, comDraft:''}; S.modal='com_det'; render(); }
+function openComDet(id){
+  const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return;
+  let thread='';
+  if(c.deQuien===S.user.nombre){ const para=(c.para||[]); thread = (para.find(r=>comThreadList(c,r).length)||para[0]||''); }
+  F={type:'com_det', id, comDraft:'', comThread:thread}; S.modal='com_det'; render();
+}
 function comMarcarLeido(id){
   const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return;
   const me=S.user.nombre;
@@ -4509,15 +4514,54 @@ function comMarcarNoLeido(id){
   if(!(c.para||[]).includes(me)) return;
   if(c.leidos && c.leidos[me]){ delete c.leidos[me]; render(); srvComUpdate(id, c, 'Marcada como no leída'); }
 }
-function comAddComentario(id){
+function comEffCon(c, cm){ return cm.con || (cm.de===c.deQuien ? '' : cm.de); }
+function comThreadList(c, party){ if(!party) return []; return (Array.isArray(c.comentarios)?c.comentarios:[]).filter(cm=>comEffCon(c,cm)===party); }
+function setComThread(v){ F.comThread=v; render(); }
+function comAddComentario(id, con){
   const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return;
   const me=S.user.nombre;
-  if(!((c.para||[]).includes(me)||c.deQuien===me||isAdmin())){ toast('No puedes comentar esta comunicación'); return; }
+  const esCreador=c.deQuien===me, esPara=(c.para||[]).includes(me);
+  if(!(esCreador||esPara)){ toast('No puedes comentar esta comunicación'); return; }
+  const party = esCreador ? (con||F.comThread||'') : me;
+  if(esCreador && !party){ toast('Elige a quién respondes'); return; }
   const txt=(F.comDraft||'').trim(); if(!txt) return;
   if(!Array.isArray(c.comentarios)) c.comentarios=[];
-  c.comentarios.push({de:me, texto:txt, ts:now()});
+  c.comentarios.push({de:me, con:party, texto:txt, ts:now()});
   F.comDraft=''; render(); srvComUpdate(id, c);
-  if(c.deQuien && c.deQuien!==me) tgNotify(c.deQuien, `💬 ${me} comentó en "${c.titulo}": ${txt}`);
+  const otro = esCreador ? party : c.deQuien;
+  if(otro && otro!==me) tgNotify(otro, `💬 ${me} en "${c.titulo}": ${txt}`);
+}
+function comBurbujas(comList, me){
+  return comList.length ? comList.map(cm=>{const mine=cm.de===me; return `<div style="margin-bottom:8px;display:flex;${mine?'justify-content:flex-end':''}"><div style="max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px"><div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(cm.de||'—')} · ${incEsc(comFmtTs(cm.ts))}</div><div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(cm.texto||'')}</div></div></div>`;}).join('') : `<div class="muted" style="font-size:13px">Sin comentarios todavía.</div>`;
+}
+function comComentariosHtml(c){
+  const me=S.user.nombre;
+  const soyDe=c.deQuien===me, soyPara=(c.para||[]).includes(me);
+  if(!soyDe && !soyPara) return '';
+  if(soyDe){
+    const para=(c.para||[]);
+    const sel = para.includes(F.comThread)?F.comThread:(para.find(r=>comThreadList(c,r).length)||para[0]||'');
+    const opciones = para.map(r=>{const n=comThreadList(c,r).length; return `<option value="${incEsc(r)}" ${r===sel?'selected':''}>${incEsc(r)}${n?` (${n})`:''}</option>`;}).join('');
+    const list = comThreadList(c, sel);
+    const compose = sel?`<div style="display:flex;gap:8px;margin-top:10px"><input class="inp" placeholder="Responder a ${incEsc(sel)}…" value="${incEsc(F.comDraft||'')}" oninput="setInp('comDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();comAddComentario('${c.id}','${sel.replace(/'/g,"\\'")}')}"><button class="btn btn-primary" onclick="comAddComentario('${c.id}','${sel.replace(/'/g,"\\'")}')">Responder</button></div>`:'';
+    return `<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+        <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B">Comentarios privados</div>
+        <select class="inp" style="max-width:220px;margin:0" onchange="setComThread(this.value)">${opciones}</select>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:8px">Conversación privada con ${incEsc(sel||'—')}. Cada persona solo ve la suya.</div>
+      <div style="max-height:220px;overflow-y:auto">${comBurbujas(list, me)}</div>
+      ${compose}
+    </div>`;
+  }
+  const list = comThreadList(c, me);
+  const compose = `<div style="display:flex;gap:8px;margin-top:10px"><input class="inp" placeholder="Comenta en privado con ${incEsc(c.deQuien||'')}…" value="${incEsc(F.comDraft||'')}" oninput="setInp('comDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();comAddComentario('${c.id}')}"><button class="btn btn-primary" onclick="comAddComentario('${c.id}')">Comentar</button></div>`;
+  return `<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+    <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:4px">Comentarios</div>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Privado: solo lo veis ${incEsc(c.deQuien||'quien la envió')} y tú.</div>
+    <div style="max-height:220px;overflow-y:auto">${comBurbujas(list, me)}</div>
+    ${compose}
+  </div>`;
 }
 function comEliminar(id){
   const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return;
@@ -4529,10 +4573,6 @@ function comDetModalContent(){
   const me=S.user.nombre, admin=isAdmin();
   const soyPara=(c.para||[]).includes(me), soyDe=c.deQuien===me;
   const yaLeido=comLeida(c,me);
-  const comentarios=Array.isArray(c.comentarios)?c.comentarios:[];
-  const comsHtml = comentarios.length? comentarios.map(mm=>{const mine=mm.de===me; return `<div style="margin-bottom:8px;display:flex;${mine?'justify-content:flex-end':''}"><div style="max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px"><div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(mm.de||'—')} · ${incEsc(comFmtTs(mm.ts))}</div><div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div></div></div>`;}).join('') : `<div class="muted" style="font-size:13px">Sin comentarios todavía.</div>`;
-  const puedeComentar = soyPara||soyDe||admin;
-  const compose = puedeComentar?`<div style="display:flex;gap:8px;margin-top:10px"><input class="inp" placeholder="Escribe un comentario…" value="${incEsc(F.comDraft||'')}" oninput="setInp('comDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();comAddComentario('${c.id}')}"><button class="btn btn-primary" onclick="comAddComentario('${c.id}')">Comentar</button></div>`:'';
   let receipts='';
   if(soyDe||admin){
     const leidoBy=(c.para||[]).filter(n=>comLeida(c,n));
@@ -4558,11 +4598,7 @@ function comDetModalContent(){
       <div class="inc-meta" style="margin:0 0 10px">De ${incEsc(c.deQuien||'—')} · ${incEsc(comFmtTs(c.ts))} · Para ${(c.para||[]).length} persona(s)</div>
       <div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px;white-space:pre-wrap">${incEsc(c.texto||'')}</div>
       ${receipts}
-      <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
-        <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Comentarios</div>
-        <div style="max-height:220px;overflow-y:auto">${comsHtml}</div>
-        ${compose}
-      </div>
+      ${comComentariosHtml(c)}
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
         ${acciones}
         <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
