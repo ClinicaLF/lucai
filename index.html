@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-46">
+<meta name="lucai-version" content="2026-06-08-48">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -751,7 +751,7 @@ function pinPress(n){
   if(S.pin.length>=4) return;
   S.pin+=n; S.err="";
   if(S.pin.length===4){
-    if(S.pin===S.pinUser.pin){ S.user=S.pinUser; S.pinUser=null; S.pin=""; S.module=null; S.alert=""; S.iaOpen=false; clearTimeout(window._iaSaludoShow); window._iaSaludoShow=setTimeout(()=>{ if(typeof lucaiSaludoShow==='function') lucaiSaludoShow(); }, 600); render(); resetIdle(); }
+    if(S.pin===S.pinUser.pin){ S.user=S.pinUser; S.pinUser=null; S.pin=""; S.module=null; S.alert=""; S.iaOpen=false; if(typeof iaWarmup==='function') iaWarmup(); clearTimeout(window._iaSaludoShow); window._iaSaludoShow=setTimeout(()=>{ if(typeof lucaiSaludoShow==='function') lucaiSaludoShow(); }, 600); render(); resetIdle(); }
     else { S.err="PIN incorrecto"; S.pin=""; render(); return; }
   }
   render();
@@ -4566,37 +4566,48 @@ async function iaSend(textoFijo){
   const box = el('iaInput');
   const q = (textoFijo!=null ? textoFijo : (box ? box.value : '')).trim();
   if(!q || S.iaLoading) return;
-  S.iaChat.push({ q:q, a:null });
-  S.iaLoading = true; render();
-  const last = S.iaChat[S.iaChat.length-1];
   const scrollDown=()=>{ const sc=el('iaScroll'); if(sc) sc.scrollTop=sc.scrollHeight; };
+  S.iaChat.push({ q:q, a:null });
+  S.iaLoading = true; render(); scrollDown(); setTimeout(scrollDown,30);
+  const last = S.iaChat[S.iaChat.length-1];
+  const ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  const killer = setTimeout(()=>{ try{ ctrl && ctrl.abort(); }catch(_){} }, 45000);
   try{
     const r = await fetch(IA_FN, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ pregunta:q, contexto:iaContexto(q), usuario:S.user.nombre })
+      body: JSON.stringify({ pregunta:q, contexto:iaContexto(q), usuario:S.user.nombre }),
+      signal: ctrl ? ctrl.signal : undefined
     });
     const ct = (r.headers.get('content-type')||'');
     if(!r.ok || ct.includes('application/json') || !r.body || !r.body.getReader){
       // respuesta entera (error, o función sin streaming): comportamiento clásico
       const data = await r.json().catch(()=>({}));
+      clearTimeout(killer);
       last.a = (data && data.respuesta) ? data.respuesta
              : (data && data.error ? ('Vaya, ha habido un error: '+data.error) : 'No he recibido respuesta.');
       last._live=false; S.iaLoading=false; render(); setTimeout(scrollDown,30); return;
     }
-    // streaming: la respuesta va apareciendo poco a poco
-    last.a=''; last._live=true; S.iaLoading=false; render();
+    // streaming: mantenemos "Pensando…" hasta la PRIMERA palabra
     const reader=r.body.getReader(); const dec=new TextDecoder();
+    let started=false;
     while(true){
       const {done, value} = await reader.read();
       if(done) break;
-      last.a += dec.decode(value, {stream:true});
+      const chunk = dec.decode(value, {stream:true});
+      if(!chunk) continue;
+      if(!started){ started=true; last.a=''; last._live=true; S.iaLoading=false; render(); }
+      last.a += chunk;
       const liveEl=document.getElementById('iaLiveMsg');
       if(liveEl){ liveEl.textContent=last.a; scrollDown(); } else { render(); scrollDown(); }
     }
-    if(!last.a) last.a='No he recibido respuesta.';
+    clearTimeout(killer);
+    if(!started){ last.a = last.a || 'No he recibido respuesta.'; S.iaLoading=false; }
     last._live=false; render(); setTimeout(scrollDown,30);
   }catch(e){
-    last.a = (last.a && last.a.length) ? last.a : 'No he podido conectar con la IA. Revisa la conexión e inténtalo de nuevo.';
+    clearTimeout(killer);
+    const abort = e && (e.name==='AbortError');
+    last.a = (last.a && last.a.length) ? last.a
+           : (abort ? 'Ha tardado demasiado. Inténtalo de nuevo.' : 'No he podido conectar con la IA. Revisa la conexión e inténtalo de nuevo.');
     last._live=false; S.iaLoading=false; render(); setTimeout(scrollDown,30);
   }
 }
@@ -5255,8 +5266,9 @@ homeView = function(){
 function iaToggle(){
   if(typeof lucaiSaludoHide==='function') lucaiSaludoHide(true);
   S.iaOpen=!S.iaOpen; S.iaSaludo=false; render();
-  if(S.iaOpen) setTimeout(()=>{ const s=el('iaScroll'); if(s) s.scrollTop=s.scrollHeight; const i=el('iaInput'); if(i) i.focus(); }, 60);
+  if(S.iaOpen){ if(typeof iaWarmup==='function') iaWarmup(); setTimeout(()=>{ const s=el('iaScroll'); if(s) s.scrollTop=s.scrollHeight; const i=el('iaInput'); if(i) i.focus(); }, 60); }
 }
+function iaWarmup(){ try{ fetch(IA_FN, {method:'OPTIONS'}).catch(()=>{}); }catch(_){} }
 function iaSaludoCerrar(){ S.iaSaludo=false; render(); }
 function iaSaludoAbrir(){ S.iaSaludo=false; iaToggle(); }
 function lucaiIcon(sz){ sz=sz||28; return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z"/><circle cx="8.5" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11.5" r="1.1" fill="currentColor" stroke="none"/></svg>`; }
