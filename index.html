@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-38">
+<meta name="lucai-version" content="2026-06-08-44">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -107,7 +107,7 @@
     padding:6px 12px 6px 6px;border-radius:30px}
   .who .chip .avatar{width:30px;height:30px;font-size:11px;background:var(--green);color:var(--ink)}
   .who .chip .nm{font-size:13px;font-weight:600}
-  .logout{font-size:12.5px;color:var(--grey-2);font-weight:600;padding:6px 10px;border-radius:8px}
+  .logout{font-size:12.5px;color:var(--grey-2);font-weight:600;padding:6px 10px;border-radius:8px;white-space:nowrap}
   .logout:hover{color:var(--arena-1)}
 
   /* ---------- TABS ---------- */
@@ -323,14 +323,14 @@
     .login-right{padding:26px 22px 38px}
     .users{grid-template-columns:1fr}
 
-    header{padding:0 14px;height:58px}
-    header .brand{gap:10px}
+    header{padding:0 12px;height:58px;overflow:hidden}
+    header .brand{gap:10px;min-width:0;flex-shrink:1}
     header .brand img{height:30px}
-    header .brand .t{font-size:0}
-    .who{gap:9px}
+    header .brand .t{display:none}
+    .who{gap:7px;flex-shrink:0}
     .who .chip .nm{display:none}
     .who .chip{padding:5px}
-    .logout{font-size:12px;padding:6px 6px}
+    .logout{font-size:11.5px;padding:6px 7px}
 
     .tabs{padding:12px 12px 0;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
     .tab{padding:10px 14px;font-size:13px;white-space:nowrap;flex-shrink:0}
@@ -718,6 +718,7 @@ function loginView(){
           <button class="key" onclick="pinPress('0')">0</button>
           <button class="key wide" onclick="pinDel()">Borrar</button>
         </div>
+        <p class="hint" style="color:#8A949B">Puedes tocar los botones o teclear el PIN directamente.</p>
         <p class="hint"><a href="#" onclick="event.preventDefault();pinForgot()" style="color:#5A6770;text-decoration:underline">He olvidado mi PIN</a></p>
       `)}
     </div>
@@ -756,6 +757,17 @@ function pinPress(n){
   render();
 }
 function pinDel(){ S.pin=S.pin.slice(0,-1); S.err=""; render(); }
+function pinKey(e){
+  if(typeof DEVICE!=='undefined' && !DEVICE) return;   // aún en login de dispositivo
+  if(S.user) return;                                    // ya dentro
+  if(!S.pinUser || S.pinForgot) return;                 // no estamos en el teclado del PIN
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+  const el2=e.target, tag=(el2&&el2.tagName)||'';
+  if(tag==='INPUT'||tag==='TEXTAREA'||(el2&&el2.isContentEditable)) return; // escribiendo en un campo (p.ej. recuperación)
+  if(e.key>='0' && e.key<='9'){ e.preventDefault(); pinPress(e.key); }
+  else if(e.key==='Backspace'){ e.preventDefault(); pinDel(); }
+}
+document.addEventListener('keydown', pinKey);
 function logout(){ if(typeof lucaiSaludoHide==='function') lucaiSaludoHide(true); clearTimeout(window._iaSaludoShow); S.user=null; S.pin=""; S.module=null; S.sub="stock"; clearTimeout(window._idle); window._idle=null; render(); }
 const SESION_MIN = 5; // minutos de inactividad antes de cerrar sesión
 function resetIdle(){
@@ -3542,6 +3554,7 @@ loadFromDB = async function(){
         estado:x.estado||'Pendiente', ts:x.ts, fechaHecha:x.fecha_hecha,
         tiempos: Array.isArray(x.tiempos) ? x.tiempos : (function(){ try{ return x.tiempos?JSON.parse(x.tiempos):[]; }catch(_){ return []; } })(),
         mensajes: Array.isArray(x.mensajes) ? x.mensajes : (function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
+        adjuntos: Array.isArray(x.adjuntos) ? x.adjuntos : (function(){ try{ return x.adjuntos?JSON.parse(x.adjuntos):[]; }catch(_){ return []; } })(),
         vistos: (x.vistos && typeof x.vistos==='object' && !Array.isArray(x.vistos)) ? x.vistos : (function(){ try{ return x.vistos?JSON.parse(x.vistos):{}; }catch(_){ return {}; } })()
       }));
     }
@@ -3554,7 +3567,7 @@ async function srvTarInsert(t, okMsg){
       id:t.id, titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
       area:t.area||'General',
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
-      estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]) });
+      estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]) });
     if(error) throw error;
   }catch(e){ console.error('srvTarInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
@@ -3565,7 +3578,7 @@ async function srvTarUpdate(id, t, okMsg){
       titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
       area:t.area||'General',
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
-      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]) }).eq('id', id);
+      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]) }).eq('id', id);
     if(error) throw error;
   }catch(e){ console.error('srvTarUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
@@ -3641,6 +3654,7 @@ function tareasView(){
       ${acts}
     </div>
     ${tarResumenBanner()}
+    ${tarMiDiaCard()}
     ${seg}
     ${body}
   </div></main>
@@ -3937,7 +3951,60 @@ function tarMarcar(id,estado){
   t.estado=estado;
   t.fechaHecha = estado==='Hecha' ? todayStr() : null;
   render();
-  srvTarUpdate(id, t, estado==='Hecha'?'Tarea terminada y archivada':'Tarea actualizada');
+  let msg = estado==='Hecha' ? 'Tarea terminada y archivada' : 'Tarea actualizada';
+  if(estado==='Hecha' && t.paraQuien===S.user.nombre){
+    try{ const s=tarMiDiaStats(); if(s.pct===100 && s.denom>0) msg='¡Día redondo! '+tarReconoceFrase(); }catch(_){}
+  }
+  srvTarUpdate(id, t, msg);
+}
+
+/* ---- progreso personal (privado) ---- */
+function tarMiDiaStats(){
+  const me=S.user.nombre, hoy=todayStr();
+  const mias=(S.tareas||[]).filter(t=>t.paraQuien===me);
+  const hoyT=mias.filter(t=>t.fechaLimite===hoy);
+  const hechas=hoyT.filter(t=>t.estado==='Hecha').length;
+  const espera=hoyT.filter(t=>t.estado==='En espera').length;
+  const pend=hoyT.filter(t=>t.estado!=='Hecha' && t.estado!=='En espera').length;
+  const denom=hechas+pend; // "en espera de otros" no cuenta en tu contra
+  const pct = denom>0 ? Math.round(hechas/denom*100) : null;
+  const vencidas=mias.filter(t=> t.fechaLimite && t.fechaLimite<hoy && t.estado!=='Hecha' && t.estado!=='En espera').length;
+  return {hechas, pend, espera, denom, pct, vencidas};
+}
+function tarMiSemanaStats(){
+  const me=S.user.nombre; const r=(typeof tarSemRango==='function')?tarSemRango():[null,null];
+  const desde=r[0], hasta=r[1];
+  const cer=(S.tareas||[]).filter(t=> t.paraQuien===me && t.estado==='Hecha' && t.fechaHecha && String(t.fechaHecha).slice(0,10)>=desde && String(t.fechaHecha).slice(0,10)<=hasta);
+  const aTiempo=cer.filter(t=> !t.fechaLimite || String(t.fechaHecha).slice(0,10)<=t.fechaLimite).length;
+  return {cerradas:cer.length, aTiempo};
+}
+function tarReconoceFrase(){
+  const f=['Día redondo: lo de hoy está cerrado.','Todo lo de hoy, hecho. Bien jugado.','Lista de hoy a cero. Genial.','Has dejado todo lo de hoy cerrado. Bravo.','Día completado. Así da gusto.'];
+  const d=new Date(todayStr()+'T00:00:00'); return f[(d.getDate()+d.getMonth())%f.length];
+}
+function tarMiDiaCard(){
+  const s=tarMiDiaStats(), w=tarMiSemanaStats();
+  const semLine=`<span style="color:#8A949B;font-size:13px">Esta semana: <strong style="color:#5A6770">${w.cerradas}</strong> cerradas${w.cerradas?` · <strong style="color:#6E8E00">${w.aTiempo}</strong> a tiempo`:''}</span>`;
+  let main, semBlock='';
+  if(s.pct===null){
+    main=`<div style="font-size:14px;color:#5A6770">Hoy no tienes tareas con fecha de hoy.${s.vencidas?` Tienes <strong style="color:#B8860B">${s.vencidas}</strong> de antes sin cerrar.`:' Buen momento para adelantar algo.'}</div>`;
+    semBlock=`<div style="margin-top:6px">${semLine}</div>`;
+  } else {
+    const ok=s.pct===100;
+    const bar=`<div style="height:10px;background:#EAE3D7;border-radius:6px;overflow:hidden;margin:8px 0 6px"><div style="height:100%;width:${s.pct}%;background:${ok?'#6E8E00':'#A8C400'};transition:width .4s"></div></div>`;
+    const extra=[];
+    if(s.espera) extra.push(`${s.espera} en espera de otros`);
+    if(s.vencidas) extra.push(`<span style="color:#B8860B">${s.vencidas} de antes sin cerrar</span>`);
+    const pie= ok ? `<span style="color:#6E8E00">✓ ${tarReconoceFrase()}</span>` : (extra.length?extra.join(' · '):'Ánimo, a por ello.');
+    main=`<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <div style="font-size:14px;color:#333F48"><strong>Hoy:</strong> ${s.hechas} de ${s.denom} hechas <strong style="color:${ok?'#6E8E00':'#5A6770'}">(${s.pct}%)</strong></div>
+        ${semLine}
+      </div>${bar}<div style="font-size:13px;color:#8A949B">${pie}</div>`;
+  }
+  return `<div style="background:#F7F4EE;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+    <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:6px">Tu progreso</div>
+    ${main}${semBlock}
+  </div>`;
 }
 function tarEliminar(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
@@ -4080,6 +4147,7 @@ function tarDetModalContent(){
       <div class="inc-meta" style="margin:0 0 6px">De ${incEsc(t.deQuien||'—')} · Para ${incEsc(t.paraQuien||'—')}</div>
       <div class="inc-meta" style="margin:0 0 10px">Entrega: ${incEsc(limTxt)}${t.fechaHecha?` · Hecha el ${incEsc(fmtFecha(t.fechaHecha))}`:''}</div>
       ${t.descripcion?`<div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(t.descripcion)}</div>`:''}
+      ${tarAdjuntosHtml(t)}
       ${tarThreadHtml(t)}
       ${tarTiempoHtml(t)}
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
@@ -4098,9 +4166,11 @@ function tarThreadHtml(t){
       <div style="max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px">
         <div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(mm.de||'—')} · ${incEsc(tarMsgTime(mm.ts))}</div>
         <div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div>
+        ${mm.adj&&mm.adj.path?`<img data-tarpath="${mm.adj.path}" onclick="tarVerImg('${mm.adj.path}')" alt="imagen" style="margin-top:6px;max-width:190px;max-height:190px;border-radius:8px;cursor:pointer;display:block;background:#E8EAED">`:''}
       </div></div>`;
   }).join('') : `<div class="muted" style="font-size:13px">Aún no hay mensajes. Escribe el primero para aclarar o comentar la tarea.</div>`;
   const compose = puede ? `<div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-ghost" onclick="tarAddMsgImg('${t.id}')" title="Adjuntar imagen (o pega una con Ctrl+V)" style="flex:0 0 auto;padding:8px 11px">📷</button>
       <input class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}">
       <button class="btn btn-primary" onclick="tarAddMsg('${t.id}')">Enviar</button>
     </div>` : '';
@@ -4389,9 +4459,12 @@ const _canAccess_ia = canAccess;
 canAccess = function(id){ if(id==='asistente') return !!S.user; return _canAccess_ia(id); };
 
 /* construir el contexto que se le manda: las tareas activas del usuario */
-function iaContexto(){
+function iaContexto(pregunta){
   const me = S.user.nombre;
   const admin = (typeof isAdmin==='function') ? isAdmin() : false;
+  const pregLow = (pregunta||'').toLowerCase();
+  const enMaterial = (S.module==='material');
+  const quiereMaterial = enMaterial || /(material|almac|stock|inventar|pedir|pedido|provee|caduc|unidad|art[ií]culo|reponer|existencias|comprar|caja|valor almac)/i.test(pregLow);
   const hoy = (typeof todayStr==='function') ? todayStr() : new Date().toISOString().slice(0,10);
   const activa = t => (typeof tarActiva==='function' ? tarActiva(t) : t.estado!=='Hecha');
   const temp = f => !f ? 'sin fecha' : (f<hoy?'VENCIDA':(f===hoy?'VENCE HOY':'futura'));
@@ -4455,30 +4528,34 @@ function iaContexto(){
     const pedPend = (S.pedidos||[]).filter(p=> p.estado!=='recibido');
     out.push(`Resumen: ${arts.length} artículos activos · valor almacenado ≈ ${Math.round(valor)} € · ${pedir.length} para pedir · ${sinStock.length} sin stock · ${cad.length} por caducar/caducados · ${pedPend.length} pedidos sin recibir.`);
 
-    out.push('· PARA PEDIR (bajo mínimo):');
-    if(!pedir.length) out.push('  (nada bajo mínimo)');
-    else pedir.forEach(a=> out.push(`  - ${a.nombre} [${a.cod}] | ${a.categoria||'—'} | stock ${a.stock}/mín ${a.min} | proveedor: ${a.proveedor||'—'}`));
+    if(!quiereMaterial){
+      out.push('(Resumen de material. Si te preguntan algo más concreto del almacén — qué hay que pedir, qué caduca, stock de un artículo, pedidos, proveedores — pide que abran el módulo de Material o que lo pregunten con esas palabras para ver el detalle.)');
+    } else {
+      out.push('· PARA PEDIR (bajo mínimo):');
+      if(!pedir.length) out.push('  (nada bajo mínimo)');
+      else pedir.forEach(a=> out.push(`  - ${a.nombre} [${a.cod}] | ${a.categoria||'—'} | stock ${a.stock}/mín ${a.min} | proveedor: ${a.proveedor||'—'}`));
 
-    if(cad.length){
-      out.push('· CADUCIDAD (caducado o caduca pronto):');
-      cad.forEach(a=>{ const dd=(typeof diasHasta==='function')?diasHasta(a.caduca):null; out.push(`  - ${a.nombre} [${a.cod}] | caduca ${a.caduca} (${dd==null?'?':(dd<0?`caducado hace ${-dd} d`:`en ${dd} d`)}) | stock ${a.stock}`); });
-    }
+      if(cad.length){
+        out.push('· CADUCIDAD (caducado o caduca pronto):');
+        cad.forEach(a=>{ const dd=(typeof diasHasta==='function')?diasHasta(a.caduca):null; out.push(`  - ${a.nombre} [${a.cod}] | caduca ${a.caduca} (${dd==null?'?':(dd<0?`caducado hace ${-dd} d`:`en ${dd} d`)}) | stock ${a.stock}`); });
+      }
 
-    if(pedPend.length){
-      out.push('· PEDIDOS SIN RECIBIR:');
-      pedPend.forEach(p=>{ const lin=(p.lineas||[]).map(l=>{ const a=(typeof art==='function')?art(l.cod):null; return `${a?a.nombre:l.cod} x${l.cant}`; }).join(', '); out.push(`  - #${String(p.id).slice(-4)} | ${p.ts||'?'} | proveedor: ${p.proveedor||'—'} | ${lin||'—'}`); });
-    }
+      if(pedPend.length){
+        out.push('· PEDIDOS SIN RECIBIR:');
+        pedPend.forEach(p=>{ const lin=(p.lineas||[]).map(l=>{ const a=(typeof art==='function')?art(l.cod):null; return `${a?a.nombre:l.cod} x${l.cant}`; }).join(', '); out.push(`  - #${String(p.id).slice(-4)} | ${p.ts||'?'} | proveedor: ${p.proveedor||'—'} | ${lin||'—'}`); });
+      }
 
-    out.push('· INVENTARIO COMPLETO (artículo [cód] | categoría | stock/mín | estado | proveedor | precio ref | caduca):');
-    arts.slice(0,250).forEach(a=>{ const est=(typeof estadoOf==='function')?estadoOf(a):''; out.push(`  - ${a.nombre} [${a.cod}] | ${a.categoria||'—'} | ${a.stock}/${a.min} | ${est} | ${a.proveedor||'—'} | ${Number(a.precioRef)||0} € | ${a.caduca||'sin caducidad'}`); });
-    if(arts.length>250) out.push(`  ...y ${arts.length-250} artículos más (consulta la app para el resto).`);
+      out.push('· INVENTARIO COMPLETO (artículo [cód] | categoría | stock/mín | estado | proveedor | precio ref | caduca):');
+      arts.slice(0,250).forEach(a=>{ const est=(typeof estadoOf==='function')?estadoOf(a):''; out.push(`  - ${a.nombre} [${a.cod}] | ${a.categoria||'—'} | ${a.stock}/${a.min} | ${est} | ${a.proveedor||'—'} | ${Number(a.precioRef)||0} € | ${a.caduca||'sin caducidad'}`); });
+      if(arts.length>250) out.push(`  ...y ${arts.length-250} artículos más (consulta la app para el resto).`);
 
-    if((S.proveedores||[]).length) out.push(`· PROVEEDORES: ${(S.proveedores||[]).join(', ')}.`);
+      if((S.proveedores||[]).length) out.push(`· PROVEEDORES: ${(S.proveedores||[]).join(', ')}.`);
 
-    const movs=(S.movimientos||[]).filter(m=>!m.anulado).slice(0,30);
-    if(movs.length){
-      out.push('· MOVIMIENTOS RECIENTES (entradas/salidas/mermas · sin datos de pacientes):');
-      movs.forEach(m=> out.push(`  - ${m.ts||'?'} | ${m.tipo} | ${m.nombre||m.cod} x${m.cant} | motivo: ${m.motivo||'—'}${m.valorPerdido?` | pérdida ${Math.round(m.valorPerdido)} €`:''} | por: ${m.user||'—'}`));
+      const movs=(S.movimientos||[]).filter(m=>!m.anulado).slice(0,30);
+      if(movs.length){
+        out.push('· MOVIMIENTOS RECIENTES (entradas/salidas/mermas · sin datos de pacientes):');
+        movs.forEach(m=> out.push(`  - ${m.ts||'?'} | ${m.tipo} | ${m.nombre||m.cod} x${m.cant} | motivo: ${m.motivo||'—'}${m.valorPerdido?` | pérdida ${Math.round(m.valorPerdido)} €`:''} | por: ${m.user||'—'}`));
+      }
     }
   }
 
@@ -4495,7 +4572,7 @@ async function iaSend(textoFijo){
   try{
     const r = await fetch(IA_FN, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ pregunta:q, contexto:iaContexto(), usuario:S.user.nombre })
+      body: JSON.stringify({ pregunta:q, contexto:iaContexto(q), usuario:S.user.nombre })
     });
     const data = await r.json().catch(()=>({}));
     const last = S.iaChat[S.iaChat.length-1];
@@ -5247,6 +5324,174 @@ appView = function(){
   return html;
 };
 /* ===== FIN ASISTENTE FLOTANTE ===== */
+
+
+
+/* ===== IMÁGENES EN TAREAS (Supabase Storage) ===== */
+const TAR_BUCKET = 'tareas';
+window._tarImgUrls = window._tarImgUrls || {};
+
+function tarComprimirImagen(file){
+  return new Promise((resolve,reject)=>{
+    if(!file || !/^image\//.test(file.type||'')){ reject(new Error('No es una imagen')); return; }
+    const fr=new FileReader();
+    fr.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        try{
+          const MAX=1600;
+          let w=img.width, h=img.height;
+          if(w>MAX || h>MAX){ const r=Math.min(MAX/w, MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
+          const c=document.createElement('canvas'); c.width=w; c.height=h;
+          c.getContext('2d').drawImage(img,0,0,w,h);
+          c.toBlob(b=>{ b ? resolve(b) : reject(new Error('No se pudo procesar la imagen')); }, 'image/jpeg', 0.72);
+        }catch(err){ reject(err); }
+      };
+      img.onerror=()=>reject(new Error('Imagen no válida'));
+      img.src=fr.result;
+    };
+    fr.onerror=()=>reject(new Error('No se pudo leer el archivo'));
+    fr.readAsDataURL(file);
+  });
+}
+
+function tarSubirImagen(file, tareaId){
+  return tarComprimirImagen(file).then(blob=>{
+    const path = `${tareaId}/${uid()}.jpg`;
+    return sbc.storage.from(TAR_BUCKET).upload(path, blob, {contentType:'image/jpeg', upsert:false}).then(res=>{
+      if(res && res.error) throw res.error;
+      return { path, name:(file.name||'imagen.jpg'), ts:now(), quien:S.user.nombre };
+    });
+  });
+}
+
+function tarPickImagen(cb){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*';
+  inp.onchange=()=>{ const f=inp.files && inp.files[0]; if(f) cb(f); };
+  inp.click();
+}
+
+function tarPuedeTocar(t){ const me=S.user.nombre; return isAdmin() || t.deQuien===me || t.paraQuien===me; }
+
+function tarAddImagen(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  if(!tarPuedeTocar(t)){ toast('No puedes adjuntar en esta tarea'); return; }
+  tarPickImagen(async (f)=>{
+    toast('Subiendo imagen…');
+    try{
+      const ref=await tarSubirImagen(f, id);
+      if(!Array.isArray(t.adjuntos)) t.adjuntos=[];
+      t.adjuntos.push(ref); render();
+      srvTarUpdate(id, t, 'Imagen añadida');
+    }catch(e){ toast('No se pudo subir: '+(e.message||e)); }
+  });
+}
+
+function tarDelAdjunto(id, idx){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t || !Array.isArray(t.adjuntos)) return;
+  if(!tarPuedeTocar(t)){ toast('No puedes quitar imágenes'); return; }
+  const ref=t.adjuntos[idx]; if(!ref) return;
+  t.adjuntos.splice(idx,1); render(); srvTarUpdate(id, t, 'Imagen quitada');
+  try{ sbc.storage.from(TAR_BUCKET).remove([ref.path]); }catch(_){}
+}
+
+function tarAddMsgImg(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const me=S.user.nombre;
+  if(!tarPuedeTocar(t)){ toast('No puedes escribir en esta tarea'); return; }
+  tarPickImagen(async (f)=>{
+    toast('Subiendo imagen…');
+    try{
+      const ref=await tarSubirImagen(f, id);
+      if(!Array.isArray(t.mensajes)) t.mensajes=[];
+      const txt=(F.msgDraft||'').trim();
+      t.mensajes.push({de:me, texto:txt, adj:ref, ts:now()});
+      F.msgDraft=''; render();
+      srvTarUpdate(id, t);
+      const otros=[...new Set([t.deQuien,t.paraQuien].filter(n=>n && n!==me))];
+      otros.forEach(n=>tgNotify(n, `📷 ${me} ha enviado una imagen en "${t.titulo}"`));
+    }catch(e){ toast('No se pudo subir: '+(e.message||e)); }
+  });
+}
+
+function tarAdjuntosHtml(t){
+  const puede=tarPuedeTocar(t);
+  const adj=Array.isArray(t.adjuntos)?t.adjuntos:[];
+  const thumbs=adj.map((a,i)=>`<div style="position:relative;display:inline-block">
+      <img data-tarpath="${a.path}" onclick="tarVerImg('${a.path}')" alt="adjunto" style="width:74px;height:74px;object-fit:cover;border-radius:8px;cursor:pointer;background:#E8EAED;border:1px solid var(--line)">
+      ${puede?`<button onclick="tarDelAdjunto('${t.id}',${i})" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#C0392B;color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer">×</button>`:''}
+    </div>`).join('');
+  return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+    <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Imágenes</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      ${thumbs}
+      ${puede?`<button class="btn btn-ghost btn-sm" onclick="tarAddImagen('${t.id}')">+ Imagen</button>`:''}
+    </div>
+    ${(!adj.length&&!puede)?'<div class="muted" style="font-size:13px">Sin imágenes.</div>':''}
+  </div>`;
+}
+
+function tarVerImg(p){
+  const open=(u)=>{
+    const d=document.createElement('div');
+    d.style.cssText='position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px';
+    d.onclick=()=>d.remove();
+    const img=document.createElement('img');
+    img.src=u; img.style.cssText='max-width:100%;max-height:100%;border-radius:8px';
+    d.appendChild(img); document.body.appendChild(d);
+  };
+  if(window._tarImgUrls[p]){ open(window._tarImgUrls[p]); return; }
+  sbc.storage.from(TAR_BUCKET).createSignedUrl(p, 3600).then(res=>{
+    if(res && res.data && res.data.signedUrl){ window._tarImgUrls[p]=res.data.signedUrl; open(res.data.signedUrl); }
+    else toast('No se pudo abrir la imagen');
+  }).catch(()=>toast('No se pudo abrir la imagen'));
+}
+
+function tarHidratarImgs(){
+  const imgs=document.querySelectorAll('img[data-tarpath]');
+  imgs.forEach(im=>{
+    const p=im.getAttribute('data-tarpath'); if(!p) return;
+    const cached=window._tarImgUrls[p];
+    if(cached){ if(im.src!==cached) im.src=cached; return; }
+    if(im.getAttribute('data-loading')) return;
+    im.setAttribute('data-loading','1');
+    sbc.storage.from(TAR_BUCKET).createSignedUrl(p, 3600).then(res=>{
+      if(res && res.data && res.data.signedUrl){
+        window._tarImgUrls[p]=res.data.signedUrl;
+        document.querySelectorAll('img[data-tarpath="'+p+'"]').forEach(x=>{ x.src=res.data.signedUrl; x.removeAttribute('data-loading'); });
+      } else { im.removeAttribute('data-loading'); }
+    }).catch(()=>im.removeAttribute('data-loading'));
+  });
+}
+
+/* tras cada render, rellenar las miniaturas con su enlace firmado */
+const _render_tarimg = render;
+render = function(){ _render_tarimg(); try{ tarHidratarImgs(); }catch(_){} };
+function tarOnPaste(e){
+  if(S.modal!=='tar_det' || !F.id) return;
+  const items=(e.clipboardData && e.clipboardData.items) ? e.clipboardData.items : [];
+  let file=null;
+  for(let i=0;i<items.length;i++){ const it=items[i]; if(it && it.type && it.type.indexOf('image')===0){ file=it.getAsFile(); break; } }
+  if(!file) return; // no hay imagen (p.ej. texto): pegado normal
+  e.preventDefault();
+  const id=F.id;
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  if(!tarPuedeTocar(t)){ toast('No puedes adjuntar en esta tarea'); return; }
+  toast('Subiendo imagen pegada…');
+  tarSubirImagen(file, id).then(ref=>{
+    if(!Array.isArray(t.mensajes)) t.mensajes=[];
+    const me=S.user.nombre;
+    const txt=(F.msgDraft||'').trim();
+    t.mensajes.push({de:me, texto:txt, adj:ref, ts:now()});
+    F.msgDraft=''; render();
+    srvTarUpdate(id, t);
+    const otros=[...new Set([t.deQuien,t.paraQuien].filter(n=>n && n!==me))];
+    otros.forEach(n=>tgNotify(n, `📷 ${me} ha enviado una imagen en "${t.titulo}"`));
+  }).catch(err=>toast('No se pudo subir: '+(err.message||err)));
+}
+document.addEventListener('paste', tarOnPaste);
+/* ===== FIN IMÁGENES EN TAREAS ===== */
 
 
 boot();
