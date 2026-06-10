@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-12">
+<meta name="lucai-version" content="2026-06-08-13">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -600,7 +600,7 @@ const SUPABASE_KEY = 'sb_publishable_z-TexwPd_srvBHfWL2vnyA_zTOpi0ue';
 const sbc = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let DEVICE = false, LOADED = false;
 const CLINICA = 'centro';
-const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','seguimientos','tarAreas'];
+const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','seguimientos','tarAreas','grupos'];
 let _persistT = null;
 
 async function boot(){
@@ -1841,8 +1841,9 @@ async function _autoSync(){
   await loadFromDB();
   const sig=JSON.stringify([S.articulos.length,S.movimientos.length,S.pedidos.length,S.seguimientos.length,
     S.articulos.reduce((s,a)=>s+(Number(a.stock)||0),0),(S.movimientos[0]||{}).id,
-    (S.tareas||[]).map(t=>t.id+':'+(t.estado||'')+':'+(t.fechaLimite||'')+':'+(t.prioridad||'')+':'+((t.mensajes||[]).length)).join('|'),
+    (S.tareas||[]).map(t=>t.id+':'+(t.estado||'')+':'+(t.fechaLimite||'')+':'+(t.prioridad||'')+':'+((t.mensajes||[]).length)+':'+((t.tiempos||[]).length)).join('|'),
     (S.incidencias||[]).map(i=>i.id+':'+(i.revisada?1:0)).join('|'),
+    (S.comunicaciones||[]).map(c=>c.id+':'+Object.keys(c.leidos||{}).length+':'+((c.comentarios||[]).length)).join('|'),
     (S.presupuestos||[]).length,(S.equipos||[]).length]);
   if(sig!==_lastSig){ _lastSig=sig; render(); }
 }
@@ -4273,6 +4274,311 @@ appView = function(){
 };
 
 /* ===== FIN ASISTENTE IA ===== */
+
+
+/* ===== MÓDULO COMUNICACIONES ===== */
+/* Avisos/anuncios al equipo con registro de leído y comentarios.
+   Incluye gestión de grupos (reutilizable). Tabla: comunicaciones. Grupos en estado de clínica. */
+
+const COM_USERS = () => USERS.map(u=>u.nombre);
+
+if(!Array.isArray(S.comunicaciones)) S.comunicaciones = [];
+if(!Array.isArray(S.grupos)) S.grupos = [];
+S.comSub = S.comSub || 'com_recibidas';
+
+/* módulo en el hub */
+(function(){
+  if(!MODULES.find(x=>x.id==='comunicaciones')){
+    MODULES.push({ id:'comunicaciones', ini:'C', nombre:'Comunicaciones',
+      desc:'Avisos y mejoras para el equipo. No son tareas: cada uno marca cuando lo ha leído y puede comentar.',
+      estado:'activo' });
+  }
+})();
+
+/* acceso: cualquiera logueado */
+const _canAccess_com = canAccess;
+canAccess = function(id){ if(id==='comunicaciones') return !!S.user; return _canAccess_com(id); };
+
+/* persistencia */
+const _loadFromDB_com = loadFromDB;
+loadFromDB = async function(){
+  const _prev=_loadFromDB_com();
+  try{
+    const r=await sbc.from('comunicaciones').select('*').order('created_at',{ascending:false});
+    if(r.data){
+      S.comunicaciones=r.data.map(x=>({
+        id:x.id, titulo:x.titulo, texto:x.texto, deQuien:x.de_quien,
+        para: Array.isArray(x.para)?x.para:(function(){ try{ return x.para?JSON.parse(x.para):[]; }catch(_){ return []; } })(),
+        leidos: (x.leidos&&typeof x.leidos==='object'&&!Array.isArray(x.leidos))?x.leidos:(function(){ try{ return x.leidos?JSON.parse(x.leidos):{}; }catch(_){ return {}; } })(),
+        comentarios: Array.isArray(x.comentarios)?x.comentarios:(function(){ try{ return x.comentarios?JSON.parse(x.comentarios):[]; }catch(_){ return []; } })(),
+        ts:x.ts
+      }));
+    }
+  }catch(e){ console.error('loadComunicaciones', e); }
+  await _prev;
+};
+async function srvComInsert(c, okMsg){
+  try{
+    const { error } = await sbc.from('comunicaciones').insert({
+      id:c.id, titulo:c.titulo, texto:c.texto, de_quien:c.deQuien,
+      para:(c.para||[]), leidos:(c.leidos||{}), comentarios:(c.comentarios||[]), ts:c.ts });
+    if(error) throw error;
+  }catch(e){ console.error('srvComInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvComUpdate(id, c, okMsg){
+  try{
+    const { error } = await sbc.from('comunicaciones').update({
+      titulo:c.titulo, texto:c.texto, para:(c.para||[]), leidos:(c.leidos||{}), comentarios:(c.comentarios||[]) }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('srvComUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvComDelete(id, okMsg){
+  try{ const { error } = await sbc.from('comunicaciones').delete().eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvComDelete', e); await syncAll(); toast('No se pudo eliminar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+
+/* helpers */
+function comGrupos(){ return Array.isArray(S.grupos)?S.grupos:[]; }
+function _comPersistGrupos(){ try{ if(typeof _persistSoon==='function') _persistSoon(); else if(typeof persistNow==='function') persistNow(); }catch(_){ } }
+function comLeida(c, n){ return !!(c.leidos && c.leidos[n]); }
+function comNoLeidasDe(me){ return (S.comunicaciones||[]).filter(c=> (c.para||[]).includes(me) && !comLeida(c,me)).length; }
+function comFmtTs(ts){ ts=String(ts||''); const d=ts.slice(0,10).split('-'); const hm=ts.slice(11,16); return (d.length===3?`${d[2]}/${d[1]}`:ts)+(hm?` ${hm}`:''); }
+function setComSub(s){ S.comSub=s; render(); }
+
+/* vista principal */
+function comunicacionesView(){
+  const subs=['com_recibidas','com_emitidas'];
+  const sub=subs.includes(S.comSub)?S.comSub:'com_recibidas';
+  const lbl={com_recibidas:'Recibidas',com_emitidas:'Enviadas'};
+  const seg=`<div class="seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setComSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
+  const admin=isAdmin();
+  const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openGrupos()">Grupos</button>`:''}<button class="btn btn-primary" onclick="openComNuevo()">Nueva comunicación</button></div>`;
+  const body = sub==='com_emitidas' ? comEmitidasView() : comRecibidasView();
+  return `${moduleHeader('Comunicaciones', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:14px">
+      <div><div class="section-title">Comunicaciones</div>
+      <div class="section-sub" style="margin:0">Avisos y mejoras para el equipo. No son tareas: cada uno marca cuando lo ha leído y puede comentar.</div></div>
+      ${acts}
+    </div>
+    ${seg}
+    ${body}
+  </div></main>
+  ${S.modal?modalContent():''}`;
+}
+function comRecibidasView(){
+  const me=S.user.nombre;
+  const list=(S.comunicaciones||[]).filter(c=>(c.para||[]).includes(me));
+  if(!list.length) return `<div class="muted" style="padding:20px;text-align:center">No tienes comunicaciones.</div>`;
+  const noleidas=list.filter(c=>!comLeida(c,me)).length;
+  const head = noleidas?`<div class="note" style="margin-top:0">Tienes <strong>${noleidas}</strong> sin leer. Ábrelas y marca “leído”.</div>`:'';
+  const rows=list.map(c=>{
+    const leida=comLeida(c,me);
+    const estado = leida?'<span class="muted" style="font-size:12px">Leído</span>':'<span style="display:inline-block;background:#C0392B;color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:1px 9px">Nuevo</span>';
+    return `<tr onclick="openComDet('${c.id}')" style="${leida?'':'background:#FBF6E8'}">
+      <td>${estado}</td>
+      <td style="font-weight:600">${incEsc(c.titulo)}</td>
+      <td class="col-hide-m">${incEsc(c.deQuien||'—')}</td>
+      <td>${incEsc(comFmtTs(c.ts))}</td>
+    </tr>`;
+  }).join('');
+  return head+`<div class="inctable-wrap"><table class="inctable"><thead><tr><th>Estado</th><th>Comunicación</th><th class="col-hide-m">De</th><th>Fecha</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function comEmitidasView(){
+  const me=S.user.nombre;
+  const list=(S.comunicaciones||[]).filter(c=>c.deQuien===me);
+  if(!list.length) return `<div class="muted" style="padding:20px;text-align:center">No has enviado ninguna comunicación. Usa “Nueva comunicación”.</div>`;
+  const rows=list.map(c=>{
+    const total=(c.para||[]).length;
+    const leidos=(c.para||[]).filter(n=>comLeida(c,n)).length;
+    const pct = total?Math.round(leidos/total*100):0;
+    return `<tr onclick="openComDet('${c.id}')">
+      <td style="font-weight:600">${incEsc(c.titulo)}</td>
+      <td>${incEsc(comFmtTs(c.ts))}</td>
+      <td>Leído por ${leidos}/${total}${total?` (${pct}%)`:''}</td>
+      <td class="col-hide-m">${(c.comentarios||[]).length} comentario(s)</td>
+    </tr>`;
+  }).join('');
+  return `<div class="inctable-wrap"><table class="inctable"><thead><tr><th>Comunicación</th><th>Fecha</th><th>Lecturas</th><th class="col-hide-m">Comentarios</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* nueva comunicación */
+function openComNuevo(){ F={type:'com_nuevo', titulo:'', texto:'', comPara:[]}; S.modal='com_nuevo'; render(); }
+function comTogglePersona(n){ if(!Array.isArray(F.comPara)) F.comPara=[]; const i=F.comPara.indexOf(n); if(i>=0) F.comPara.splice(i,1); else F.comPara.push(n); render(); }
+function comToggleGrupo(gi){ const g=comGrupos()[gi]; if(!g) return; if(!Array.isArray(F.comPara)) F.comPara=[]; const all=g.miembros.length && g.miembros.every(n=>F.comPara.includes(n)); if(all){ F.comPara=F.comPara.filter(n=>!g.miembros.includes(n)); } else { g.miembros.forEach(n=>{ if(!F.comPara.includes(n)) F.comPara.push(n); }); } render(); }
+function comTodos(){ if(!Array.isArray(F.comPara)) F.comPara=[]; const all=COM_USERS(); F.comPara = (F.comPara.length===all.length)?[]:all.slice(); render(); }
+function comNuevoModalContent(){
+  const people=COM_USERS();
+  const sel=Array.isArray(F.comPara)?F.comPara:[];
+  const grupos=comGrupos();
+  const gruposHtml = grupos.length?`<div style="margin-bottom:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">Grupos</div>${grupos.map((g,i)=>{const all=g.miembros.length&&g.miembros.every(n=>sel.includes(n)); return `<button type="button" class="btn btn-sm ${all?'btn-primary':'btn-ghost'}" style="margin:0 6px 6px 0" onclick="comToggleGrupo(${i})">${incEsc(g.nombre)} (${g.miembros.length})</button>`;}).join('')}</div>`:'';
+  const personasHtml = `<div><div class="muted" style="font-size:12px;margin-bottom:4px">Personas <button type="button" class="btn btn-sm btn-ghost" style="margin-left:6px" onclick="comTodos()">${sel.length===people.length?'Quitar todos':'Todos'}</button></div>${people.map(n=>{const on=sel.includes(n); return `<button type="button" class="btn btn-sm ${on?'btn-primary':'btn-ghost'}" style="margin:0 6px 6px 0" onclick="comTogglePersona('${n.replace(/'/g,"\\'")}')">${incEsc(n)}</button>`;}).join('')}</div>`;
+  const ready=(F.titulo||'').trim() && (F.texto||'').trim() && sel.length;
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Nueva comunicación</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Un aviso o mejora para el equipo. Cada destinatario podrá marcarlo como leído y comentar.</div>
+      <div class="fld" style="margin-top:10px"><label>Título</label>
+        <input class="inp" value="${incEsc(F.titulo||'')}" oninput="setInp('titulo',this.value)" placeholder="De qué va, en una frase."></div>
+      <div class="fld"><label>Mensaje</label>
+        <textarea class="inp" rows="5" oninput="setInp('texto',this.value)" placeholder="Escribe la comunicación.">${incEsc(F.texto||'')}</textarea></div>
+      <div class="fld"><label>Para (${sel.length} seleccionados)</label>${gruposHtml}${personasHtml}</div>
+      <div class="note" style="margin-top:8px">${ready?'✓ Lista para enviar.':'Faltan: título, mensaje y al menos un destinatario.'}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitComunicacion()">Enviar</button>
+      </div>
+    </div></div></div>`;
+}
+function commitComunicacion(){
+  const titulo=(F.titulo||'').trim(), texto=(F.texto||'').trim();
+  const para=Array.isArray(F.comPara)?[...new Set(F.comPara)]:[];
+  if(!titulo){ toast('Pon un título'); return; }
+  if(!texto){ toast('Escribe el mensaje'); return; }
+  if(!para.length){ toast('Elige al menos un destinatario'); return; }
+  const c={ id:uid(), titulo, texto, deQuien:S.user.nombre, para, leidos:{}, comentarios:[], ts:now() };
+  S.comunicaciones.unshift(c); closeModal(); render();
+  srvComInsert(c, 'Comunicación enviada');
+  para.forEach(n=>{ if(n!==S.user.nombre) tgNotify(n, `📣 Nueva comunicación de ${c.deQuien}: "${c.titulo}"`); });
+}
+
+/* detalle */
+function openComDet(id){ const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return; F={type:'com_det', id, comDraft:''}; S.modal='com_det'; render(); }
+function comMarcarLeido(id){
+  const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return;
+  const me=S.user.nombre;
+  if(!(c.para||[]).includes(me)) return;
+  if(!c.leidos||typeof c.leidos!=='object'||Array.isArray(c.leidos)) c.leidos={};
+  if(c.leidos[me]) return;
+  c.leidos[me]=now(); render(); srvComUpdate(id, c, 'Marcado como leído');
+  if(c.deQuien && c.deQuien!==me) tgNotify(c.deQuien, `✅ ${me} ha leído tu comunicación: "${c.titulo}"`);
+}
+function comAddComentario(id){
+  const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return;
+  const me=S.user.nombre;
+  if(!((c.para||[]).includes(me)||c.deQuien===me||isAdmin())){ toast('No puedes comentar esta comunicación'); return; }
+  const txt=(F.comDraft||'').trim(); if(!txt) return;
+  if(!Array.isArray(c.comentarios)) c.comentarios=[];
+  c.comentarios.push({de:me, texto:txt, ts:now()});
+  F.comDraft=''; render(); srvComUpdate(id, c);
+  if(c.deQuien && c.deQuien!==me) tgNotify(c.deQuien, `💬 ${me} comentó en "${c.titulo}": ${txt}`);
+}
+function comEliminar(id){
+  const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return;
+  if(!(isAdmin()||c.deQuien===S.user.nombre)){ toast('Solo puede borrarla quien la creó o Dirección'); return; }
+  closeModal(); srvComDelete(id, 'Comunicación eliminada');
+}
+function comDetModalContent(){
+  const c=(S.comunicaciones||[]).find(x=>x.id===F.id)||{};
+  const me=S.user.nombre, admin=isAdmin();
+  const soyPara=(c.para||[]).includes(me), soyDe=c.deQuien===me;
+  const yaLeido=comLeida(c,me);
+  const comentarios=Array.isArray(c.comentarios)?c.comentarios:[];
+  const comsHtml = comentarios.length? comentarios.map(mm=>{const mine=mm.de===me; return `<div style="margin-bottom:8px;display:flex;${mine?'justify-content:flex-end':''}"><div style="max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px"><div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(mm.de||'—')} · ${incEsc(comFmtTs(mm.ts))}</div><div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div></div></div>`;}).join('') : `<div class="muted" style="font-size:13px">Sin comentarios todavía.</div>`;
+  const puedeComentar = soyPara||soyDe||admin;
+  const compose = puedeComentar?`<div style="display:flex;gap:8px;margin-top:10px"><input class="inp" placeholder="Escribe un comentario…" value="${incEsc(F.comDraft||'')}" oninput="setInp('comDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();comAddComentario('${c.id}')}"><button class="btn btn-primary" onclick="comAddComentario('${c.id}')">Comentar</button></div>`:'';
+  let receipts='';
+  if(soyDe||admin){
+    const leidoBy=(c.para||[]).filter(n=>comLeida(c,n));
+    const noBy=(c.para||[]).filter(n=>!comLeida(c,n));
+    receipts=`<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Lecturas (${leidoBy.length}/${(c.para||[]).length})</div>
+      <div style="font-size:13px;margin-bottom:4px"><strong>Leído:</strong> ${leidoBy.length?leidoBy.map(n=>`${incEsc(n)} (${incEsc(comFmtTs(c.leidos[n]))})`).join(', '):'—'}</div>
+      <div style="font-size:13px"><strong>Pendiente:</strong> ${noBy.length?noBy.map(n=>incEsc(n)).join(', '):'—'}</div>
+    </div>`;
+  }
+  let acciones='';
+  if(soyPara && !yaLeido) acciones+=`<button class="btn btn-primary" onclick="comMarcarLeido('${c.id}')">Marcar como leído</button>`;
+  if(soyPara && yaLeido) acciones+=`<span class="muted" style="align-self:center;font-size:13px">Leído el ${incEsc(comFmtTs(c.leidos[me]))}</span>`;
+  if(soyDe||admin) acciones+=`<button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="comEliminar('${c.id}')">Eliminar</button>`;
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Comunicación</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div style="font-family:var(--serif);font-size:19px;margin-bottom:6px">${incEsc(c.titulo||'')}</div>
+      <div class="inc-meta" style="margin:0 0 10px">De ${incEsc(c.deQuien||'—')} · ${incEsc(comFmtTs(c.ts))} · Para ${(c.para||[]).length} persona(s)</div>
+      <div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px;white-space:pre-wrap">${incEsc(c.texto||'')}</div>
+      ${receipts}
+      <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+        <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Comentarios</div>
+        <div style="max-height:220px;overflow-y:auto">${comsHtml}</div>
+        ${compose}
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
+        ${acciones}
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      </div>
+    </div></div></div>`;
+}
+
+/* grupos (Dirección) */
+function openGrupos(){ if(!isAdmin()){ toast('Solo Dirección puede gestionar los grupos'); return; } F={type:'grupos', gNombre:'', gMiembros:[]}; S.modal='grupos'; render(); }
+function grupoToggleMiembro(n){ if(!Array.isArray(F.gMiembros)) F.gMiembros=[]; const i=F.gMiembros.indexOf(n); if(i>=0) F.gMiembros.splice(i,1); else F.gMiembros.push(n); render(); }
+function grupoAdd(){
+  const nombre=(F.gNombre||'').trim(); const miembros=Array.isArray(F.gMiembros)?[...new Set(F.gMiembros)]:[];
+  if(!nombre){ toast('Pon un nombre al grupo'); return; }
+  if(comGrupos().some(g=>g.nombre.toLowerCase()===nombre.toLowerCase())){ toast('Ya hay un grupo con ese nombre'); return; }
+  if(!miembros.length){ toast('Elige al menos un miembro'); return; }
+  S.grupos=comGrupos().slice(); S.grupos.push({nombre, miembros}); F.gNombre=''; F.gMiembros=[]; _comPersistGrupos(); render(); toast('Grupo creado');
+}
+function grupoDelete(i){ const g=comGrupos().slice(); if(i<0||i>=g.length) return; g.splice(i,1); S.grupos=g; _comPersistGrupos(); render(); toast('Grupo borrado'); }
+function gruposModalContent(){
+  const grupos=comGrupos();
+  const people=COM_USERS();
+  const filas=grupos.length?grupos.map((g,i)=>`<div style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><strong>${incEsc(g.nombre)}</strong>
+        <button class="btn btn-ghost btn-sm" onclick="grupoDelete(${i})">Borrar</button></div>
+      <div class="muted" style="font-size:12px;margin-top:2px">${g.miembros.map(n=>incEsc(n)).join(', ')||'(sin miembros)'}</div>
+    </div>`).join(''):`<div class="muted" style="font-size:13px">No hay grupos todavía.</div>`;
+  const sel=Array.isArray(F.gMiembros)?F.gMiembros:[];
+  const chips=people.map(n=>{const on=sel.includes(n); return `<button type="button" class="btn btn-sm ${on?'btn-primary':'btn-ghost'}" style="margin:0 6px 6px 0" onclick="grupoToggleMiembro('${n.replace(/'/g,"\\'")}')">${incEsc(n)}</button>`;}).join('');
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Grupos</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Crea grupos de personas para mandarles comunicaciones (y pronto tareas) de una vez.</div>
+      ${filas}
+      <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px">
+        <div class="fld" style="margin-top:0"><label>Nombre del grupo nuevo</label>
+          <input class="inp" value="${incEsc(F.gNombre||'')}" oninput="setInp('gNombre',this.value)" placeholder="Ej. Recepción"></div>
+        <div class="fld"><label>Miembros (${sel.length})</label>${chips}</div>
+        <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="grupoAdd()">Crear grupo</button></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
+    </div></div></div>`;
+}
+
+/* enganches (gana la última) */
+const _modalContent_com = modalContent;
+modalContent = function(){
+  if(F.type==='com_nuevo') return comNuevoModalContent();
+  if(F.type==='com_det')   return comDetModalContent();
+  if(F.type==='grupos')    return gruposModalContent();
+  return _modalContent_com();
+};
+const _appView_com = appView;
+appView = function(){
+  if(S.module==='comunicaciones'){ if(!canAccess('comunicaciones')){ S.module=null; return homeView(); } return comunicacionesView(); }
+  return _appView_com();
+};
+const _homeView_com = homeView;
+homeView = function(){
+  let html=_homeView_com();
+  try{
+    const me=S.user&&S.user.nombre;
+    if(me){
+      const n=comNoLeidasDe(me);
+      if(n){
+        const badge=`<span title="${n} sin leer" style="margin-left:auto;background:#C0392B;color:#fff;font-size:11px;font-weight:800;border-radius:20px;padding:3px 9px">${n}</span>`;
+        html=html.replace(/(onclick="setModule\('comunicaciones'\)">\s*<div class="mc-top">)([\s\S]*?)(<\/div>)/, (m,a,b,c)=> a+b+badge+c);
+      }
+    }
+  }catch(e){ console.error('hub badge com', e); }
+  return html;
+};
+
+/* ===== FIN COMUNICACIONES ===== */
 
 
 boot();
