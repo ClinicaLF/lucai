@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-8">
+<meta name="lucai-version" content="2026-06-08-9">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -1840,13 +1840,16 @@ async function _autoSync(){
   if(!_canSync()) return;
   await loadFromDB();
   const sig=JSON.stringify([S.articulos.length,S.movimientos.length,S.pedidos.length,S.seguimientos.length,
-    S.articulos.reduce((s,a)=>s+(Number(a.stock)||0),0),(S.movimientos[0]||{}).id]);
+    S.articulos.reduce((s,a)=>s+(Number(a.stock)||0),0),(S.movimientos[0]||{}).id,
+    (S.tareas||[]).map(t=>t.id+':'+(t.estado||'')+':'+(t.fechaLimite||'')+':'+(t.prioridad||'')+':'+((t.mensajes||[]).length)).join('|'),
+    (S.incidencias||[]).map(i=>i.id+':'+(i.revisada?1:0)).join('|'),
+    (S.presupuestos||[]).length,(S.equipos||[]).length]);
   if(sig!==_lastSig){ _lastSig=sig; render(); }
 }
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _autoSync(); });
 window.addEventListener('focus', function(){ _autoSync(); });
 window.addEventListener('pageshow', function(){ _autoSync(); });
-setInterval(function(){ _autoSync(); }, 20000);
+setInterval(function(){ _autoSync(); }, 8000);
 /* ===== FIN CAPA ROBUSTA ===== */
 
 /* ===== MÓDULO INCIDENCIAS ===== */
