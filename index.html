@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-9">
+<meta name="lucai-version" content="2026-06-08-10">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3437,6 +3437,7 @@ appView = function(){
 
 const TAR_PRIOS   = ['Alta','Media','Baja'];
 const TAR_ESTADOS = ['Pendiente','En curso','Hecha'];
+const TAR_AREAS   = ['General','Personal','Agenda','Contabilidad','Mantenimiento','Clínica','Marketing'];
 const TAR_DOW     = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 const tarUsers    = () => USERS.map(u=>u.nombre);
 
@@ -3473,7 +3474,7 @@ if(!Array.isArray(S.tareas)) S.tareas = [
 ];
 S.tarVerHechas = S.tarVerHechas || false;
 S.tarWeek = S.tarWeek || 0;
-S.tarF = S.tarF || {estado:'',prio:'',de:'',para:''};
+S.tarF = S.tarF || {estado:'',prio:'',de:'',para:'',area:''};
 
 /* activar módulo en el hub */
 (function(){ const m=MODULES.find(x=>x.id==='tareas');
@@ -3488,6 +3489,7 @@ loadFromDB = async function(){
     if(r.data){
       S.tareas = r.data.map(x=>({
         id:x.id, titulo:x.titulo, descripcion:x.descripcion, prioridad:x.prioridad||'Media',
+        area:x.area||'General',
         fechaLimite:x.fecha_limite, deQuien:x.de_quien, paraQuien:x.para_quien,
         estado:x.estado||'Pendiente', ts:x.ts, fechaHecha:x.fecha_hecha,
         mensajes: Array.isArray(x.mensajes) ? x.mensajes : (function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
@@ -3501,6 +3503,7 @@ async function srvTarInsert(t, okMsg){
   try{
     const { error } = await sbc.from('tar_tareas').insert({
       id:t.id, titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
+      area:t.area||'General',
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
       estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) });
     if(error) throw error;
@@ -3511,6 +3514,7 @@ async function srvTarUpdate(id, t, okMsg){
   try{
     const { error } = await sbc.from('tar_tareas').update({
       titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
+      area:t.area||'General',
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
       estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) }).eq('id', id);
     if(error) throw error;
@@ -3584,6 +3588,7 @@ function tarKpis(arr){
   </div>`;
 }
 
+function tarAreaChip(a){ if(!a) a='General'; return `<span style="display:inline-block;font-size:11px;font-weight:500;background:#EAE3D7;color:#5A6770;border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:middle">${incEsc(a)}</span>`; }
 function tarBuzonView(modo){
   const me=S.user.nombre;
   const all=(S.tareas||[]).filter(t=> modo==='emitidas' ? t.deQuien===me : t.paraQuien===me);
@@ -3597,10 +3602,10 @@ function tarBuzonView(modo){
   const rows=list.map(t=>{
     const persona = modo==='emitidas' ? t.paraQuien : t.deQuien;
     const quick = (modo==='recibidas' && tarActiva(t))
-      ? `<button class="btn btn-ghost btn-sm" style="color:#6E8E00;border-color:#6E8E00" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">✓ Hecha</button>` : '';
+      ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>` : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
       <td>${tarPrioChip(t.prioridad)}</td>
-      <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}</td>
+      <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}${tarAreaChip(t.area)}</td>
       <td class="col-hide-m">${incEsc(persona||'—')}</td>
       <td>${tarLimiteCell(t)}</td>
       <td class="col-hide-m">${tarEstadoChip(t.estado)}</td>
@@ -3617,6 +3622,7 @@ function tarTodasView(){
   const filt=all.filter(t=>{
     if(f.estado && t.estado!==f.estado) return false;
     if(f.prio && t.prioridad!==f.prio) return false;
+    if(f.area && (t.area||'General')!==f.area) return false;
     if(f.de && t.deQuien!==f.de) return false;
     if(f.para && t.paraQuien!==f.para) return false;
     return true;
@@ -3625,16 +3631,17 @@ function tarTodasView(){
   const filtros=`<div class="inc-filters">
     <select class="inp" onchange="setTarF('estado',this.value)"><option value="">Todos los estados</option>${TAR_ESTADOS.map(s=>`<option ${f.estado===s?'selected':''}>${s}</option>`).join('')}</select>
     <select class="inp" onchange="setTarF('prio',this.value)"><option value="">Toda prioridad</option>${TAR_PRIOS.map(p=>`<option ${f.prio===p?'selected':''}>${p}</option>`).join('')}</select>
+    <select class="inp" onchange="setTarF('area',this.value)"><option value="">Toda área</option>${TAR_AREAS.map(a=>`<option ${f.area===a?'selected':''}>${a}</option>`).join('')}</select>
     <select class="inp" onchange="setTarF('de',this.value)"><option value="">Cualquier emisor</option>${u.map(n=>`<option ${f.de===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>
     <select class="inp" onchange="setTarF('para',this.value)"><option value="">Cualquier responsable</option>${u.map(n=>`<option ${f.para===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>
-    ${(f.estado||f.prio||f.de||f.para)?`<button class="btn btn-ghost btn-sm" onclick="clearTarF()">Limpiar</button>`:''}
+    ${(f.estado||f.prio||f.area||f.de||f.para)?`<button class="btn btn-ghost btn-sm" onclick="clearTarF()">Limpiar</button>`:''}
     <button class="btn btn-ghost btn-sm" onclick="exportTareas()">Exportar Excel</button>
     <span class="muted" style="font-size:12px">${filt.length} tarea(s)</span>
   </div>`;
   if(!filt.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay tareas con esos filtros.</div>`;
   const rows=filt.map(t=>`<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
     <td>${tarPrioChip(t.prioridad)}</td>
-    <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}</td>
+    <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}${tarAreaChip(t.area)}</td>
     <td class="col-hide-m">${incEsc(t.deQuien||'—')}</td>
     <td>${incEsc(t.paraQuien||'—')}</td>
     <td>${tarLimiteCell(t)}</td>
@@ -3683,7 +3690,7 @@ function tarSemanaView(){
 /* ---- interacciones ---- */
 function toggleTarHechas(){ S.tarVerHechas=!S.tarVerHechas; render(); }
 function setTarF(field,v){ S.tarF[field]=v; render(); }
-function clearTarF(){ S.tarF={estado:'',prio:'',de:'',para:''}; render(); }
+function clearTarF(){ S.tarF={estado:'',prio:'',de:'',para:'',area:''}; render(); }
 function tarWeekNav(delta,reset){ S.tarWeek = reset ? 0 : (S.tarWeek+delta); render(); }
 
 function tarMarcar(id,estado){
@@ -3718,6 +3725,8 @@ function tarFormBody(){
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <div class="fld" style="flex:1;min-width:150px"><label>Prioridad</label>
         <select class="inp" onchange="setSel('prioridad',this.value)">${TAR_PRIOS.map(p=>`<option ${(F.prioridad||'Media')===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      <div class="fld" style="flex:1;min-width:150px"><label>Área</label>
+        <select class="inp" onchange="setSel('area',this.value)">${TAR_AREAS.map(a=>`<option ${(F.area||'General')===a?'selected':''}>${a}</option>`).join('')}</select></div>
       <div class="fld" style="flex:1;min-width:170px"><label>Fecha de entrega</label>
         <input class="inp" type="date" value="${incEsc(F.fechaLimite||'')}" oninput="setInp('fechaLimite',this.value)" ${puedeFecha?'':'disabled style="background:#F4F0E9;color:#8A949B"'}>
         ${puedeFecha?'':'<div class="muted" style="font-size:12px;margin-top:4px">Solo la cambia quien emitió la tarea.</div>'}</div>
@@ -3746,7 +3755,7 @@ function tarNuevoModalContent(){
 function commitTarea(){
   if(!tarValid()) return;
   const t={ id:uid(), titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
-    prioridad:F.prioridad||'Media', fechaLimite:F.fechaLimite, deQuien:S.user.nombre,
+    prioridad:F.prioridad||'Media', area:F.area||'General', fechaLimite:F.fechaLimite, deQuien:S.user.nombre,
     paraQuien:F.paraQuien, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{} };
   S.tareas.unshift(t); closeModal(); render();
   srvTarInsert(t, 'Tarea enviada');
@@ -3826,7 +3835,7 @@ function tarAddMsg(id){
 function openTarEdit(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   if(!(isAdmin()||t.deQuien===S.user.nombre)){ toast('Solo puede editarla quien la creó o Dirección'); return; }
-  F={type:'tar_edit', id, titulo:t.titulo||'', descripcion:t.descripcion||'', prioridad:t.prioridad||'Media', fechaLimite:t.fechaLimite||'', paraQuien:t.paraQuien||'', deQuien:t.deQuien||''};
+  F={type:'tar_edit', id, titulo:t.titulo||'', descripcion:t.descripcion||'', prioridad:t.prioridad||'Media', area:t.area||'General', fechaLimite:t.fechaLimite||'', paraQuien:t.paraQuien||'', deQuien:t.deQuien||''};
   S.modal='tar_edit'; render();
 }
 function tarEditModalContent(){
@@ -3844,7 +3853,7 @@ function commitTarEdit(){
   if(!tarValid()) return;
   const t=(S.tareas||[]).find(x=>x.id===F.id); if(!t) return;
   t.titulo=(F.titulo||'').trim(); t.descripcion=(F.descripcion||'').trim();
-  t.prioridad=F.prioridad||'Media'; t.paraQuien=F.paraQuien;
+  t.prioridad=F.prioridad||'Media'; t.area=F.area||'General'; t.paraQuien=F.paraQuien;
   if(t.deQuien===S.user.nombre) t.fechaLimite=F.fechaLimite; // la fecha de entrega solo la cambia quien emitió
   closeModal(); render();
   srvTarUpdate(t.id, t, 'Tarea actualizada');
@@ -3857,15 +3866,16 @@ function exportTareas(){
   const data=(S.tareas||[]).filter(t=>{
     if(f.estado && t.estado!==f.estado) return false;
     if(f.prio && t.prioridad!==f.prio) return false;
+    if(f.area && (t.area||'General')!==f.area) return false;
     if(f.de && t.deQuien!==f.de) return false;
     if(f.para && t.paraQuien!==f.para) return false;
     return true;
   });
   if(!data.length){ toast('No hay tareas que exportar'); return; }
-  const head=["Tarea","Prioridad","Estado","De","Para","Fecha entrega","Hecha el","Detalle"];
+  const head=["Tarea","Área","Prioridad","Estado","De","Para","Fecha entrega","Hecha el","Detalle"];
   const rows=[head];
-  data.forEach(t=>rows.push([t.titulo||"",t.prioridad||"",t.estado||"",t.deQuien||"",t.paraQuien||"",fmtFecha(t.fechaLimite),t.fechaHecha?fmtFecha(t.fechaHecha):"",t.descripcion||""]));
-  const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:38},{wch:10},{wch:11},{wch:18},{wch:18},{wch:13},{wch:12},{wch:46}];
+  data.forEach(t=>rows.push([t.titulo||"",t.area||"General",t.prioridad||"",t.estado||"",t.deQuien||"",t.paraQuien||"",fmtFecha(t.fechaLimite),t.fechaHecha?fmtFecha(t.fechaHecha):"",t.descripcion||""]));
+  const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:38},{wch:14},{wch:10},{wch:11},{wch:18},{wch:18},{wch:13},{wch:12},{wch:46}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Tareas");
   XLSX.writeFile(wb,`tareas_${new Date().toISOString().slice(0,10)}.xlsx`); toast('Tareas exportadas');
 }
@@ -4055,13 +4065,13 @@ function iaContexto(){
   const recib = (S.tareas||[]).filter(t=> t.paraQuien===me && activa(t));
   out.push('\n[MIS TAREAS PENDIENTES]');
   if(!recib.length) out.push('(ninguna)');
-  else recib.forEach(t=> out.push(`- ${t.titulo} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'} | me la mandó: ${t.deQuien||'—'}`));
+  else recib.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'} | me la mandó: ${t.deQuien||'—'}`));
 
   // 2) Tareas que YO he encargado a otros
   const emit = (S.tareas||[]).filter(t=> t.deQuien===me && t.paraQuien!==me && activa(t));
   out.push('\n[TAREAS QUE YO HE ENCARGADO A OTROS]');
   if(!emit.length) out.push('(ninguna)');
-  else emit.forEach(t=> out.push(`- ${t.titulo} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'}`));
+  else emit.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'}`));
 
   // 3) Incidencias sin revisar (sin datos de pacientes)
   const incs = (S.incidencias||[]).filter(i=> !i.revisada).slice(0,25);
