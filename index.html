@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-48">
+<meta name="lucai-version" content="2026-06-08-50">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4565,12 +4565,15 @@ function iaContexto(pregunta){
 async function iaSend(textoFijo){
   const box = el('iaInput');
   const q = (textoFijo!=null ? textoFijo : (box ? box.value : '')).trim();
-  if(!q || S.iaLoading) return;
+  if(!q || S.iaBusy) return;
   const scrollDown=()=>{ const sc=el('iaScroll'); if(sc) sc.scrollTop=sc.scrollHeight; };
+  try{ if(S._iaCtrl){ S._iaCtrl.abort(); } }catch(_){}
+  S.iaChat.forEach(m=>{ m._live=false; });           // nunca dejes una burbuja "en vivo" antigua
   S.iaChat.push({ q:q, a:null });
-  S.iaLoading = true; render(); scrollDown(); setTimeout(scrollDown,30);
+  S.iaBusy=true; S.iaLoading=true; render(); scrollDown(); setTimeout(scrollDown,30);
   const last = S.iaChat[S.iaChat.length-1];
   const ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  S._iaCtrl = ctrl;
   const killer = setTimeout(()=>{ try{ ctrl && ctrl.abort(); }catch(_){} }, 45000);
   try{
     const r = await fetch(IA_FN, {
@@ -4585,7 +4588,7 @@ async function iaSend(textoFijo){
       clearTimeout(killer);
       last.a = (data && data.respuesta) ? data.respuesta
              : (data && data.error ? ('Vaya, ha habido un error: '+data.error) : 'No he recibido respuesta.');
-      last._live=false; S.iaLoading=false; render(); setTimeout(scrollDown,30); return;
+      last._live=false; S.iaLoading=false; S.iaBusy=false; render(); setTimeout(scrollDown,30); return;
     }
     // streaming: mantenemos "Pensando…" hasta la PRIMERA palabra
     const reader=r.body.getReader(); const dec=new TextDecoder();
@@ -4595,20 +4598,21 @@ async function iaSend(textoFijo){
       if(done) break;
       const chunk = dec.decode(value, {stream:true});
       if(!chunk) continue;
-      if(!started){ started=true; last.a=''; last._live=true; S.iaLoading=false; render(); }
+      if(!started){ started=true; last.a=''; last._live=true; S.iaLoading=false; render(); scrollDown(); }
       last.a += chunk;
       const liveEl=document.getElementById('iaLiveMsg');
-      if(liveEl){ liveEl.textContent=last.a; scrollDown(); } else { render(); scrollDown(); }
+      if(liveEl){ liveEl.textContent=last.a; } else { render(); }
+      scrollDown();
     }
     clearTimeout(killer);
     if(!started){ last.a = last.a || 'No he recibido respuesta.'; S.iaLoading=false; }
-    last._live=false; render(); setTimeout(scrollDown,30);
+    last._live=false; S.iaBusy=false; render(); setTimeout(scrollDown,30);
   }catch(e){
     clearTimeout(killer);
     const abort = e && (e.name==='AbortError');
     last.a = (last.a && last.a.length) ? last.a
            : (abort ? 'Ha tardado demasiado. Inténtalo de nuevo.' : 'No he podido conectar con la IA. Revisa la conexión e inténtalo de nuevo.');
-    last._live=false; S.iaLoading=false; render(); setTimeout(scrollDown,30);
+    last._live=false; S.iaLoading=false; S.iaBusy=false; render(); setTimeout(scrollDown,30);
   }
 }
 function iaSugerencia(t){ iaSend(t); }
@@ -4657,7 +4661,7 @@ function asistenteView(){
     <div style="display:flex;gap:8px;margin-top:12px">
       <input id="iaInput" class="inp" style="flex:1" placeholder="Escribe tu pregunta…"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();iaSend()}">
-      <button class="btn btn-primary" onclick="iaSend()" ${S.iaLoading?'disabled':''}>Enviar</button>
+      <button class="btn btn-primary" onclick="iaSend()" ${S.iaBusy?'disabled':''}>Enviar</button>
     </div>
   </div></main>`;
 }
@@ -5312,7 +5316,7 @@ function iaFloatHtml(){
     <div id="iaScroll" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:12px;background:var(--arena-1);margin:10px 12px;border:1px solid var(--line);border-radius:12px">${iaBurbujas()}</div>
     <div style="display:flex;gap:8px;padding:0 12px 12px;flex:0 0 auto">
       <input id="iaInput" class="inp" style="flex:1" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();iaSend()}">
-      <button class="btn btn-primary" onclick="iaSend()" ${S.iaLoading?'disabled':''}>Enviar</button>
+      <button class="btn btn-primary" onclick="iaSend()" ${S.iaBusy?'disabled':''}>Enviar</button>
     </div>
   </div>` : '';
   const fab = `<button onclick="iaToggle()" title="Pregúntale a Lucai" style="position:fixed;right:18px;bottom:18px;z-index:1200;width:58px;height:58px;border-radius:50%;border:none;padding:0;background:${S.iaOpen?'#333F48':'transparent'};color:#fff;box-shadow:0 8px 24px rgba(51,63,72,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1;overflow:hidden">${S.iaOpen?'×':lucaiAvatar(58)}</button>`;
