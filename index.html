@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-24">
+<meta name="lucai-version" content="2026-06-08-26">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -557,7 +557,7 @@ function seedArticulos(){
 
 const art = cod => S.articulos.find(a=>a.cod===cod);
 const nombreOf = cod => { const a=art(cod); return a?a.nombre:cod; };
-const isAdmin = () => !!(S.user && ["Director","Directora"].includes(S.user.rol));
+const isAdmin = () => !!(S.user && (S.user.admin===true || ["Director","Directora"].includes(S.user.rol)));
 const eur = n => (Number(n)||0).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
 const activeArts = () => S.articulos.filter(a=>a.activo!==false);
 function estadoOf(a){ if(a.aviso===false) return 'Sin aviso'; if(a.stock===0) return 'SIN STOCK'; if(a.stock<=a.min) return 'PEDIR'; return 'OK'; }
@@ -600,7 +600,7 @@ const SUPABASE_KEY = 'sb_publishable_z-TexwPd_srvBHfWL2vnyA_zTOpi0ue';
 const sbc = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let DEVICE = false, LOADED = false;
 const CLINICA = 'centro';
-const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','seguimientos','tarAreas','grupos','comCategorias'];
+const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','seguimientos','tarAreas','grupos','comCategorias','usuarios'];
 let _persistT = null;
 
 async function boot(){
@@ -671,10 +671,10 @@ function toastUndo(msg){ const m=el("toast-msg"); if(m)m.textContent=msg; const 
 function render(){ el("app").innerHTML = !DEVICE ? deviceLoginView() : (S.user ? appView() : loginView()); }
 
 function loginView(){
-  const users = USERS.map(u=>`
+  const users = appUsers().map(u=>`
     <button class="user-card ${S.pinUser&&S.pinUser.id===u.id?'sel':''}" onclick="selUser(${u.id})">
       <span class="avatar">${initials(u.nombre)}</span>
-      <span><span class="nm">${u.nombre}</span><span class="rl">${u.rol}</span></span>
+      <span><span class="nm">${u.nombre}</span><span class="rl">${u.rol||''}</span></span>
     </button>`).join("");
   const dots = [0,1,2,3].map(i=>`<span class="pin-dot ${i<S.pin.length?'on':''}"></span>`).join("");
   const keys = [1,2,3,4,5,6,7,8,9].map(n=>`<button class="key" onclick="pinPress('${n}')">${n}</button>`).join("");
@@ -690,6 +690,24 @@ function loginView(){
         <div class="step-label">1 · Selecciona tu usuario</div>
         <div class="users">${users}</div>
         <p class="hint">Cada persona entra con su propio PIN.<br>Nadie puede registrar material en nombre de otro.</p>
+      ` : (S.pinForgot ? `
+        <div class="step-label">Recuperar PIN — ${S.pinUser.nombre}</div>
+        ${!S.recVerified ? `
+          <p class="hint" style="margin-bottom:10px">Por seguridad, confirma la <strong>contraseña del dispositivo</strong> (el correo y la contraseña con los que se desbloqueó este equipo).</p>
+          <input id="recEmail" type="email" placeholder="Correo del dispositivo" style="width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;margin:4px 0 8px;font-family:inherit;font-size:15px">
+          <input id="recPass" type="password" placeholder="Contraseña" style="width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;margin:0 0 6px;font-family:inherit;font-size:15px">
+          <div class="err">${S.recErr||''}</div>
+          <button class="key wide" style="width:100%;margin-bottom:6px" onclick="verifyRecovery()">${S.recBusy?'Comprobando…':'Verificar'}</button>
+          <button class="key wide" style="width:100%" onclick="recoveryCancel()">Cancelar</button>
+        ` : `
+          <p class="hint">Verificado. El PIN de ${S.pinUser.nombre} es:</p>
+          <div style="font-size:32px;font-weight:800;letter-spacing:10px;text-align:center;margin:10px 0;color:var(--ink)">${S.pinUser.pin}</div>
+          <p class="hint" style="margin-bottom:6px">Puedes usarlo tal cual, o poner uno nuevo:</p>
+          <input id="recNew" inputmode="numeric" maxlength="4" placeholder="Nuevo PIN (4 dígitos)" style="width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;margin:0 0 6px;font-family:inherit;font-size:15px">
+          <div class="err">${S.recErr||''}</div>
+          <button class="key wide" style="width:100%;margin-bottom:6px" onclick="saveRecoveryPin()">Guardar PIN nuevo</button>
+          <button class="key wide" style="width:100%" onclick="recoveryCancel()">Volver</button>
+        `}
       ` : `
         <div class="step-label">2 · Introduce tu PIN — ${S.pinUser.nombre}</div>
         <div class="pin-row">${dots}</div>
@@ -699,12 +717,34 @@ function loginView(){
           <button class="key" onclick="pinPress('0')">0</button>
           <button class="key wide" onclick="pinDel()">Borrar</button>
         </div>
-        <p class="hint">PIN demo de ${S.pinUser.nombre}: <strong>${S.pinUser.pin}</strong></p>
-      `}
+        <p class="hint"><a href="#" onclick="event.preventDefault();pinForgot()" style="color:#5A6770;text-decoration:underline">He olvidado mi PIN</a></p>
+      `)}
     </div>
   </div></div>`;
 }
-function selUser(id){ S.pinUser = id?USERS.find(u=>u.id===id):null; S.pin=""; S.err=""; render(); }
+function selUser(id){ S.pinUser = id?appUsers().find(u=>u.id===id):null; S.pin=""; S.err=""; S.pinForgot=false; S.recVerified=false; S.recErr=""; render(); }
+function pinForgot(){ S.pinForgot=true; S.recVerified=false; S.recErr=""; S.recBusy=false; render(); }
+function recoveryCancel(){ S.pinForgot=false; S.recVerified=false; S.recErr=""; S.pin=""; render(); }
+async function verifyRecovery(){
+  const em=el('recEmail'), pw=el('recPass');
+  const email=(em&&em.value||'').trim(), pass=(pw&&pw.value)||'';
+  if(!email||!pass){ S.recErr='Pon el correo y la contraseña del dispositivo.'; render(); return; }
+  S.recBusy=true; S.recErr=''; render();
+  try{
+    const { error } = await sbc.auth.signInWithPassword({ email, password: pass });
+    if(error){ S.recBusy=false; S.recErr='Correo o contraseña incorrectos.'; render(); return; }
+    S.recBusy=false; S.recVerified=true; S.recErr=''; render();
+  }catch(e){ S.recBusy=false; S.recErr=(e.message||'No se pudo verificar.'); render(); }
+}
+async function saveRecoveryPin(){
+  const inp=el('recNew'); const np=((inp&&inp.value)||'').replace(/[^0-9]/g,'').slice(0,4);
+  if(!/^[0-9]{4}$/.test(np)){ S.recErr='El PIN nuevo debe tener 4 dígitos.'; render(); return; }
+  if(appUsers().some(u=>u.id!==S.pinUser.id && u.pin===np)){ S.recErr='Ese PIN ya lo usa otra persona.'; render(); return; }
+  S.usuarios=appUsers().map(u=> u.id===S.pinUser.id ? {...u, pin:np} : u);
+  S.pinUser = appUsers().find(u=>u.id===S.pinUser.id);
+  try{ if(typeof persistNow==='function') await persistNow(); }catch(_){ }
+  S.pinForgot=false; S.recVerified=false; S.recErr=''; S.pin=''; render(); toast('PIN actualizado. Entra con el nuevo.');
+}
 function pinPress(n){
   if(S.pin.length>=4) return;
   S.pin+=n; S.err="";
@@ -745,6 +785,8 @@ function whoBlock(showBell){
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span class="badge">${cadItems().length}</span></button>`:''}
     <div class="chip"><span class="avatar">${initials(S.user.nombre)}</span><span class="nm">${S.user.nombre}</span></div>
+    ${isAdmin()?`<button class="logout" onclick="openUsuarios()">Usuarios</button>`:''}
+    <button class="logout" onclick="openCambiarPin()">Mi PIN</button>
     <button class="logout" onclick="logout()">Cerrar sesión</button>
   </div>`;
 }
@@ -4911,6 +4953,147 @@ homeView = function(){
 };
 
 /* ===== FIN COMUNICACIONES ===== */
+
+
+/* ===== USUARIOS Y PERMISOS (Dirección) ===== */
+const DEFAULT_PERMS = ['incidencias','tareas','asistente','comunicaciones'];
+if(!Array.isArray(S.usuarios) || !S.usuarios.length){
+  S.usuarios = USERS.map(u=>({
+    id:u.id, nombre:u.nombre, rol:u.rol, pin:u.pin,
+    admin: ["Director","Directora"].includes(u.rol),
+    permisos: ["Director","Directora"].includes(u.rol) ? [] : DEFAULT_PERMS.slice()
+  }));
+}
+function appUsers(){ return (Array.isArray(S.usuarios)&&S.usuarios.length) ? S.usuarios : USERS; }
+function _usuariosPersist(){ try{ if(typeof _persistSoon==='function') _persistSoon(); else if(typeof persistNow==='function') persistNow(); }catch(_){ } }
+function _nextUserId(){ return (appUsers().reduce((m,u)=>Math.max(m, Number(u.id)||0), 0))+1; }
+
+/* permisos: autoridad final (gana la última) */
+canAccess = function(id){
+  if(!S.user) return false;
+  if(isAdmin()) return true;
+  const u = appUsers().find(x=>x.id===(S.user&&S.user.id));
+  const perms = (u && Array.isArray(u.permisos)) ? u.permisos : DEFAULT_PERMS;
+  return perms.includes(id);
+};
+
+/* --- panel de usuarios (solo Dirección) --- */
+function openUsuarios(){ if(!isAdmin()){ toast('Solo Dirección puede gestionar usuarios'); return; } F={type:'usuarios'}; S.modal='usuarios'; render(); }
+function usuariosModalContent(){
+  const filas=appUsers().map(u=>{
+    const mods = u.admin ? 'Todo (Dirección)' : (Array.isArray(u.permisos)&&u.permisos.length ? u.permisos.length+' módulo(s)' : 'sin acceso');
+    return `<div style="display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px">
+      <span class="avatar">${initials(u.nombre)}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">${incEsc(u.nombre)}${u.admin?' <span style="font-size:11px;font-weight:700;background:#333F48;color:#fff;border-radius:10px;padding:1px 7px;margin-left:4px">Dirección</span>':''}</div>
+        <div class="muted" style="font-size:12px">${incEsc(u.rol||'')} · PIN ${incEsc(u.pin||'----')} · ${mods}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="openUsuarioEdit(${u.id})">Editar</button>
+    </div>`;
+  }).join('');
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Usuarios y permisos</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Crea usuarios, ponles PIN y elige a qué módulos accede cada uno. Como Dirección ves el PIN de todos, por si hay que ayudar a alguien.</div>
+      ${filas}
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btn-primary" onclick="openUsuarioEdit(null)">Crear usuario</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      </div>
+    </div></div></div>`;
+}
+function openUsuarioEdit(id){
+  if(!isAdmin()){ toast('Solo Dirección'); return; }
+  const u = id!=null ? appUsers().find(x=>x.id===id) : null;
+  F = u ? {type:'usuario_edit', id:u.id, nombre:u.nombre, rol:u.rol||'', pin:u.pin||'', admin:!!u.admin, permisos:(Array.isArray(u.permisos)?u.permisos.slice():DEFAULT_PERMS.slice())}
+        : {type:'usuario_edit', id:null, nombre:'', rol:'', pin:'', admin:false, permisos:DEFAULT_PERMS.slice()};
+  S.modal='usuario_edit'; render();
+}
+function usuarioToggleModulo(mid){ if(!Array.isArray(F.permisos)) F.permisos=[]; const i=F.permisos.indexOf(mid); if(i>=0) F.permisos.splice(i,1); else F.permisos.push(mid); render(); }
+function usuarioEditModalContent(){
+  const mods = MODULES.filter(m=>m.id!=='usuarios');
+  const chips = mods.map(m=>{const on=(F.permisos||[]).includes(m.id); return `<button type="button" class="btn btn-sm ${on?'btn-primary':'btn-ghost'}" style="margin:0 6px 6px 0" onclick="usuarioToggleModulo('${m.id}')">${incEsc(m.nombre)}</button>`;}).join('');
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>${F.id!=null?'Editar usuario':'Nuevo usuario'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)" placeholder="Nombre y apellidos"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:150px"><label>Puesto</label><input class="inp" value="${incEsc(F.rol||'')}" oninput="setInp('rol',this.value)" placeholder="Coordinadora, Atención paciente…"></div>
+        <div class="fld" style="flex:1;min-width:120px"><label>PIN (4 dígitos)</label><input class="inp" inputmode="numeric" maxlength="4" value="${incEsc(F.pin||'')}" oninput="setInp('pin',this.value.replace(/[^0-9]/g,'').slice(0,4))" placeholder="••••"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:6px 0 12px;cursor:pointer">
+        <input type="checkbox" ${F.admin?'checked':''} onchange="setInp('admin',this.checked); render()"> Acceso total (Dirección): ve y gestiona todo</label>
+      ${F.admin?'<div class="muted" style="font-size:12px;margin-bottom:8px">Con acceso total entra a todo; no hace falta elegir módulos.</div>'
+        : `<div class="fld"><label>Módulos a los que puede acceder</label>${chips}</div>`}
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;flex-wrap:wrap">
+        ${F.id!=null && appUsers().length>1 ? `<button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="usuarioDelete(${F.id})">Borrar usuario</button>`:'<span></span>'}
+        <div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="openUsuarios()">Cancelar</button><button class="btn btn-primary" onclick="commitUsuario()">Guardar</button></div>
+      </div>
+    </div></div></div>`;
+}
+function commitUsuario(){
+  const nombre=(F.nombre||'').trim(); const rol=(F.rol||'').trim(); const pin=(F.pin||'').trim();
+  if(!nombre){ toast('Pon el nombre'); return; }
+  if(!/^[0-9]{4}$/.test(pin)){ toast('El PIN debe tener 4 dígitos'); return; }
+  const otros=appUsers().filter(u=>u.id!==F.id);
+  if(otros.some(u=>u.pin===pin)){ toast('Ese PIN ya lo usa otra persona'); return; }
+  if(otros.some(u=>(u.nombre||'').toLowerCase()===nombre.toLowerCase())){ toast('Ya hay un usuario con ese nombre'); return; }
+  let list=appUsers().slice();
+  if(F.id!=null){
+    list=list.map(u=> u.id===F.id ? {...u, nombre, rol, pin, admin:!!F.admin, permisos: F.admin?[]:(F.permisos||[]).slice()} : u);
+  } else {
+    list.push({ id:_nextUserId(), nombre, rol, pin, admin:!!F.admin, permisos: F.admin?[]:(F.permisos||[]).slice() });
+  }
+  S.usuarios=list; _usuariosPersist();
+  if(S.user && S.user.id===F.id){ const me=list.find(u=>u.id===F.id); if(me){ S.user.nombre=me.nombre; S.user.rol=me.rol; S.user.admin=me.admin; S.user.permisos=me.permisos; S.user.pin=me.pin; } }
+  openUsuarios(); toast('Usuario guardado');
+}
+function usuarioDelete(id){
+  if(!isAdmin()) return;
+  if(S.user && S.user.id===id){ toast('No puedes borrar tu propio usuario mientras estás dentro'); return; }
+  if(appUsers().length<=1){ toast('Debe quedar al menos un usuario'); return; }
+  S.usuarios=appUsers().filter(u=>u.id!==id); _usuariosPersist(); openUsuarios(); toast('Usuario borrado');
+}
+
+/* --- cambiar mi PIN (cualquiera) --- */
+function openCambiarPin(){ F={type:'cambiar_pin', actual:'', nuevo:'', nuevo2:''}; S.modal='cambiar_pin'; render(); }
+function cambiarPinModalContent(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Cambiar mi PIN</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Tu PIN es personal. Si lo olvidas, Dirección puede ponerte uno nuevo.</div>
+      <div class="fld"><label>PIN actual</label><input class="inp" inputmode="numeric" maxlength="4" value="${incEsc(F.actual||'')}" oninput="setInp('actual',this.value.replace(/[^0-9]/g,'').slice(0,4))"></div>
+      <div class="fld"><label>PIN nuevo (4 dígitos)</label><input class="inp" inputmode="numeric" maxlength="4" value="${incEsc(F.nuevo||'')}" oninput="setInp('nuevo',this.value.replace(/[^0-9]/g,'').slice(0,4))"></div>
+      <div class="fld"><label>Repite el PIN nuevo</label><input class="inp" inputmode="numeric" maxlength="4" value="${incEsc(F.nuevo2||'')}" oninput="setInp('nuevo2',this.value.replace(/[^0-9]/g,'').slice(0,4))"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="commitCambiarPin()">Guardar</button></div>
+    </div></div></div>`;
+}
+function commitCambiarPin(){
+  const me=appUsers().find(u=>u.id===(S.user&&S.user.id)); if(!me){ toast('No encuentro tu usuario'); return; }
+  if((F.actual||'')!==me.pin){ toast('El PIN actual no es correcto'); return; }
+  if(!/^[0-9]{4}$/.test(F.nuevo||'')){ toast('El PIN nuevo debe tener 4 dígitos'); return; }
+  if(F.nuevo!==F.nuevo2){ toast('Los dos PIN nuevos no coinciden'); return; }
+  if(appUsers().some(u=>u.id!==me.id && u.pin===F.nuevo)){ toast('Ese PIN ya lo usa otra persona'); return; }
+  S.usuarios=appUsers().map(u=> u.id===me.id ? {...u, pin:F.nuevo} : u);
+  if(S.user) S.user.pin=F.nuevo;
+  _usuariosPersist(); closeModal(); toast('PIN actualizado');
+}
+
+/* enganches (gana la última) */
+const _modalContent_usr = modalContent;
+modalContent = function(){
+  if(F.type==='usuarios') return usuariosModalContent();
+  if(F.type==='usuario_edit') return usuarioEditModalContent();
+  if(F.type==='cambiar_pin') return cambiarPinModalContent();
+  return _modalContent_usr();
+};
+const _homeView_usr = homeView;
+homeView = function(){
+  let html=_homeView_usr();
+  try{ if(S.modal && html.indexOf('class="overlay"')===-1) html += modalContent(); }catch(e){ console.error('home modal', e); }
+  return html;
+};
+/* ===== FIN USUARIOS ===== */
 
 
 boot();
