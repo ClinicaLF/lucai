@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-26">
+<meta name="lucai-version" content="2026-06-08-31">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -749,7 +749,7 @@ function pinPress(n){
   if(S.pin.length>=4) return;
   S.pin+=n; S.err="";
   if(S.pin.length===4){
-    if(S.pin===S.pinUser.pin){ S.user=S.pinUser; S.pinUser=null; S.pin=""; S.module=null; S.alert=""; render(); resetIdle(); }
+    if(S.pin===S.pinUser.pin){ S.user=S.pinUser; S.pinUser=null; S.pin=""; S.module=null; S.alert=""; S.iaOpen=false; S.iaSaludo=true; clearTimeout(window._iaSaludoT); window._iaSaludoT=setTimeout(()=>{ if(S.iaSaludo){ S.iaSaludo=false; render(); } }, 10000); render(); resetIdle(); }
     else { S.err="PIN incorrecto"; S.pin=""; render(); return; }
   }
   render();
@@ -4460,7 +4460,13 @@ function iaLimpiar(){ S.iaChat=[]; render(); }
 
 function iaBurbujas(){
   if(!S.iaChat.length){
-    return `<div class="muted" style="text-align:center;padding:26px 8px">Escribe tu pregunta abajo, o toca una sugerencia.</div>`;
+    const nombre = (S.user&&S.user.nombre) ? S.user.nombre.split(' ')[0] : '';
+    return `<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 2px">
+      <span style="flex:0 0 auto;display:flex">${typeof lucaiAvatar==='function'?lucaiAvatar(32):''}</span>
+      <div style="background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:10px 12px;font-size:14px;line-height:1.5;max-width:85%">
+        ¡Hola${nombre?', '+incEsc(nombre):''}! Soy <strong>Lucai</strong>, tu asistente. Te ayudo con tus tareas: qué tienes para hoy, qué es lo más urgente o qué tienes vencido. Pregúntame con tus palabras, o toca una de las sugerencias de arriba.
+      </div>
+    </div>`;
   }
   let h='';
   S.iaChat.forEach(m=>{
@@ -5094,6 +5100,79 @@ homeView = function(){
   return html;
 };
 /* ===== FIN USUARIOS ===== */
+
+
+/* ===== ASISTENTE FLOTANTE (burbuja en cualquier pantalla) ===== */
+/* Quita la tarjeta del inicio y deja el asistente como burbuja fija. */
+(function(){ const i=MODULES.findIndex(m=>m.id==='asistente'); if(i>=0) MODULES.splice(i,1); })();
+
+function iaToggle(){
+  S.iaOpen=!S.iaOpen; S.iaSaludo=false; render();
+  if(S.iaOpen) setTimeout(()=>{ const s=el('iaScroll'); if(s) s.scrollTop=s.scrollHeight; const i=el('iaInput'); if(i) i.focus(); }, 60);
+}
+function iaSaludoCerrar(){ S.iaSaludo=false; render(); }
+function iaSaludoAbrir(){ S.iaSaludo=false; iaToggle(); }
+function lucaiIcon(sz){ sz=sz||28; return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z"/><circle cx="8.5" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="11.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11.5" r="1.1" fill="currentColor" stroke="none"/></svg>`; }
+/* Para usar tu propia foto: pon aquí la URL de una imagen (cuadrada). Si lo dejas vacío, se usa el avatar dibujado. */
+const LUCAI_AVATAR_URL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NiA5NiIgd2lkdGg9Ijk2IiBoZWlnaHQ9Ijk2Ij4KPGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI0E4QzQwMCIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzZFOEUwMCIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPgo8Y2lyY2xlIGN4PSI0OCIgY3k9IjQ4IiByPSI0OCIgZmlsbD0idXJsKCNiZykiLz4KPGxpbmUgeDE9IjQ4IiB5MT0iMTYiIHgyPSI0OCIgeTI9IjI3IiBzdHJva2U9IiNFQUYxRDgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxjaXJjbGUgY3g9IjQ4IiBjeT0iMTMuNSIgcj0iNC4yIiBmaWxsPSIjRUFGMUQ4Ii8+CjxyZWN0IHg9IjE3IiB5PSI0NiIgd2lkdGg9IjYuNSIgaGVpZ2h0PSIxNSIgcng9IjMuMiIgZmlsbD0iI0VBRjFEOCIvPgo8cmVjdCB4PSI3Mi41IiB5PSI0NiIgd2lkdGg9IjYuNSIgaGVpZ2h0PSIxNSIgcng9IjMuMiIgZmlsbD0iI0VBRjFEOCIvPgo8cmVjdCB4PSIyNCIgeT0iMzAiIHdpZHRoPSI0OCIgaGVpZ2h0PSI0MyIgcng9IjE2IiBmaWxsPSIjZmZmZmZmIi8+CjxyZWN0IHg9IjMwIiB5PSIzOCIgd2lkdGg9IjM2IiBoZWlnaHQ9IjI3IiByeD0iMTEiIGZpbGw9IiNGMkY2RTYiLz4KPGNpcmNsZSBjeD0iNDAiIGN5PSI1MCIgcj0iNS4yIiBmaWxsPSIjMzMzRjQ4Ii8+CjxjaXJjbGUgY3g9IjU2IiBjeT0iNTAiIHI9IjUuMiIgZmlsbD0iIzMzM0Y0OCIvPgo8Y2lyY2xlIGN4PSI0Mi4xIiBjeT0iNDcuOSIgcj0iMS43IiBmaWxsPSIjZmZmZmZmIi8+CjxjaXJjbGUgY3g9IjU4LjEiIGN5PSI0Ny45IiByPSIxLjciIGZpbGw9IiNmZmZmZmYiLz4KPGNpcmNsZSBjeD0iMzIuNSIgY3k9IjU4LjUiIHI9IjMiIGZpbGw9IiNDQkUwOEEiLz4KPGNpcmNsZSBjeD0iNjMuNSIgY3k9IjU4LjUiIHI9IjMiIGZpbGw9IiNDQkUwOEEiLz4KPHBhdGggZD0iTTQwIDU5IHE4IDYuNSAxNiAwIiBzdHJva2U9IiMzMzNGNDgiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPg==';
+function lucaiAvatar(sz){
+  sz=sz||40;
+  if(LUCAI_AVATAR_URL){ return `<img src="${LUCAI_AVATAR_URL}" alt="Lucai" style="width:${sz}px;height:${sz}px;border-radius:50%;object-fit:cover;display:block">`; }
+  return `<svg width="${sz}" height="${sz}" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="24" cy="24" r="24" fill="#6E8E00"/>
+    <circle cx="24" cy="10.2" r="1.9" fill="#EAF1D8"/>
+    <rect x="23.2" y="11.8" width="1.6" height="4.2" rx="0.8" fill="#EAF1D8"/>
+    <rect x="11.5" y="15.5" width="25" height="21" rx="8" fill="#fff"/>
+    <circle cx="19" cy="26" r="2.7" fill="#333F48"/>
+    <circle cx="29" cy="26" r="2.7" fill="#333F48"/>
+    <circle cx="20" cy="25" r="0.85" fill="#fff"/>
+    <circle cx="30" cy="25" r="0.85" fill="#fff"/>
+    <path d="M18.5 31.4c1.8 1.8 9.2 1.8 11 0" stroke="#333F48" stroke-width="1.9" stroke-linecap="round"/>
+    <rect x="9.5" y="23" width="2.4" height="5" rx="1.2" fill="#EAF1D8"/>
+    <rect x="36.1" y="23" width="2.4" height="5" rx="1.2" fill="#EAF1D8"/>
+  </svg>`;
+}
+function iaFloatHtml(){
+  if(!S.user || S.modal) return '';
+  const nombre = S.user.nombre ? S.user.nombre.split(' ')[0] : '';
+  const sugs = ['¿Qué tengo que hacer hoy?','¿Qué es lo más urgente?','¿Tengo algo vencido?','Resúmeme mis tareas'];
+  const saludo = (S.iaSaludo && !S.iaOpen) ? `
+  <div style="position:fixed;right:18px;bottom:88px;z-index:1190;max-width:min(300px,calc(100vw - 40px))">
+    <div onclick="iaSaludoAbrir()" style="display:flex;gap:9px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:16px 16px 4px 16px;box-shadow:0 12px 34px rgba(51,63,72,.2);padding:11px 12px;cursor:pointer">
+      <span style="flex:0 0 auto;display:flex">${lucaiAvatar(36)}</span>
+      <div style="font-size:13px;line-height:1.45">¡Hola${nombre?', '+incEsc(nombre):''}! Te damos la bienvenida a <strong>Centro Odontológico Laura Fernández</strong>. Soy <strong>Lucai</strong>; si necesitas algo, pregúntame aquí.</div>
+      <button onclick="event.stopPropagation();iaSaludoCerrar()" style="background:none;border:none;color:#8A949B;font-size:18px;line-height:1;cursor:pointer;flex:0 0 auto;padding:0 2px">×</button>
+    </div>
+  </div>` : '';
+  const panel = S.iaOpen ? `
+  <div style="position:fixed;right:18px;bottom:88px;z-index:1200;width:min(380px,calc(100vw - 32px));background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 44px rgba(51,63,72,.24);display:flex;flex-direction:column;max-height:min(70vh,560px);overflow:hidden">
+    <div style="background:#333F48;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="flex:0 0 auto;display:flex">${lucaiAvatar(36)}</span>
+        <div><div style="font-weight:700">Pregúntale a Lucai</div><div style="font-size:11px;opacity:.7">Sobre tus tareas. Puede equivocarse; compruébalo.</div></div>
+      </div>
+      <button onclick="iaToggle()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px 0">
+      ${sugs.map(s=>`<button class="btn btn-ghost btn-sm" onclick="iaSugerencia('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('')}
+      ${S.iaChat&&S.iaChat.length?`<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="iaLimpiar()">Limpiar</button>`:''}
+    </div>
+    <div id="iaScroll" style="flex:1;overflow:auto;padding:10px 12px;background:var(--arena-1);margin:10px 12px;border:1px solid var(--line);border-radius:12px;min-height:160px">${iaBurbujas()}</div>
+    <div style="display:flex;gap:8px;padding:0 12px 12px">
+      <input id="iaInput" class="inp" style="flex:1" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();iaSend()}">
+      <button class="btn btn-primary" onclick="iaSend()" ${S.iaLoading?'disabled':''}>Enviar</button>
+    </div>
+  </div>` : '';
+  const fab = `<button onclick="iaToggle()" title="Pregúntale a Lucai" style="position:fixed;right:18px;bottom:18px;z-index:1200;width:58px;height:58px;border-radius:50%;border:none;padding:0;background:${S.iaOpen?'#333F48':'transparent'};color:#fff;box-shadow:0 8px 24px rgba(51,63,72,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1;overflow:hidden">${S.iaOpen?'×':lucaiAvatar(58)}</button>`;
+  return saludo+panel+fab;
+}
+const _appView_fab = appView;
+appView = function(){
+  let html=_appView_fab();
+  try{ if(S.user) html += iaFloatHtml(); }catch(e){ console.error('ia float', e); }
+  return html;
+};
+/* ===== FIN ASISTENTE FLOTANTE ===== */
 
 
 boot();
