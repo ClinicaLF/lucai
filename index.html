@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-53">
+<meta name="lucai-version" content="2026-06-08-55">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -609,6 +609,11 @@ async function boot(){
   catch(e){ DEVICE = false; }
   if (DEVICE) await loadEstado();
   render();
+  try{
+    setInterval(lucaiCheckUpdate, 90000);
+    document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) lucaiCheckUpdate(); });
+    setTimeout(lucaiCheckUpdate, 8000);
+  }catch(_){}
 }
 async function loadEstado(){
   try{
@@ -3957,32 +3962,34 @@ function tarMarcar(id,estado){
 /* ---- "% de estar al día" (privado, una sola métrica) ---- */
 function tarAlDiaStats(){
   const me=S.user.nombre, hoy=todayStr();
-  // tus tareas activas (las hechas se archivan)
-  const activas=(S.tareas||[]).filter(t=> t.paraQuien===me && t.estado!=='Hecha');
-  // atrasadas = deberían estar hechas y no lo están (la espera de otros no cuenta en tu contra)
-  const atrasadas=activas.filter(t=> t.estado!=='En espera' && t.fechaLimite && t.fechaLimite<hoy);
-  const total=activas.length;
-  const pct = total>0 ? Math.round((total-atrasadas.length)/total*100) : 100;
-  return {total, atrasadas:atrasadas.length, pct};
+  // universo: lo que es tuyo y puedes hacer (las hechas se archivan; la espera depende de otros)
+  const universo=(S.tareas||[]).filter(t=> t.paraQuien===me && t.estado!=='Hecha' && t.estado!=='En espera');
+  const vencidas=universo.filter(t=> t.fechaLimite && t.fechaLimite<hoy).length;   // de días anteriores
+  const hoyN=universo.filter(t=> t.fechaLimite && t.fechaLimite===hoy).length;     // de hoy sin hacer
+  const pendientes=vencidas+hoyN;   // lo que debería estar hecho a día de hoy
+  const total=universo.length;
+  const pct = total>0 ? Math.round((total-pendientes)/total*100) : 100;
+  return {total, vencidas, hoy:hoyN, pendientes, pct};
 }
 function tarAlDiaCard(){
   const s=tarAlDiaStats();
-  const n=s.atrasadas;
-  const plural = n===1 ? 'tarea atrasada' : 'tareas atrasadas';
+  const v=s.vencidas, h=s.hoy;
   let label, sub, color;
-  if(n===0){
+  if(s.pendientes===0){
     color='#6E8E00';
-    if(s.total){ label='¡Vas al día!'; sub='No tienes nada atrasado. Así da gusto, sigue así.'; }
+    if(s.total){ label='¡Al día!'; sub='No te queda nada ni de antes ni de hoy. Así da gusto.'; }
     else { label='Todo despejado'; sub='No tienes tareas pendientes ahora mismo. Buen momento para adelantar algo.'; }
-  } else if(s.pct>=80){
-    color='#A8C400'; label='Casi al día';
-    sub=`Solo te queda${n===1?'':'n'} ${n} ${plural}. Un último empujón y lo dejas a cero.`;
-  } else if(s.pct>=50){
-    color='#B8860B'; label='A medio camino';
-    sub=`Tienes ${n} ${plural}. Si cierras un par hoy, el porcentaje sube enseguida.`;
+  } else if(v===0){
+    // nada atrasado, solo queda lo de hoy: vas en hora, pero aún no al día
+    color='#B8860B'; label='A por lo de hoy';
+    sub=`Te queda${h===1?'':'n'} ${h} ${h===1?'tarea':'tareas'} para hoy. Ciérrala${h===1?'':'s'} y llegas al 100%.`;
   } else {
-    color='#C0392B'; label='A ponerse al día';
-    sub=`Se han acumulado ${n} ${plural}. No pasa nada: empieza por una y ve restando.`;
+    // hay tareas atrasadas
+    color = s.pct>=50 ? '#B8860B' : '#C0392B';
+    label='A ponerse al día';
+    sub = h>0
+      ? `${v} ${v===1?'atrasada':'atrasadas'} y ${h} para hoy. Empieza por las atrasadas.`
+      : `Tienes ${v} ${v===1?'tarea atrasada':'tareas atrasadas'} que ya deberían estar hechas. Empieza por una y ve restando.`;
   }
   const bar=`<div style="height:10px;background:#EAE3D7;border-radius:6px;overflow:hidden;margin:8px 0 4px"><div style="height:100%;width:${s.pct}%;background:${color};transition:width .4s"></div></div>`;
   return `<div style="background:#F7F4EE;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:16px">
@@ -5314,6 +5321,41 @@ function iaFloatHtml(){
   </div>` : '';
   const fab = `<button onclick="iaToggle()" title="Pregúntale a Lucai" style="position:fixed;right:18px;bottom:18px;z-index:1200;width:58px;height:58px;border-radius:50%;border:none;padding:0;background:${S.iaOpen?'#333F48':'transparent'};color:#fff;box-shadow:0 8px 24px rgba(51,63,72,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1;overflow:hidden">${S.iaOpen?'×':lucaiAvatar(58)}</button>`;
   return panel+fab;
+}
+/* ---- comprobador de versión en vivo (mientras la app está abierta) ---- */
+var _lucaiNewVer = null;
+async function lucaiCheckUpdate(){
+  try{
+    if(navigator.onLine===false) return;
+    if(document.getElementById('lucaiUpd')) return;          // ya está avisado
+    var cur=document.querySelector('meta[name=lucai-version]');
+    cur=cur?cur.getAttribute('content'):'';
+    var base=location.href.split('#')[0].split('?')[0];
+    const r=await fetch(base+'?cb='+Date.now(),{cache:'no-store',headers:{'Range':'bytes=0-2047'}});
+    const t=await r.text();
+    const m=t.match(/name="lucai-version"\s+content="([^"]+)"/);
+    const net=m?m[1]:'';
+    if(net && cur && net!==cur){ _lucaiNewVer=net; lucaiUpdateBanner(); }
+  }catch(_){}
+}
+function lucaiUpdateBanner(){
+  if(document.getElementById('lucaiUpd')) return;
+  const d=document.createElement('div');
+  d.id='lucaiUpd';
+  d.style.cssText='position:fixed;top:14px;left:50%;z-index:2000;opacity:0;transform:translate(-50%,-8px);transition:opacity .3s ease, transform .3s ease';
+  d.innerHTML=`<div style="display:flex;align-items:center;gap:12px;background:#333F48;color:#fff;border-radius:12px;box-shadow:0 12px 34px rgba(51,63,72,.3);padding:9px 10px 9px 16px;font-size:14px">
+      <span>Hay una versión nueva de Lucai</span>
+      <button onclick="lucaiUpdateNow()" style="background:#A8C400;color:#1f2a30;font-weight:700;border-radius:8px;padding:7px 14px;font-size:14px">Actualizar</button>
+      <span onclick="var b=document.getElementById('lucaiUpd'); if(b) b.remove();" style="color:#8A949B;font-size:18px;line-height:1;padding:0 4px;cursor:pointer">×</span>
+    </div>`;
+  document.body.appendChild(d);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ d.style.opacity='1'; d.style.transform='translate(-50%,0)'; }));
+}
+function lucaiUpdateNow(){
+  const ver=_lucaiNewVer||('t'+Date.now());
+  const sp=new URLSearchParams(location.search);
+  sp.set('v',ver);
+  location.replace(location.pathname+'?'+sp.toString());
 }
 function lucaiSaludoShow(){
   lucaiSaludoHide(true);
