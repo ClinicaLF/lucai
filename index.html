@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-55">
+<meta name="lucai-version" content="2026-06-08-56">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4057,7 +4057,7 @@ function tarAreaDelete(i){
   areas.splice(i,1); S.tarAreas=areas; _tarPersistAreas(); render(); toast('Área borrada');
 }
 function openTarea(){
-  F={type:'tar_nuevo', titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre};
+  F={type:'tar_nuevo', id:uid(), titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre, adjuntos:[]};
   S.modal='tar_nuevo'; render();
 }
 function tarFormBody(){
@@ -4078,7 +4078,37 @@ function tarFormBody(){
       <div class="fld" style="flex:1;min-width:170px"><label>Fecha de entrega</label>
         <input class="inp" type="date" value="${incEsc(F.fechaLimite||'')}" oninput="setInp('fechaLimite',this.value)" ${puedeFecha?'':'disabled style="background:#F4F0E9;color:#8A949B"'}>
         ${puedeFecha?'':'<div class="muted" style="font-size:12px;margin-top:4px">Solo la cambia quien emitió la tarea.</div>'}</div>
-    </div>`;
+    </div>
+    ${tarFormAdjuntosHtml()}`;
+}
+function tarFormAdjuntosHtml(){
+  const adj=Array.isArray(F.adjuntos)?F.adjuntos:[];
+  const thumbs=adj.map((a,i)=>`<div style="position:relative;display:inline-block">
+      <img data-tarpath="${a.path}" onclick="tarVerImg('${a.path}')" alt="adjunto" style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;background:#E8EAED;border:1px solid var(--line)">
+      <button type="button" onclick="tarFormDelAdjunto(${i})" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#C0392B;color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer">×</button>
+    </div>`).join('');
+  return `<div class="fld"><label>Imágenes (opcional)</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      ${thumbs}
+      <button type="button" class="btn btn-ghost btn-sm" onclick="tarFormAddImagen()">+ Imagen</button>
+    </div></div>`;
+}
+function tarFormAddImagen(){
+  if(!F.id) F.id=uid();
+  tarPickImagen(async (f)=>{
+    toast('Subiendo imagen…');
+    try{
+      const ref=await tarSubirImagen(f, F.id);
+      if(!Array.isArray(F.adjuntos)) F.adjuntos=[];
+      F.adjuntos.push(ref); render();
+    }catch(e){ toast('No se pudo subir: '+(e.message||e)); }
+  });
+}
+function tarFormDelAdjunto(idx){
+  if(!Array.isArray(F.adjuntos)) return;
+  const ref=F.adjuntos[idx]; if(!ref) return;
+  F.adjuntos.splice(idx,1); render();
+  try{ sbc.storage.from(TAR_BUCKET).remove([ref.path]); }catch(_){}
 }
 function tarValid(){
   if(!(F.titulo||'').trim()){ toast('Pon un título a la tarea'); return false; }
@@ -4102,9 +4132,10 @@ function tarNuevoModalContent(){
 }
 function commitTarea(){
   if(!tarValid()) return;
-  const t={ id:uid(), titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
+  const t={ id:F.id||uid(), titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
     prioridad:F.prioridad||'Media', area:F.area||'General', fechaLimite:F.fechaLimite, deQuien:S.user.nombre,
-    paraQuien:F.paraQuien, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[] };
+    paraQuien:F.paraQuien, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[],
+    adjuntos:Array.isArray(F.adjuntos)?F.adjuntos:[] };
   S.tareas.unshift(t); closeModal(); render();
   srvTarInsert(t, 'Tarea enviada');
   tgNotify(t.paraQuien, `📋 Nueva tarea de ${t.deQuien}: "${t.titulo}" · prioridad ${t.prioridad}${t.fechaLimite?` · entrega ${fmtFecha(t.fechaLimite)}`:''}`);
