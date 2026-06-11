@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-64">
+<meta name="lucai-version" content="2026-06-08-65">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3922,9 +3922,11 @@ function tarBuzonView(modo){
   const selEstado=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('estado',this.value)"><option value="">Todos</option>${TAR_ESTADOS.map(s=>`<option ${bf.estado===s?'selected':''}>${s}</option>`).join('')}</select>`;
   const search=`<input ${ss} placeholder="Buscar…" value="${incEsc(bf.q||'')}" onchange="setTarBuzF('q',this.value)">`;
   const arrow = bf.sortDir==='desc'?'▼':'▲';
-  const rangoEntrega=`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:3px;margin-top:2px">
-      <input type="date" ${ds} title="Desde" value="${incEsc(bf.desde||'')}" onchange="setTarBuzF('desde',this.value)">
-      <input type="date" ${ds} title="Hasta" value="${incEsc(bf.hasta||'')}" onchange="setTarBuzF('hasta',this.value)">
+  const dlab=`style="font-size:10px;color:#8A949B;letter-spacing:.2px;margin-bottom:1px"`;
+  const dinp=`class="inp" style="margin:0;padding:3px 6px;font-size:12px;width:118px"`;
+  const rangoEntrega=`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:row;gap:8px;margin-top:2px">
+      <label style="display:inline-flex;flex-direction:column"><span ${dlab}>desde</span><input type="date" ${dinp} value="${incEsc(bf.desde||'')}" onchange="setTarBuzF('desde',this.value)"></label>
+      <label style="display:inline-flex;flex-direction:column"><span ${dlab}>hasta</span><input type="date" ${dinp} value="${incEsc(bf.hasta||'')}" onchange="setTarBuzF('hasta',this.value)"></label>
     </div>`;
   const hayFiltro = bf.prio||bf.cat||bf.persona||bf.estado||bf.q||bf.desde||bf.hasta||bf.kpi;
   const clear = hayFiltro?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()">Limpiar</button>`:'';
