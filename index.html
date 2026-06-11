@@ -4850,6 +4850,16 @@ function iaContexto(pregunta){
   out.push('\n[MÓDULOS DE LA PLATAFORMA · acceso de esta persona ahora]');
   out.push(modList.length ? modList.join('\n') : '(no hay módulos cargados)');
 
+  /* Comunicaciones (avisos del equipo) SIN LEER por esta persona.
+     El system prompt pide avisar de esto; aquí le pasamos el dato real. */
+  const comAll = (S.comunicaciones||[]).filter(c=> (c.para||[]).includes(me));
+  const comNoLeidas = comAll.filter(c=> !(typeof comLeida==='function' ? comLeida(c,me) : (c.leidos&&c.leidos[me])));
+  out.push(`\n[COMUNICACIONES] ${comNoLeidas.length} sin leer de ${comAll.length} dirigidas a ti.`);
+  if(comNoLeidas.length){
+    comNoLeidas.slice(0,15).forEach(c=> out.push(`- SIN LEER: "${c.titulo||'(sin título)'}" | de: ${c.deQuien||'—'} | ${c.categoria||'General'} · ${c.prioridad||'Normal'} | ${c.ts||'?'}`));
+    if(comNoLeidas.length>15) out.push(`...y ${comNoLeidas.length-15} más sin leer.`);
+  }
+
   const recib = (S.tareas||[]).filter(t=> t.paraQuien===me);
   const act = recib.filter(activa);
   const porHacer = act.filter(t=>t.estado!=='En espera');
@@ -5006,7 +5016,7 @@ function iaBurbujas(){
     return `<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 2px">
       <span style="flex:0 0 auto;display:flex">${typeof lucaiAvatar==='function'?lucaiAvatar(32):''}</span>
       <div style="background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:10px 12px;font-size:14px;line-height:1.5;max-width:85%">
-        ¡Hola${nombre?', '+incEsc(nombre):''}! Soy <strong>Lucai</strong>, tu asistente. Te ayudo con tus tareas: qué tienes para hoy, qué es lo más urgente o qué tienes vencido. Pregúntame con tus palabras, o toca una de las sugerencias de arriba.
+        ¡Hola${nombre?', '+incEsc(nombre):''}! Soy <strong>Lucai</strong>, tu asistente en el Centro. Te echo una mano con el día a día —tus tareas, las comunicaciones del equipo, las incidencias— y te guío por el resto de la plataforma para que sepas dónde se hace cada cosa. ¿En qué te ayudo?
       </div>
     </div>`;
   }
@@ -5025,11 +5035,13 @@ function iaBurbujas(){
 }
 
 function asistenteView(){
-  const sugs = ['¿Qué tengo que hacer hoy?','¿Qué es lo más urgente?','¿Tengo algo vencido?','Resúmeme mis tareas'];
+  const sugs = (typeof isAdmin==='function' && isAdmin())
+    ? ['¿Por dónde empiezo hoy?','¿Qué hay que pedir?','¿Tengo avisos sin leer?','¿Qué puedes hacer por mí?']
+    : ['¿Por dónde empiezo hoy?','¿Tengo avisos sin leer?','¿Tengo algo vencido?','¿Qué puedes hacer por mí?'];
   return `${moduleHeader('Asistente de Lucai', false)}
   <main><div class="wrap">
     <div><div class="section-title">Pregúntale a Lucai</div>
-      <div class="section-sub">Responde en lenguaje normal sobre tus tareas. Puede equivocarse: para algo importante, compruébalo.</div></div>
+      <div class="section-sub">Te ayuda en el día a día de la clínica y te guía por la plataforma. Puede equivocarse: para algo importante, compruébalo.</div></div>
 
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin:6px 0 12px">
       ${sugs.map(s=>`<button class="btn btn-ghost btn-sm" onclick="iaSugerencia('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('')}
@@ -5753,14 +5765,16 @@ function lucaiAvatar(sz){
 function iaFloatHtml(){
   if(!S.user || S.modal) return '';
   const nombre = S.user.nombre ? S.user.nombre.split(' ')[0] : '';
-  const sugs = ['¿Qué tengo que hacer hoy?','¿Qué es lo más urgente?','¿Tengo algo vencido?','Resúmeme mis tareas'];
+  const sugs = (typeof isAdmin==='function' && isAdmin())
+    ? ['¿Por dónde empiezo hoy?','¿Qué hay que pedir?','¿Tengo avisos sin leer?','¿Qué puedes hacer por mí?']
+    : ['¿Por dónde empiezo hoy?','¿Tengo avisos sin leer?','¿Tengo algo vencido?','¿Qué puedes hacer por mí?'];
   const sinChat = !(S.iaChat && S.iaChat.length);
   const panel = S.iaOpen ? `
   <div style="position:fixed;right:18px;bottom:88px;z-index:1200;width:min(420px,calc(100vw - 20px));height:min(80vh,620px);background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 44px rgba(51,63,72,.24);display:flex;flex-direction:column;overflow:hidden">
     <div style="background:#333F48;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex:0 0 auto">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:0 0 auto;display:flex">${lucaiAvatar(36)}</span>
-        <div><div style="font-weight:700">Pregúntale a Lucai</div><div style="font-size:11px;opacity:.7">Sobre tus tareas. Puede equivocarse; compruébalo.</div></div>
+        <div><div style="font-weight:700">Pregúntale a Lucai</div><div style="font-size:11px;opacity:.7">Tu asistente de la clínica. Puede equivocarse; compruébalo.</div></div>
       </div>
       <button onclick="iaToggle()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1">×</button>
     </div>
