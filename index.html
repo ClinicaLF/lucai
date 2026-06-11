@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-11-85">
+<meta name="lucai-version" content="2026-06-11-86">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -794,7 +794,7 @@ function resetIdle(){
 }
 
 /* ---- APP SHELL ---- */
-const APP_VERSION = 'v2026.06.11-11';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
+const APP_VERSION = 'v2026.06.11-12';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
 const MODULES = [
   {id:'material', nombre:'Control de material', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
   {id:'tareas', nombre:'Tareas', ini:'T', desc:'Tareas que van surgiendo en la clínica: qué hay que hacer, quién es responsable, estado y seguimiento.', estado:'pronto'},
@@ -5153,15 +5153,15 @@ async function iaSend(textoFijo){
   const box = el('iaInput');
   const q = (textoFijo!=null ? textoFijo : (box ? box.value : '')).trim();
   if(!q || S.iaBusy) return;
-  const scrollDown=()=>{ const sc=el('iaScroll'); if(sc) sc.scrollTop=sc.scrollHeight; };
+  const scrollDown=(force)=>{ const sc=el('iaScroll'); if(!sc) return; const near=(sc.scrollHeight - sc.scrollTop - sc.clientHeight)<80; if(force||near) sc.scrollTop=sc.scrollHeight; };
   try{ if(S._iaCtrl){ S._iaCtrl.abort(); } }catch(_){}
   S.iaChat.forEach(m=>{ m._live=false; });           // nunca dejes una burbuja "en vivo" antigua
   S.iaChat.push({ q:q, a:null });
-  S.iaBusy=true; S.iaLoading=true; render(); scrollDown(); setTimeout(scrollDown,30);
+  S.iaBusy=true; S.iaLoading=true; render(); scrollDown(true); setTimeout(()=>scrollDown(true),30);
   const last = S.iaChat[S.iaChat.length-1];
   const ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
   S._iaCtrl = ctrl;
-  const killer = setTimeout(()=>{ try{ ctrl && ctrl.abort(); }catch(_){} }, 45000);
+  const killer = setTimeout(()=>{ try{ ctrl && ctrl.abort(); }catch(_){} }, 90000);
   try{
     const r = await fetch(IA_FN, {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -5185,11 +5185,10 @@ async function iaSend(textoFijo){
       if(done) break;
       const chunk = dec.decode(value, {stream:true});
       if(!chunk) continue;
-      if(!started){ started=true; last.a=''; last._live=true; S.iaLoading=false; render(); scrollDown(); }
+      if(!started){ started=true; last.a=''; last._live=true; S.iaLoading=false; render(); scrollDown(true); }
       last.a += chunk;
       const liveEl=document.getElementById('iaLiveMsg');
       if(liveEl){ liveEl.innerHTML=iaFormat(last.a); } else { render(); }
-      scrollDown();
     }
     clearTimeout(killer);
     if(!started){ last.a = last.a || 'No he recibido respuesta.'; S.iaLoading=false; }
@@ -5208,7 +5207,10 @@ function iaLimpiar(){ S.iaChat=[]; render(); }
 function iaFormat(t){
   let s = incEsc(t||'');
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');   // **negrita**
-  s = s.replace(/(^|\n)\s*[-•]\s+/g, '$1• ');                    // viñetas limpias
+  s = s.replace(/(^|\n)\s*[-•]\s+/g, '$1• ');            // viñetas limpias
+  s = s.replace(/([^\n])\n(\d+[.)]\s)/g, '$1\n\n$2');           // aire antes de 1. 2. 3.
+  s = s.replace(/([^\n])\n(• )/g, '$1\n\n$2');               // aire antes de viñeta
+  s = s.replace(/\n{3,}/g, '\n\n');                               // como mucho una linea en blanco
   return s;
 }
 function iaBurbujas(){
