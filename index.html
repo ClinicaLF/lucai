@@ -794,6 +794,7 @@ function resetIdle(){
 }
 
 /* ---- APP SHELL ---- */
+const APP_VERSION = 'v2026.06.11-3';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
 const MODULES = [
   {id:'material', nombre:'Control de material', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
   {id:'tareas', nombre:'Tareas', ini:'T', desc:'Tareas que van surgiendo en la clínica: qué hay que hacer, quién es responsable, estado y seguimiento.', estado:'pronto'},
@@ -825,7 +826,7 @@ function moduleHeader(title, showBell){
   return `<header><div class="brand">
     <button class="backbtn" onclick="goHome()" title="Inicio">‹</button>
     <img src="${LOGO_WHITE}" alt="Laura Fernández">
-    <div class="t">${title}<small>Lucai · Gestión interna</small></div>
+    <div class="t">${title}<small>Lucai · Gestión interna · ${APP_VERSION}</small></div>
   </div>${whoBlock(showBell)}</header>`;
 }
 function homeView(){
@@ -839,7 +840,7 @@ function homeView(){
     </button>`).join("");
   return `<header><div class="brand">
       <img src="${LOGO_WHITE}" alt="Laura Fernández">
-      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández</small></div>
+      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández · ${APP_VERSION}</small></div>
     </div>${whoBlock(false)}</header>
   <main class="homearea"><div class="wrap">
     <div class="hello">Hola, ${first}. ¿Con qué quieres trabajar?</div>
@@ -2506,7 +2507,7 @@ function homeView(){
   }).join("");
   return `<header><div class="brand">
       <img src="${LOGO_WHITE}" alt="Laura Fernández">
-      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández</small></div>
+      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández · ${APP_VERSION}</small></div>
     </div>${whoBlock(false)}</header>
   <main class="homearea"><div class="wrap">
     <div class="hello">Hola, ${first}. ¿Con qué quieres trabajar?</div>
