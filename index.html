@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-67">
+<meta name="lucai-version" content="2026-06-08-69">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -948,7 +948,7 @@ function pedidosView(){
       ? `<span class="tag sal">Recibido</span><small style="display:block;color:var(--grey);margin-top:3px">${fmtFecha(p.recTs)} · ${p.recUser}</small>`
       : `<span class="tag inc">Pendiente</span>`;
     const accion=p.estado==='pendiente'
-      ? `<button class="btn btn-primary btn-sm" onclick="openRecepcion(${p.id})">Marcar recibido</button>` : '<span class="muted">—</span>';
+      ? `<button class="btn btn-ghost btn-sm" onclick="openPedidoEdit('${p.id}')">Editar</button> <button class="btn btn-primary btn-sm" onclick="openRecepcion('${p.id}')">Marcar recibido</button>` : '<span class="muted">—</span>';
     return `<tr>
       <td data-label="Nº" class="mono">#${String(p.id).slice(-4)}</td>
       <td data-label="Fecha pedido" class="mono muted">${fmtFecha(p.ts)}</td>
@@ -972,7 +972,7 @@ function pedidosView(){
    </table></div>`;
 }
 function openRecepcion(id){
-  const p=S.pedidos.find(x=>x.id===id); if(!p) return;
+  const p=S.pedidos.find(x=>String(x.id)===String(id)); if(!p) return;
   S.alert="";
   F={type:'recepcion', pedidoId:id, recPrecios:p.lineas.map(l=>l.precio?String(l.precio):'')};
   S.modal='recepcion'; render();
@@ -1277,6 +1277,13 @@ function pedidoAddArt(cod){
 }
 function pedidoAddTodosFaltan(){ pedFaltan().forEach(function(a){ pedidoAddArt(a.cod); }); }
 function setPedLineaCant(i,v){ if(!Array.isArray(F.lineas)) return; var n=parseInt(v)||0; if(n<1){ F.lineas.splice(i,1); } else { F.lineas[i].cant=n; } render(); }
+function openPedidoEdit(id){
+  var p=S.pedidos.find(function(x){ return String(x.id)===String(id); }); if(!p) return;
+  if(p.estado==='recibido'){ toast('Un pedido ya recibido no se puede editar'); return; }
+  F={ type:'pedido', editId:p.id, lineas:(p.lineas||[]).map(function(l){ return {cod:l.cod, cant:l.cant, precio:l.precio}; }),
+      proveedor:p.proveedor||'', proveedorNuevo:'', fecha:p.ts||todayStr(), pcod:'', pcant:1, pprecio:'' };
+  S.modal='pedido'; render();
+}
 function commitPedido(){
   if(!F.lineas.length) return;
   const prov=(F.proveedor==='__nuevo__'?(F.proveedorNuevo||''):(F.proveedor||'')).trim();
@@ -1294,8 +1301,8 @@ function pedidoModalContent(){
   const provOk=F.proveedor && (F.proveedor!=='__nuevo__' || (F.proveedorNuevo||'').trim());
   const valid=F.lineas.length>0;
   const hint=!valid?'! Añade al menos una línea.':(!provOk?'! Elige el proveedor.':'✓ Listo para crear el pedido.');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
-    <div class="modal-head"><h2>Nuevo pedido</h2><button class="x" onclick="closeModal()">×</button></div>
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px">
+    <div class="modal-head"><h2>${F.editId?'Editar pedido':'Nuevo pedido'}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Añade los artículos que vas a pedir. Si conoces el precio acordado, mételo aquí; lo confirmarás con el albarán al recibir.</div>
       <div class="fld" style="margin-top:0"><label>Proveedor</label>
@@ -1306,11 +1313,12 @@ function pedidoModalContent(){
         </select></div>
       ${F.proveedor==='__nuevo__'?`<div class="fld" style="margin-top:8px"><label>Nombre del proveedor nuevo</label>
         <input class="inp" type="text" placeholder="Ej. Ormco Ibérica" value="${F.proveedorNuevo||''}" oninput="F.proveedorNuevo=this.value" onchange="render()"></div>`:''}
-      ${(function(){ var f=pedFaltan(); if(!f.length) return ''; return `<div class="fld"><label>Lo que falta (bajo mínimo) · ${f.length}</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px">
+      ${(function(){ var f=pedFaltan(); if(!f.length) return ''; return `<div style="background:#F7F4EE;border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-top:18px">
+        <div style="font-size:12.5px;font-weight:700;color:#46525B;margin-bottom:9px">Lo que falta · ${f.length} bajo mínimo <span style="font-weight:400;color:#8A949B">· toca para añadirlo</span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">
           ${f.map(function(a){ return `<button type="button" class="btn btn-ghost btn-sm" onclick="pedidoAddArt('${a.cod}')" title="stock ${a.stock} / mín ${a.min}${a.proveedor?' · '+incEsc(a.proveedor):''}">＋ ${incEsc(a.nombre)} <span class="muted">(${a.stock}/${a.min})</span></button>`; }).join('')}
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" style="font-weight:700" onclick="pedidoAddTodosFaltan()">＋ Añadir todos los que faltan (${f.length})</button></div>`; })()}
+        <button type="button" class="btn btn-ghost btn-sm" style="font-weight:700" onclick="pedidoAddTodosFaltan()">＋ Añadir todos (${f.length})</button></div>`; })()}
       <div class="fld"><label>Artículo</label>
         <select class="inp" onchange="setInp('pcod',this.value)">${artOptions(F.pcod,false)}</select></div>
       <div class="grid2">
@@ -1319,14 +1327,15 @@ function pedidoModalContent(){
         <div class="fld" style="margin-top:0"><label>Precio acordado (€/ud.)</label>
           <input class="inp" type="number" min="0" step="0.01" inputmode="decimal" placeholder="opcional" value="${F.pprecio}" oninput="setInp('pprecio',this.value)"></div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="addPedidoLinea()" style="margin-bottom:16px">＋ Añadir línea</button>
-      <div class="fld" style="margin-top:0"><label>Líneas del pedido</label>${lineList}${totalRow}</div>
+      <button class="btn btn-ghost btn-sm" onclick="addPedidoLinea()">＋ Añadir línea</button>
+      <div style="border-top:1px solid var(--line);margin:20px 0 0"></div>
+      <div class="fld" style="margin-top:16px"><label>Líneas del pedido</label>${lineList}${totalRow}</div>
       <div class="fld"><label>Fecha del pedido</label>
         <input class="inp" type="date" value="${F.fecha||''}" oninput="setInp('fecha',this.value)" style="max-width:210px"></div>
       <div class="req-note ${valid&&provOk?'okk':''}">${hint}</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" ${valid?'':'disabled'} onclick="commitPedido()">Crear pedido</button></div>
+      <button class="btn btn-primary" ${valid?'':'disabled'} onclick="commitPedido()">${F.editId?'Guardar cambios':'Crear pedido'}</button></div>
   </div></div>`;
 }
 
@@ -1784,6 +1793,14 @@ async function srvPedidoInsert(p, okMsg){
   }catch(e){ console.error('srvPedidoInsert', e); await syncAll(); toast('Error al crear pedido: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
 }
+async function srvPedidoUpdate(p, okMsg){
+  try{
+    const { error } = await sbc.from('lucai_pedidos').update({
+      ts:p.ts||null, proveedor:p.proveedor||null, lineas:p.lineas||[] }).eq('id', String(p.id));
+    if(error) throw error;
+  }catch(e){ console.error('srvPedidoUpdate', e); await syncAll(); toast('Error al guardar cambios: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
 async function srvSegui(s, okMsg){
   try{
     const { error } = await sbc.from('lucai_seguimientos').insert({
@@ -1853,7 +1870,7 @@ function commitMove(){
 }
 
 async function commitRecepcion(){
-  const p=S.pedidos.find(x=>x.id===F.pedidoId); if(!p) return;
+  const p=S.pedidos.find(x=>String(x.id)===String(F.pedidoId)); if(!p) return;
   if(p.lineas.some((l,i)=> !(parseFloat(String(F.recPrecios[i]).replace(',','.'))>0))){ toast('Introduce el precio de todas las líneas para poder recibir'); return; }
   const ts=todayStr();
   try{
@@ -1875,6 +1892,15 @@ function commitPedido(){
   const prov=(F.proveedor==='__nuevo__'?(F.proveedorNuevo||''):(F.proveedor||'')).trim();
   if(!prov){ toast('Elige o escribe un proveedor'); return; }
   if(!S.proveedores.includes(prov)) S.proveedores.push(prov);
+  if(F.editId){
+    const p=S.pedidos.find(x=>String(x.id)===String(F.editId));
+    if(p){
+      p.ts=F.fecha||p.ts||todayStr(); p.proveedor=prov; p.lineas=F.lineas.map(l=>({...l}));
+      closeModal(); S.sub='pedidos'; render();
+      srvProveedor(prov); srvPedidoUpdate(p, 'Pedido actualizado');
+    }
+    return;
+  }
   const ped={id:Date.now(), ts:F.fecha||todayStr(), proveedor:prov, user:S.user.nombre, lineas:F.lineas.map(l=>({...l})), estado:'pendiente'};
   S.pedidos.unshift(ped);
   closeModal(); S.sub='pedidos'; render();
