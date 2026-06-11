@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-62">
+<meta name="lucai-version" content="2026-06-08-64">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -829,25 +829,7 @@ function moduleHeader(title, showBell){
     <div class="t">${title}<small>Lucai · Gestión interna</small></div>
   </div>${whoBlock(showBell)}</header>`;
 }
-function homeView(){
-  const first=S.user.nombre.split(' ')[0];
-  const cards=MODULES.map(m=>`
-    <button class="modcard ${m.estado==='pronto'?'soon-card':''}" onclick="setModule('${m.id}')">
-      <div class="mc-top"><span class="mc-ic">${m.ini}</span>
-        ${m.estado==='activo'?'<span class="pill-ok">Disponible</span>':'<span class="pill-soon">Próximamente</span>'}</div>
-      <div class="mc-title">${m.nombre}</div>
-      <div class="mc-desc">${m.desc}</div>
-    </button>`).join("");
-  return `<header><div class="brand">
-      <img src="${LOGO_WHITE}" alt="Laura Fernández">
-      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández</small></div>
-    </div>${whoBlock(false)}</header>
-  <main class="homearea"><div class="wrap">
-    <div class="hello">Hola, ${first}. ¿Con qué quieres trabajar?</div>
-    <div class="modgrid">${cards}</div>
-    <div style="text-align:center;margin-top:30px;font-size:10.5px;color:var(--grey-2);opacity:.6;letter-spacing:.3px">Lucai · ${APP_VERSION}</div>
-  </div></main>`;
-}
+
 function modulePlaceholder(){
   const m=MODULES.find(x=>x.id===S.module)||{nombre:'Módulo',desc:''};
   return `${moduleHeader(m.nombre,false)}<main><div class="wrap"><div class="soon">
@@ -2492,28 +2474,107 @@ function canAccess(id){
 }
 
 function homeView(){
+  const NP_CSS = `<style>
+.np-wrap{max-width:1120px;margin:0 auto;padding:30px 24px 56px}
+.np-eyebrow{font-size:11.5px;letter-spacing:2.4px;text-transform:uppercase;color:#B8A88F;font-weight:700;margin-top:2px}
+.np-hello{font-family:Georgia,'Times New Roman',serif;font-size:32px;line-height:1.1;margin:8px 0 0;color:#333F48}
+.np-attn{margin:11px 0 0;font-size:15px;color:#6C757D}
+.np-attn b{color:#333F48;font-weight:700}
+.np-sec{margin-top:30px}
+.np-sechead{display:flex;align-items:center;gap:12px;margin-bottom:13px}
+.np-lbl{font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:#46525B;font-weight:700}
+.np-rule{flex:1;height:1px;background:#E7E0D4}
+.np-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:15px}
+.np-card{position:relative;background:#fff;border:1px solid #E7E0D4;border-radius:16px;padding:17px 17px 16px;text-align:left;cursor:pointer;overflow:hidden;transition:transform .16s,box-shadow .16s,border-color .16s;box-shadow:0 1px 2px rgba(51,63,72,.04);font-family:inherit;color:inherit;display:block;width:100%}
+.np-card::before{content:"";position:absolute;left:0;top:16px;bottom:16px;width:3px;border-radius:3px;background:transparent;transition:background .16s}
+.np-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(51,63,72,.10);border-color:#DED5C6}
+.np-card:hover::before{background:#A8B400}
+.np-tile{width:46px;height:46px;border-radius:13px;background:#EFE8DC;display:grid;place-items:center;color:#333F48}
+.np-tile svg{width:23px;height:23px;stroke:currentColor;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.np-tile b{font-family:Georgia,serif;font-size:20px;color:#333F48}
+.np-title{font-family:Georgia,'Times New Roman',serif;font-size:18px;margin:12px 0 4px;color:#333F48}
+.np-desc{font-size:12.5px;line-height:1.45;color:#6C757D}
+.np-count{position:absolute;top:15px;right:15px;min-width:24px;height:24px;padding:0 7px;border-radius:20px;display:grid;place-items:center;font-size:12px;font-weight:800;color:#fff}
+.np-c-ink{background:#333F48}
+.np-c-red{background:#C0392B}
+.np-tag{position:absolute;top:17px;right:15px;font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:#B8A88F;font-weight:700;background:#F2ECE0;border:1px solid #E7DECD;padding:3px 9px;border-radius:20px}
+.np-tag-lock{color:#9AA0A6;background:#F1F0EE;border-color:#E2E0DC}
+.np-soon{background:#FAF7F1}
+.np-soon .np-tile{background:#F0ECE4;color:#9AA0A6}
+.np-soon .np-title{color:#6C757D}
+.np-lock{opacity:.7;cursor:default}
+.np-lock:hover{transform:none;box-shadow:0 1px 2px rgba(51,63,72,.04);border-color:#E7E0D4}
+.np-lock:hover::before{background:transparent}
+.np-lock .np-tile{background:#F1F0EE;color:#B4B4B4}
+@media(max-width:560px){ .np-hello{font-size:26px} .np-grid{grid-template-columns:1fr 1fr;gap:11px} .np-desc{display:none} }
+@media(prefers-reduced-motion:reduce){ .np-card{transition:none} .np-card:hover{transform:none} }
+</style>`;
+
   const first=S.user.nombre.split(' ')[0];
-  const cards=MODULES.map(m=>{
-    const ok=canAccess(m.id);
-    const soon=m.estado==='pronto';
-    let pill, click;
-    if(!ok){ pill=`<span class="pill-lock">${LOCK_SVG} Sin acceso</span>`; click=`onclick="toast('No tienes acceso a este módulo')"`; }
-    else if(soon){ pill='<span class="pill-soon">Próximamente</span>'; click=`onclick="setModule('${m.id}')"`; }
-    else { pill='<span class="pill-ok">Disponible</span>'; click=`onclick="setModule('${m.id}')"`; }
-    return `<button class="modcard ${soon?'soon-card':''} ${!ok?'locked-card':''}" ${click}>
-      <div class="mc-top"><span class="mc-ic">${m.ini}</span>${pill}</div>
-      <div class="mc-title">${m.nombre}</div>
-      <div class="mc-desc">${m.desc}</div>
-    </button>`;
-  }).join("");
-  return `<header><div class="brand">
+  const me=S.user&&S.user.nombre;
+  const taPend = (typeof tarActiva==='function') ? (S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t) && t.estado!=='En espera').length : 0;
+  const taVenc = (typeof tarVencida==='function') ? (S.tareas||[]).filter(t=>t.paraQuien===me && tarVencida(t)).length : 0;
+  const taNuevos = (typeof tarMisNuevos==='function') ? tarMisNuevos(me) : 0;
+  const comNL = (typeof comNoLeidasDe==='function') ? comNoLeidasDe(me) : 0;
+  const COUNTS = {
+    tareas: (taPend||taNuevos) ? {txt:`${taPend}${taNuevos?` · ${taNuevos}✉`:''}`, cls: taVenc?'np-c-red':'np-c-ink'} : null,
+    comunicaciones: comNL ? {txt:`${comNL}`, cls:'np-c-red'} : null
+  };
+  const IC = {
+    tareas:'<path d="M9 4h6a1 1 0 0 1 1 1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1a1 1 0 0 1 1-1z"/><path d="M8 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M8.5 12.5l2 2 4-4.5"/>',
+    comunicaciones:'<path d="M4 11l13-5v12L4 13z"/><path d="M4 11v2a2 2 0 0 0 2 2h1"/><path d="M8 15v3a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-2"/>',
+    incidencias:'<path d="M12 4L3 19h18L12 4z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
+    accesos:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13.5v6M13.5 16.5h6"/>',
+    material:'<path d="M3 8l9-4 9 4-9 4-9-4z"/><path d="M3 8v8l9 4 9-4V8"/><path d="M12 12v8"/>',
+    equipos:'<path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.1-.6-.6-2.1 2.4-2.4z"/>',
+    presupuestos:'<path d="M7 3h10a1 1 0 0 1 1 1v16l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9.5 8.5h5M9.5 12h5"/>',
+    orto:'<path d="M6 4c1.6 0 2.4 1 3.2 1s1.2-1 2.8-1 2 1 2.8 1S18 4 18 4c1.6 0 2.5 1.3 2.5 3.2 0 2.4-1 4-1.6 6.8-.5 2.3-1 5-2.4 5-1.2 0-1.3-2.4-2.5-2.4S13 19 12 19s-1.3-2.4-2.5-2.4S8.7 19 7.5 19c-1.4 0-1.9-2.7-2.4-5C4.5 11.2 3.5 9.6 3.5 7.2 3.5 5.3 4.4 4 6 4z"/>',
+    documentos:'<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 16.5h6"/>'
+  };
+  const GROUPS = [
+    {lbl:'Tu día', ids:['tareas','comunicaciones','incidencias','accesos']},
+    {lbl:'Almacén y equipos', ids:['material','equipos']},
+    {lbl:'Pacientes y negocio', ids:['presupuestos','orto','documentos']}
+  ];
+  const byId={}; MODULES.forEach(m=> byId[m.id]=m);
+  const usados={};
+  const renderCard = (m)=>{
+    const ok = canAccess(m.id);
+    const soon = m.estado==='pronto';
+    const ic = IC[m.id] ? `<svg viewBox="0 0 24 24">${IC[m.id]}</svg>` : `<b>${m.ini}</b>`;
+    let badge='';
+    if(!ok) badge=`<span class="np-tag np-tag-lock">Sin acceso</span>`;
+    else if(soon) badge=`<span class="np-tag">Próximamente</span>`;
+    else if(COUNTS[m.id]) badge=`<span class="np-count ${COUNTS[m.id].cls}">${COUNTS[m.id].txt}</span>`;
+    const cls=`np-card${soon?' np-soon':''}${!ok?' np-lock':''}`;
+    const click = ok ? `onclick="setModule('${m.id}')"` : `onclick="toast('No tienes acceso a este módulo')"`;
+    return `<button class="${cls}" ${click}>${badge}<span class="np-tile">${ic}</span><div class="np-title">${m.nombre}</div><div class="np-desc">${m.desc}</div></button>`;
+  };
+  let sections='';
+  GROUPS.forEach(g=>{
+    const mods=g.ids.map(id=>byId[id]).filter(Boolean);
+    mods.forEach(m=> usados[m.id]=1);
+    if(!mods.length) return;
+    sections += `<div class="np-sec"><div class="np-sechead"><span class="np-lbl">${g.lbl}</span><span class="np-rule"></span></div><div class="np-grid">${mods.map(renderCard).join('')}</div></div>`;
+  });
+  const resto=MODULES.filter(m=>!usados[m.id]);
+  if(resto.length){
+    sections += `<div class="np-sec"><div class="np-sechead"><span class="np-lbl">Más</span><span class="np-rule"></span></div><div class="np-grid">${resto.map(renderCard).join('')}</div></div>`;
+  }
+  const parts=[];
+  if(taPend) parts.push(`<b>${taPend} tarea${taPend===1?'':'s'}</b>`);
+  if(comNL) parts.push(`<b>${comNL} aviso${comNL===1?'':'s'} sin leer</b>`);
+  const attn = parts.length ? `Hoy te esperan ${parts.join(' y ')}.` : `Todo al día. Elige por dónde empezar.`;
+  return `${NP_CSS}<header><div class="brand">
       <img src="${LOGO_WHITE}" alt="Laura Fernández">
       <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández</small></div>
     </div>${whoBlock(false)}</header>
-  <main class="homearea"><div class="wrap">
-    <div class="hello">Hola, ${first}. ¿Con qué quieres trabajar?</div>
-    <div class="modgrid">${cards}</div>
-    <div style="text-align:center;margin-top:30px;font-size:10.5px;color:var(--grey-2);opacity:.6;letter-spacing:.3px">Lucai · ${APP_VERSION}</div>
+  <main class="homearea"><div class="np-wrap">
+    <div class="np-eyebrow">Panel de la clínica</div>
+    <h1 class="np-hello">Hola, ${first}.</h1>
+    <p class="np-attn">${attn}</p>
+    ${sections}
+    <div style="text-align:center;margin-top:34px;font-size:10.5px;color:#9AA0A6;opacity:.7;letter-spacing:.3px">Lucai · ${APP_VERSION}</div>
   </div></main>`;
 }
 
