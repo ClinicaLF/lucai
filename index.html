@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-74">
+<meta name="lucai-version" content="2026-06-08-76">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -2579,7 +2579,8 @@ function homeView(){
   const comNL = (typeof comNoLeidasDe==='function') ? comNoLeidasDe(me) : 0;
   const COUNTS = {
     tareas: (taPend||taNuevos) ? {txt:`${taPend}${taNuevos?` · ${taNuevos}✉`:''}`, cls: taVenc?'np-c-red':'np-c-ink'} : null,
-    comunicaciones: comNL ? {txt:`${comNL}`, cls:'np-c-red'} : null
+    comunicaciones: comNL ? {txt:`${comNL}`, cls:'np-c-red'} : null,
+    temas: (function(){ try{ var n=(S.temas||[]).filter(function(t){ return (typeof temaParticipa==='function'?temaParticipa(t):true) && t.estado!=='cerrado' && (typeof temaNoLeido==='function'&&temaNoLeido(t)); }).length; return n?{txt:String(n),cls:'np-c-red'}:null; }catch(_){ return null; } })()
   };
   const IC = {
     tareas:'<path d="M9 4h6a1 1 0 0 1 1 1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1a1 1 0 0 1 1-1z"/><path d="M8 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M8.5 12.5l2 2 4-4.5"/>',
@@ -4988,6 +4989,19 @@ function iaContexto(pregunta){
     if(comNoLeidas.length>15) out.push(`...y ${comNoLeidas.length-15} más sin leer.`);
   }
 
+  /* TEMAS de coordinación visibles para esta persona (hilos de equipo, sin datos de pacientes).
+     Respeta la privacidad: solo los temas en los que participa quien pregunta. */
+  const temasVis = (S.temas||[]).filter(t=> (typeof temaVisible==='function')?temaVisible(t):true);
+  const temasAb = temasVis.filter(t=> t.estado!=='cerrado');
+  out.push(`\n[TEMAS DE COORDINACIÓN] ${temasAb.length} abiertos · ${temasVis.length} visibles para ti. Hilos del equipo (sin datos de pacientes). Si te piden un resumen de un tema, hazlo con lo de aquí.`);
+  temasVis.slice(0,15).forEach(t=>{
+    out.push(`\n• TEMA "${t.titulo||'(sin título)'}" [${t.estado||'abierto'}] | abrió: ${t.autor||'—'} | participantes: ${(t.participantes||[]).join(', ')||'—'}${t.descripcion?` | descripción: ${t.descripcion}`:''}`);
+    const msgs=Array.isArray(t.mensajes)?t.mensajes:[];
+    if(!msgs.length) out.push('  (sin mensajes todavía)');
+    else msgs.slice(-20).forEach(m=>{ const tx=(m.texto||'').replace(/\s+/g,' ').trim(); out.push(`  - ${m.de||'—'}: ${tx.length>240?tx.slice(0,240)+'…':(tx||'(imagen)')}`); });
+  });
+  if(temasVis.length>15) out.push(`...y ${temasVis.length-15} temas más.`);
+
   const recib = (S.tareas||[]).filter(t=> t.paraQuien===me);
   const act = recib.filter(activa);
   const porHacer = act.filter(t=>t.estado!=='En espera');
@@ -6107,9 +6121,15 @@ function tarVerImg(p){
     const d=document.createElement('div');
     d.style.cssText='position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px';
     d.onclick=()=>d.remove();
+    const x=document.createElement('button');
+    x.textContent='×';
+    x.title='Cerrar';
+    x.style.cssText='position:fixed;top:14px;right:18px;z-index:3001;width:46px;height:46px;border-radius:50%;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:28px;line-height:1;cursor:pointer';
+    x.onclick=(e)=>{ e.stopPropagation(); d.remove(); };
     const img=document.createElement('img');
     img.src=u; img.style.cssText='max-width:100%;max-height:100%;border-radius:8px';
-    d.appendChild(img); document.body.appendChild(d);
+    img.onclick=(e)=>e.stopPropagation();
+    d.appendChild(img); d.appendChild(x); document.body.appendChild(d);
   };
   if(window._tarImgUrls[p]){ open(window._tarImgUrls[p]); return; }
   sbc.storage.from(TAR_BUCKET).createSignedUrl(p, 3600).then(res=>{
@@ -6307,7 +6327,8 @@ async function srvTemaUpdate(id, t){
 
 /* ---- helpers ---- */
 function temaById(id){ return (S.temas||[]).find(x=>String(x.id)===String(id)); }
-function temaVisible(t){ const me=S.user&&S.user.nombre; if(!me) return false; if(t.autor===me) return true; if(Array.isArray(t.participantes)&&t.participantes.length) return t.participantes.includes(me); return true; }
+function temaParticipa(t){ const me=S.user&&S.user.nombre; if(!me) return false; if(t.autor===me) return true; if(Array.isArray(t.participantes)&&t.participantes.length) return t.participantes.includes(me); return true; }
+function temaVisible(t){ if(typeof isAdmin==='function' && isAdmin()) return true; return temaParticipa(t); }
 function temaDelMsg(id, idx){
   const t=temaById(id); if(!t) return;
   const m=(t.mensajes||[])[idx]; if(!m) return;
@@ -6338,6 +6359,7 @@ function commitTemaNuevo(){
   t.vistos[me]=now();
   S.temas.unshift(t); S.modal=null; S.module='temas'; S.temaOpen=String(t.id); render();
   srvTemaInsert(t, 'Tema creado');
+  partes.filter(function(n){ return n && n!==me; }).forEach(function(n){ tgNotify(n, `🆕 Nuevo tema "${titulo}" creado por ${me} en Lucai → Temas.`); });
 }
 
 /* ---- mensajes ---- */
@@ -6363,9 +6385,6 @@ function temaPostMsg(id){
   if(!t.vistos) t.vistos={}; t.vistos[me]=now();
   F.temaDraft=''; S.temaAdj=null; S.temaReply=null; render();
   srvTemaUpdate(id, t);
-  const dest=(Array.isArray(t.participantes)&&t.participantes.length)?t.participantes:appUsers().map(u=>u.nombre);
-  const otros=dest.filter(n=>n && n!==me);
-  otros.forEach(n=> tgNotify(n, `💬 ${me} en el tema "${t.titulo}": ${txt||'(imagen)'}`));
 }
 function temaCerrar(id){ const t=temaById(id); if(!t) return; t.estado='cerrado'; t.fechaCierre=todayStr(); t.cerradoPor=S.user.nombre; render(); srvTemaUpdate(id, t); toast('Tema cerrado'); }
 function temaReabrir(id){ const t=temaById(id); if(!t) return; t.estado='abierto'; t.fechaCierre=null; t.cerradoPor=null; render(); srvTemaUpdate(id, t); toast('Tema reabierto'); }
@@ -6382,7 +6401,8 @@ function temasView(){
   <main><div class="wrap">
     ${inner}
   </div></main>
-  ${S.modal?modalContent():''}`;
+  ${S.modal?modalContent():''}
+  ${(typeof iaFloatHtml==='function')?iaFloatHtml():''}`;
 }
 function temasListView(){
   const me=S.user.nombre;
@@ -6393,7 +6413,8 @@ function temasListView(){
     return String(lb).localeCompare(String(la));
   });
   const rows=list.length? list.map(t=>{
-    const nMsg=(t.mensajes||[]).length; const nuevo=t.estado!=='cerrado'&&temaNoLeido(t);
+    const nMsg=(t.mensajes||[]).length; const nuevo=t.estado!=='cerrado'&&temaParticipa(t)&&temaNoLeido(t);
+    const soloDir=(typeof isAdmin==='function'&&isAdmin())&&!temaParticipa(t);
     const cerrado=t.estado==='cerrado';
     return `<div onclick="abrirTema('${t.id}')" style="cursor:pointer;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:${cerrado?'#F7F7F5':'#fff'};display:flex;justify-content:space-between;align-items:center;gap:12px">
       <div style="min-width:0">
@@ -6403,7 +6424,7 @@ function temasListView(){
           ${cerrado?'<span style="font-size:11px;font-weight:600;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px">Cerrado</span>':''}
         </div>
         ${t.descripcion?`<div style="font-size:13px;color:#5A6770;margin-top:3px">${incEsc(t.descripcion)}</div>`:''}
-        <div style="font-size:12px;color:#8A949B;margin-top:3px">${incEsc(t.autor||'—')} · ${nMsg} mensaje${nMsg===1?'':'s'} · ${(t.participantes||[]).length||1} participante${(((t.participantes||[]).length||1)===1)?'':'s'}${cerrado&&t.fechaCierre?` · cerrado ${incEsc(fmtFecha(t.fechaCierre))}`:''}</div>
+        <div style="font-size:12px;color:#8A949B;margin-top:3px">${incEsc(t.autor||'—')} · ${nMsg} mensaje${nMsg===1?'':'s'} · ${(t.participantes||[]).length||1} participante${(((t.participantes||[]).length||1)===1)?'':'s'}${soloDir?' · <span style="color:#B8860B">ves esto como Dirección</span>':''}${cerrado&&t.fechaCierre?` · cerrado ${incEsc(fmtFecha(t.fechaCierre))}`:''}</div>
       </div>
       <div style="flex:0 0 auto;color:#B8A88F;font-size:22px">›</div>
     </div>`;
@@ -6443,7 +6464,7 @@ function temaDetalleView(t){
         <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${incEsc(t.titulo)}${cerrado?'<span style="font-size:11px;font-weight:600;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px">Cerrado</span>':''}</div>
         <div class="section-sub" style="margin:0">Abierto por ${incEsc(t.autor||'—')} · ${incEsc(temaFmtTs(t.ts))}${(t.participantes&&t.participantes.length>1)?` · con ${incEsc(t.participantes.filter(n=>n!==t.autor).join(', '))}`:''}</div>
         ${t.descripcion?`<div style="font-size:13px;color:#5A6770;margin-top:7px;background:#F7F4EE;border-radius:8px;padding:8px 11px;max-width:640px">${incEsc(t.descripcion)}</div>`:''}</div>
-      ${!cerrado?`<div class="actions"><button class="btn btn-ghost" onclick="temaCerrar('${t.id}')">Cerrar tema</button></div>`:''}
+      <div class="actions">${(t.autor===me||isAdmin())?`<button class="btn btn-ghost" onclick="openTemaPartes('${t.id}')">Participantes</button>`:''}${!cerrado?`<button class="btn btn-ghost" onclick="temaCerrar('${t.id}')">Cerrar tema</button>`:''}</div>
     </div>
     <div style="margin-bottom:12px">${list}</div>
     ${compose}`;
@@ -6458,8 +6479,40 @@ appView = function(){
 const _modalContent_tema = modalContent;
 modalContent = function(){
   if(F.type==='tema_nuevo') return temaNuevoModalContent();
+  if(F.type==='tema_edit_partes') return temaPartesModalContent();
   return _modalContent_tema();
 };
+function openTemaPartes(id){
+  const t=temaById(id); if(!t) return;
+  const me=S.user.nombre;
+  if(!(t.autor===me || isAdmin())){ toast('Solo quien creó el tema (o Dirección) puede cambiar los participantes'); return; }
+  F={type:'tema_edit_partes', editId:String(id), tparts:(t.participantes||[]).slice()};
+  S.modal='tema_edit_partes'; render();
+}
+function commitTemaPartes(){
+  const t=temaById(F.editId); if(!t) return;
+  var partes=Array.isArray(F.tparts)?F.tparts.slice():[];
+  if(partes.indexOf(t.autor)<0) partes.unshift(t.autor);
+  t.participantes=partes; S.modal=null; render();
+  srvTemaUpdate(t.id, t); toast('Participantes actualizados');
+}
+function temaPartesModalContent(){
+  const t=temaById(F.editId); const all=temaUsuarios(); const autor=t?t.autor:'';
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
+    <div class="modal-head"><h2>Participantes del tema</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Añade o quita personas. Quien quede fuera dejará de ver el tema; quien entre verá todo el historial.</div>
+      <div class="fld"><label>Participantes</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button type="button" class="chip-sel ${(F.tparts||[]).length>=all.length&&all.length?'on':''}" onclick="temaAllPartes()">Todo el equipo</button>
+          ${all.map(n=>`<button type="button" class="chip-sel ${(n===autor||(F.tparts||[]).includes(n))?'on':''}" ${n===autor?'disabled style="opacity:.65;cursor:default"':''} onclick="temaToggleParte('${incEsc(n)}')">${incEsc(n)}${n===autor?' (creó)':''}</button>`).join('')}
+        </div>
+        <div class="hint" style="text-align:left;margin-top:5px">Quien creó el tema siempre queda dentro.</div></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="commitTemaPartes()">Guardar</button></div>
+  </div></div>`;
+}
 function temaNuevoModalContent(){
   const me=S.user&&S.user.nombre; const all=temaUsuarios();
   return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
