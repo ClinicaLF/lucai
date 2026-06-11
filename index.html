@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-57">
+<meta name="lucai-version" content="2026-06-08-60">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -618,7 +618,7 @@ const SUPABASE_KEY = 'sb_publishable_z-TexwPd_srvBHfWL2vnyA_zTOpi0ue';
 const sbc = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let DEVICE = false, LOADED = false;
 const CLINICA = 'centro';
-const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','seguimientos','tarAreas','grupos','comCategorias','usuarios'];
+const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','seguimientos','tarAreas','grupos','comCategorias','usuarios','doctores'];
 let _persistT = null;
 
 async function boot(){
@@ -812,6 +812,7 @@ function whoBlock(showBell){
       <span class="badge">${cadItems().length}</span></button>`:''}
     <div class="chip"><span class="avatar">${initials(S.user.nombre)}</span><span class="nm">${S.user.nombre}</span></div>
     ${isAdmin()?`<button class="logout" onclick="openUsuarios()">Usuarios</button>`:''}
+    ${isAdmin()?`<button class="logout" onclick="openDoctores()">Doctores</button>`:''}
     <button class="logout" onclick="openCambiarPin()">Mi contraseña</button>
     <button class="logout" onclick="logout()">Cerrar sesión</button>
   </div>`;
@@ -1519,16 +1520,19 @@ function stockMoveModal(){
   let extra='';
   if(F.type==='salida'){
     extra=`
-      <div class="fld"><label>Doctor</label><div>${DOCTORS.map((d,i)=>`<button class="chip-sel ${F.doctor===d?'on':''}" onclick="selDoctor(${i})">${d}</button>`).join("")}</div></div>
-      <div class="grid2">
-        <div class="fld" style="margin-top:0"><label>Nº paciente</label><input class="inp" value="${F.pcod}" oninput="setInp('pcod',this.value)"></div>
-        <div class="fld" style="margin-top:0"><label>Nombre paciente</label><input class="inp" value="${F.pnombre}" oninput="setInp('pnombre',this.value)"></div>
-      </div>
-      <div class="fld"><label>Apellidos paciente</label><input class="inp" value="${F.papellido}" oninput="setInp('papellido',this.value)"></div>
+      <div class="fld"><label>Doctor</label>
+        <select class="inp" onchange="setSel('doctor',this.value)"><option value="">Elige doctor…</option>${appDoctores().map(d=>`<option ${F.doctor===d?'selected':''}>${incEsc(d)}</option>`).join('')}</select></div>
+      <div class="fld"><label>Paciente <span style="text-transform:none;letter-spacing:0;font-weight:500;color:#A9B0B6">· opcional</span></label>
+        <div class="grid2">
+          <input class="inp" value="${F.pcod}" oninput="setInp('pcod',this.value)" placeholder="Nº paciente">
+          <input class="inp" value="${F.pnombre}" oninput="setInp('pnombre',this.value)" placeholder="Nombre y apellido">
+        </div></div>
       <div class="fld"><label>Incidencia</label>
-        <button class="chip-sel ${!F.incidencia?'on':''}" onclick="setToggle('incidencia',false)">Salida normal</button>
-        <button class="chip-sel ${F.incidencia?'on':''}" onclick="setToggle('incidencia',true)">Marcar incidencia</button></div>
-      ${F.incidencia?`<textarea class="inp" placeholder="¿Qué pasó?" oninput="setInp('incidComentario',this.value)">${F.incidComentario||''}</textarea>`:''}`;
+        <div class="chips">
+          <button class="chip-sel ${!F.incidencia?'on':''}" onclick="setToggle('incidencia',false)">Salida normal</button>
+          <button class="chip-sel ${F.incidencia?'on':''}" onclick="setToggle('incidencia',true)">Marcar incidencia</button>
+        </div></div>
+      ${F.incidencia?`<textarea class="inp" style="margin-top:10px" placeholder="¿Qué pasó?" oninput="setInp('incidComentario',this.value)">${F.incidComentario||''}</textarea>`:''}`;
   } else if(F.type==='entrada'){
     extra=`<div class="grid2">
       <div class="fld" style="margin-top:0"><label>Precio compra (€/ud.)</label><input class="inp" type="number" min="0" step="0.01" placeholder="opcional" value="${F.precio}" oninput="setInp('precio',this.value)"></div>
@@ -1546,13 +1550,15 @@ function stockMoveModal(){
   return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
     <div class="modal-head"><h2>${head}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div style="display:flex;align-items:center;gap:8px;background:var(--azul-claro,#E8EAED);border-radius:9px;padding:8px 12px;margin-bottom:12px;font-size:13px">
-        <span class="avatar">${initials(S.user.nombre)}</span>
+      <div style="display:flex;align-items:center;gap:8px;background:var(--azul-claro,#E8EAED);border-radius:9px;padding:6px 10px;margin-bottom:10px;font-size:12.5px">
+        <span class="avatar" style="width:28px;height:28px;font-size:11px">${initials(S.user.nombre)}</span>
         <span>Registrando como <strong>${S.user.nombre}</strong></span></div>
-      <div class="fld" style="margin-top:0"><label>Artículo</label>
-        <select class="inp" onchange="setSel('cod',this.value)">${artOptions(F.cod, F.type!=='entrada')}</select></div>
-      ${a?`<div class="hint" style="text-align:left">En stock ahora: ${a.stock} ud.</div>`:''}
-      <div class="fld"><label>Cantidad</label><input class="inp" type="number" min="1" value="${F.cant}" oninput="setInp('cant',this.value)" style="max-width:160px"></div>
+      <div class="grid2" style="grid-template-columns:1fr 110px;margin-top:0">
+        <div class="fld" style="margin-top:0"><label>Artículo</label>
+          <select class="inp" onchange="setSel('cod',this.value)">${artOptions(F.cod, F.type!=='entrada')}</select></div>
+        <div class="fld" style="margin-top:0"><label>Cantidad</label><input class="inp" type="number" min="1" value="${F.cant}" oninput="setInp('cant',this.value)"></div>
+      </div>
+      ${a?`<div class="hint" style="text-align:left;margin-top:6px">En stock ahora: ${a.stock} ud.</div>`:''}
       ${extra}
       <div class="req-note ${valid?'okk':''}">${valid?'✓ Listo.':(F.type==='salida'?'! Elige artículo, cantidad y doctor.':'! Elige artículo y cantidad.')}</div>
     </div>
@@ -1700,6 +1706,15 @@ async function loadFromDB(){
       recTs:r.rec_ts, recUser:r.rec_user, lineas:Array.isArray(r.lineas)?r.lineas:[] }));
     if(segs.data) S.seguimientos = segs.data.map(r=>({
       id:r.id, ts:r.ts, user:r.user_nombre, cod:r.cod, nombre:r.nombre, estado:r.estado, comentario:r.comentario }));
+    // restaurar (una vez) los campos que viven en lucai_estado: usuarios, doctores, áreas, grupos, categorías
+    if(!window._estadoLoaded){
+      try{
+        const { data: estRow } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
+        const d = estRow && estRow.data;
+        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
+      }catch(_){}
+      window._estadoLoaded=true;
+    }
     LOADED = true;
   }catch(e){ console.error('loadFromDB', e); toast('No se pudieron cargar los datos: '+(e.message||e)); }
 }
@@ -3356,7 +3371,7 @@ function presFormBody(){
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <div class="fld" style="flex:1;min-width:180px"><label>Doctor que lo entregó</label>
-        <select class="inp" onchange="setSel('doctor',this.value)"><option value="">Elige…</option>${DOCTORS.map(d=>`<option ${F.doctor===d?'selected':''}>${incEsc(d)}</option>`).join('')}</select></div>
+        <select class="inp" onchange="setSel('doctor',this.value)"><option value="">Elige…</option>${appDoctores().map(d=>`<option ${F.doctor===d?'selected':''}>${incEsc(d)}</option>`).join('')}</select></div>
       <div class="fld" style="flex:1;min-width:180px"><label>Coordinadora</label>
         <select class="inp" onchange="setSel('coordinadora',this.value)"><option value="">Elige…</option>${COORDINADORAS.map(c=>`<option ${F.coordinadora===c?'selected':''}>${incEsc(c)}</option>`).join('')}</select></div>
     </div>
@@ -5198,7 +5213,10 @@ if(!Array.isArray(S.usuarios) || !S.usuarios.length){
   }));
 }
 function appUsers(){ return (Array.isArray(S.usuarios)&&S.usuarios.length) ? S.usuarios : USERS; }
-function _usuariosPersist(){ try{ if(typeof _persistSoon==='function') _persistSoon(); else if(typeof persistNow==='function') persistNow(); }catch(_){ } }
+function _usuariosPersist(){ try{ if(typeof persistNow==='function') persistNow(); }catch(_){ } }
+/* --- doctores (editable por Dirección) --- */
+if(!Array.isArray(S.doctores) || !S.doctores.length){ S.doctores = DOCTORS.slice(); }
+function appDoctores(){ return (Array.isArray(S.doctores)&&S.doctores.length) ? S.doctores : DOCTORS; }
 function _nextUserId(){ return (appUsers().reduce((m,u)=>Math.max(m, Number(u.id)||0), 0))+1; }
 
 /* permisos: autoridad final (gana la última) */
@@ -5211,6 +5229,36 @@ canAccess = function(id){
 };
 
 /* --- panel de usuarios (solo Dirección) --- */
+/* --- gestionar doctores (solo Dirección) --- */
+function openDoctores(){ if(!isAdmin()){ toast('Solo Dirección puede gestionar doctores'); return; } F={type:'doctores', nuevo:''}; S.modal='doctores'; render(); }
+function doctoresModalContent(){
+  const list=appDoctores().map((d,i)=>`<div style="display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:7px 10px;margin-bottom:6px">
+      <span style="flex:1;min-width:0">${incEsc(d)}</span>
+      <button class="btn btn-ghost btn-sm" style="color:#C0392B" onclick="doctorDel(${i})">Quitar</button></div>`).join('') || '<div class="muted" style="font-size:13px;margin-bottom:6px">Aún no hay doctores en la lista.</div>';
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>Doctores</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Esta lista es la que aparece al registrar una <strong>salida de material</strong> y en los <strong>presupuestos</strong>. Añade o quita los que necesites.</div>
+      ${list}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input class="inp" style="flex:1" placeholder="Nombre del doctor (p. ej. Dra. Marta Ruiz)" value="${incEsc(F.nuevo||'')}" oninput="setInp('nuevo',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();doctorAdd();}">
+        <button class="btn btn-primary" onclick="doctorAdd()">Añadir</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
+    </div></div></div>`;
+}
+function doctorAdd(){
+  const n=(F.nuevo||'').trim(); if(!n) return;
+  const list=appDoctores().slice();
+  if(list.some(d=>d.toLowerCase()===n.toLowerCase())){ toast('Ese doctor ya está en la lista'); return; }
+  list.push(n); S.doctores=list; F.nuevo=''; _usuariosPersist(); render(); toast('Doctor añadido');
+}
+function doctorDel(i){
+  const list=appDoctores().slice(); if(list[i]==null) return;
+  list.splice(i,1); S.doctores=list; _usuariosPersist(); render();
+}
+
+/* --- gestionar usuarios (solo Dirección) --- */
 function openUsuarios(){ if(!isAdmin()){ toast('Solo Dirección puede gestionar usuarios'); return; } F={type:'usuarios'}; S.modal='usuarios'; render(); }
 function usuariosModalContent(){
   const filas=appUsers().map(u=>{
@@ -5329,6 +5377,7 @@ async function commitCambiarPin(){
 const _modalContent_usr = modalContent;
 modalContent = function(){
   if(F.type==='usuarios') return usuariosModalContent();
+  if(F.type==='doctores') return doctoresModalContent();
   if(F.type==='usuario_edit') return usuarioEditModalContent();
   if(F.type==='cambiar_pin') return cambiarPinModalContent();
   return _modalContent_usr();
