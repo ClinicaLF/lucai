@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-77">
+<meta name="lucai-version" content="2026-06-11-78">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -794,7 +794,7 @@ function resetIdle(){
 }
 
 /* ---- APP SHELL ---- */
-const APP_VERSION = 'v2026.06.11-3';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
+const APP_VERSION = 'v2026.06.11-4';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
 const MODULES = [
   {id:'material', nombre:'Control de material', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
   {id:'tareas', nombre:'Tareas', ini:'T', desc:'Tareas que van surgiendo en la clínica: qué hay que hacer, quién es responsable, estado y seguimiento.', estado:'pronto'},
@@ -6297,7 +6297,8 @@ loadFromDB = async function(){
         participantes: Array.isArray(x.participantes)?x.participantes:(function(){ try{ return x.participantes?JSON.parse(x.participantes):[]; }catch(_){ return []; } })(),
         estado:x.estado||'abierto', ts:x.ts, fechaCierre:x.fecha_cierre||null, cerradoPor:x.cerrado_por||null,
         mensajes: Array.isArray(x.mensajes)?x.mensajes:(function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
-        vistos: (x.vistos&&typeof x.vistos==='object'&&!Array.isArray(x.vistos))?x.vistos:{}
+        vistos: (x.vistos&&typeof x.vistos==='object'&&!Array.isArray(x.vistos))?x.vistos:{},
+        fijadoPor: Array.isArray(x.fijado_por)?x.fijado_por:(function(){ try{ return x.fijado_por?JSON.parse(x.fijado_por):[]; }catch(_){ return []; } })()
       }));
     }
   }catch(e){ console.error('loadTemas', e); }
@@ -6309,7 +6310,7 @@ async function srvTemaInsert(t, okMsg){
       id:t.id, titulo:t.titulo, descripcion:t.descripcion||null, autor:t.autor,
       participantes:(t.participantes||[]),
       estado:t.estado||'abierto', ts:t.ts, fecha_cierre:t.fechaCierre||null, cerrado_por:t.cerradoPor||null,
-      mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) });
+      mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), fijado_por:(t.fijadoPor||[]) });
     if(error) throw error;
   }catch(e){ console.error('srvTemaInsert', e); await syncAll(); toast('Error al crear el tema: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
@@ -6319,9 +6320,16 @@ async function srvTemaUpdate(id, t){
     const { error } = await sbc.from('lucai_temas').update({
       titulo:t.titulo, descripcion:t.descripcion||null, participantes:(t.participantes||[]), estado:t.estado||'abierto',
       fecha_cierre:t.fechaCierre||null, cerrado_por:t.cerradoPor||null,
-      mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) }).eq('id', id);
+      mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), fijado_por:(t.fijadoPor||[]) }).eq('id', id);
     if(error) throw error;
   }catch(e){ console.error('srvTemaUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+async function srvTemaDelete(id){
+  try{
+    const { error } = await sbc.from('lucai_temas').delete().eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('srvTemaDelete', e); await syncAll(); toast('Error al eliminar el tema: '+(e.message||e)); return; }
   await loadFromDB(); render();
 }
 
@@ -6331,6 +6339,27 @@ function temaParticipa(t){ const me=S.user&&S.user.nombre; if(!me) return false;
 function temaVisible(t){ if(typeof isAdmin==='function' && isAdmin()) return true; return temaParticipa(t); }
 function setTemaBuscar(v){ S.temaBuscar=v; render(); const e=el('temaBuscar'); if(e){ e.focus(); const val=e.value; e.value=''; e.value=val; } }
 function temaToggleArchivados(){ S.temasVerArchivados=!S.temasVerArchivados; render(); }
+function temaPinIcon(filled){ return `<svg width="15" height="15" viewBox="0 0 24 24" fill="${filled?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>`; }
+function temaFijado(t){ const me=S.user&&S.user.nombre; if(!me||!t) return false; return Array.isArray(t.fijadoPor) && t.fijadoPor.includes(me); }
+function temaFijadosCount(){ const me=S.user&&S.user.nombre; if(!me) return 0; return (S.temas||[]).filter(t=>Array.isArray(t.fijadoPor)&&t.fijadoPor.includes(me)).length; }
+function temaToggleFijar(id){
+  const t=temaById(id); if(!t) return; const me=S.user.nombre;
+  if(!Array.isArray(t.fijadoPor)) t.fijadoPor=[];
+  const i=t.fijadoPor.indexOf(me);
+  if(i>=0){ t.fijadoPor.splice(i,1); render(); srvTemaUpdate(id,t); }
+  else{
+    if(temaFijadosCount()>=3){ toast('Solo puedes fijar 3 temas arriba. Quita uno antes de fijar otro.'); return; }
+    t.fijadoPor.push(me); render(); srvTemaUpdate(id,t); toast('Tema fijado arriba');
+  }
+}
+function temaEliminar(id){
+  if(!isAdmin()){ toast('Solo Dirección puede eliminar un tema'); return; }
+  const t=temaById(id); if(!t) return;
+  if(!confirm('¿Eliminar el tema "'+(t.titulo||'')+'" por completo?\n\nSe borrará el hilo entero con todos sus mensajes. Esta acción NO se puede deshacer.')) return;
+  S.temas=(S.temas||[]).filter(x=>String(x.id)!==String(id));
+  if(String(S.temaOpen)===String(id)) S.temaOpen=null;
+  render(); srvTemaDelete(id); toast('Tema eliminado');
+}
 function temaDelMsg(id, idx){
   const t=temaById(id); if(!t) return;
   const m=(t.mensajes||[])[idx]; if(!m) return;
@@ -6357,7 +6386,7 @@ function commitTemaNuevo(){
   const me=S.user.nombre;
   var partes=Array.isArray(F.tparts)?F.tparts.slice():[];
   if(partes.indexOf(me)<0) partes.unshift(me);
-  const t={ id:'T'+Date.now().toString(36), titulo, descripcion:(F.tdesc||'').trim(), participantes:partes, autor:me, estado:'abierto', ts:now(), fechaCierre:null, cerradoPor:null, mensajes:[], vistos:{} };
+  const t={ id:'T'+Date.now().toString(36), titulo, descripcion:(F.tdesc||'').trim(), participantes:partes, autor:me, estado:'abierto', ts:now(), fechaCierre:null, cerradoPor:null, mensajes:[], vistos:{}, fijadoPor:[] };
   t.vistos[me]=now();
   S.temas.unshift(t); S.modal=null; S.module='temas'; S.temaOpen=String(t.id); render();
   srvTemaInsert(t, 'Tema creado');
@@ -6416,6 +6445,8 @@ function temasListView(){
   if(!verArch) list=list.filter(t=> t.estado!=='cerrado');
   if(q) list=list.filter(t=> [t.titulo,t.descripcion,t.autor,(t.participantes||[]).join(' ')].join(' ').toLowerCase().includes(q));
   list=list.sort((a,b)=>{
+    const fa=temaFijado(a), fb=temaFijado(b);
+    if(fa!==fb) return fa?-1:1;
     if((a.estado==='cerrado')!==(b.estado==='cerrado')) return a.estado==='cerrado'?1:-1;
     const la=(a.mensajes&&a.mensajes.length?a.mensajes[a.mensajes.length-1].ts:a.ts)||'';
     const lb=(b.mensajes&&b.mensajes.length?b.mensajes[b.mensajes.length-1].ts:b.ts)||'';
@@ -6425,7 +6456,8 @@ function temasListView(){
     const nMsg=(t.mensajes||[]).length; const nuevo=t.estado!=='cerrado'&&temaParticipa(t)&&temaNoLeido(t);
     const soloDir=(typeof isAdmin==='function'&&isAdmin())&&!temaParticipa(t);
     const cerrado=t.estado==='cerrado';
-    return `<div onclick="abrirTema('${t.id}')" style="cursor:pointer;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:${cerrado?'#F7F7F5':'#fff'};display:flex;justify-content:space-between;align-items:center;gap:12px">
+    const fijado=temaFijado(t);
+    return `<div onclick="abrirTema('${t.id}')" style="cursor:pointer;border:1px solid var(--line);${fijado?'border-left:3px solid #A8B400;':''}border-radius:12px;padding:12px 14px;margin-bottom:10px;background:${cerrado?'#F7F7F5':'#fff'};display:flex;justify-content:space-between;align-items:center;gap:12px">
       <div style="min-width:0">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           ${nuevo?'<span style="width:8px;height:8px;border-radius:50%;background:#C0392B;display:inline-block;flex:0 0 auto"></span>':''}
@@ -6435,7 +6467,10 @@ function temasListView(){
         ${t.descripcion?`<div style="font-size:13px;color:#5A6770;margin-top:3px">${incEsc(t.descripcion)}</div>`:''}
         <div style="font-size:12px;color:#8A949B;margin-top:3px">${incEsc(t.autor||'—')} · ${nMsg} mensaje${nMsg===1?'':'s'} · ${(t.participantes||[]).length||1} participante${(((t.participantes||[]).length||1)===1)?'':'s'}${soloDir?' · <span style="color:#B8860B">ves esto como Dirección</span>':''}${cerrado&&t.fechaCierre?` · cerrado ${incEsc(fmtFecha(t.fechaCierre))}`:''}</div>
       </div>
-      <div style="flex:0 0 auto;color:#B8A88F;font-size:22px">›</div>
+      <div style="flex:0 0 auto;display:flex;align-items:center;gap:4px">
+        <button onclick="event.stopPropagation();temaToggleFijar('${t.id}')" title="${fijado?'Quitar de fijados':'Fijar arriba'}" style="border:none;background:none;cursor:pointer;padding:6px;line-height:0;color:${fijado?'#A8B400':'#C2C7CC'}">${temaPinIcon(fijado)}</button>
+        <span style="color:#B8A88F;font-size:22px">›</span>
+      </div>
     </div>`;
   }).join('') : `<div class="muted" style="text-align:center;padding:32px">${q?'Ningún tema coincide con la búsqueda.':(verArch?'No hay temas archivados.':'Aún no tienes temas abiertos. Crea uno nuevo o pide que te añadan como participante.')}</div>`;
   return `<div class="toolbar" style="margin:6px 0 14px">
@@ -6477,7 +6512,7 @@ function temaDetalleView(t){
         <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${incEsc(t.titulo)}${cerrado?'<span style="font-size:11px;font-weight:600;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px">Cerrado</span>':''}</div>
         <div class="section-sub" style="margin:0">Abierto por ${incEsc(t.autor||'—')} · ${incEsc(temaFmtTs(t.ts))}${(t.participantes&&t.participantes.length>1)?` · con ${incEsc(t.participantes.filter(n=>n!==t.autor).join(', '))}`:''}</div>
         ${t.descripcion?`<div style="font-size:13px;color:#5A6770;margin-top:7px;background:#F7F4EE;border-radius:8px;padding:8px 11px;max-width:640px">${incEsc(t.descripcion)}</div>`:''}</div>
-      <div class="actions">${(t.autor===me)?`<button class="btn btn-ghost" onclick="openTemaPartes('${t.id}')">Participantes</button>`:''}${!cerrado?`<button class="btn btn-ghost" onclick="temaCerrar('${t.id}')">Cerrar tema</button>`:''}</div>
+      <div class="actions"><button class="btn btn-ghost" onclick="temaToggleFijar('${t.id}')" title="${temaFijado(t)?'Quitar de fijados':'Fijar arriba'}" style="display:inline-flex;align-items:center;gap:6px${temaFijado(t)?';color:#5A6E00':''}">${temaPinIcon(temaFijado(t))} ${temaFijado(t)?'Fijado':'Fijar'}</button>${(t.autor===me)?`<button class="btn btn-ghost" onclick="openTemaPartes('${t.id}')">Participantes</button>`:''}${!cerrado?`<button class="btn btn-ghost" onclick="temaCerrar('${t.id}')">Cerrar tema</button>`:''}${isAdmin()?`<button class="btn btn-ghost" onclick="temaEliminar('${t.id}')" style="color:#C0392B">Eliminar tema</button>`:''}</div>
     </div>
     <div style="margin-bottom:12px">${list}</div>
     ${compose}`;
