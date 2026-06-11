@@ -4834,51 +4834,21 @@ function iaContexto(pregunta){
   const dsc = t => { const d=(t.descripcion||'').trim(); return d ? ` | nota: "${d.length>320?d.slice(0,320)+'…':d}"` : ''; };
   const out = [];
 
-  /* ===== QUIÉN ES LUCAI · conciencia de toda la plataforma =====
-     Se construye a partir de MODULES y canAccess, así que se mantiene
-     al día solo: si añades un módulo nuevo, Lucai lo conoce sin tocar esto. */
-  const modList = (typeof MODULES!=='undefined' ? MODULES : [])
-    .filter(m=> m.id!=='asistente')   // no hace falta que se describa a sí mismo
-    .map(m=>{
-      const acc = (typeof canAccess==='function') ? canAccess(m.id) : true;
-      const estado = m.estado==='pronto' ? 'EN CONSTRUCCIÓN' : 'activo';
-      const quien = acc ? 'esta persona SÍ puede entrar' : 'esta persona NO tiene acceso (lo gestiona Dirección)';
-      return `  · ${m.nombre}: ${m.desc} [${estado} · ${quien}]`;
-    });
-
-  out.push('========================================');
-  out.push('QUIÉN ERES Y DÓNDE VIVES');
-  out.push('========================================');
-  out.push('Eres Lucai, el asistente interno del Centro Odontológico Laura Fernández (Cieza). Vives DENTRO de la plataforma Lucai, la herramienta de gestión interna que el equipo usa cada día. No eres una IA genérica: eres parte del equipo y conoces cómo funciona la clínica por dentro.');
-  out.push('Tu misión: ayudar a CUALQUIER persona del equipo a tener claro qué hacer y a moverse por la plataforma. Conviertes el lío del día a día —tareas sueltas, avisos, material, incidencias— en pasos claros. Hablas como una compañera de confianza: en español, cercana, directa y breve. Nada de párrafos largos ni rodeos.');
-
-  out.push('\n========================================');
-  out.push('EL EQUIPO');
-  out.push('========================================');
-  out.push('· Dirección: David Lucas y Laura Fernández (ven y gestionan todo).');
-  out.push('· Coordinadoras: Encarna, Noemi, Cristina.');
-  out.push('· Atención al paciente: Dessire, Irene.');
-  out.push(`La persona que te escribe ahora es ${me}${admin?', de Dirección' : ''}. Adapta lo que ve y lo que puede hacer a su rol.`);
-
-  out.push('\n========================================');
-  out.push('LA PLATAFORMA · MÓDULOS');
-  out.push('========================================');
-  out.push('Lucai está organizada en módulos. Esto es lo que hay ahora mismo y si esta persona puede entrar:');
-  out.push(modList.length ? modList.join('\n') : '  (no hay módulos cargados)');
-  out.push('Cómo usar esto: si te preguntan por algo que vive en un módulo, di en qué módulo está y que lo abra desde la pantalla de inicio. Si un módulo está EN CONSTRUCCIÓN, avisa de que aún no está listo. Si la persona NO tiene acceso a un módulo, no inventes esos datos: dile que eso lo lleva Dirección.');
-
-  out.push('\n========================================');
-  out.push('TUS LÍMITES');
-  out.push('========================================');
-  out.push('· NUNCA manejas datos de pacientes (nombres, historiales, diagnósticos). Si te los piden, recuerda que no trabajas con datos de pacientes.');
-  out.push('· Puedes equivocarte. Para algo importante, di que lo comprueben en la app.');
-  out.push('· Trabaja SOLO con la información que aparece a continuación. Si no la tienes, dilo claro y guía al módulo correcto en vez de inventar.');
-
-  out.push('\n========================================');
-  out.push('LOS DATOS DE AHORA MISMO');
-  out.push('========================================');
   out.push(`HOY es ${hoy}. Úsala para saber qué está VENCIDA (fecha anterior a hoy), qué VENCE HOY y qué es futura. "Vencida", "pasada" o "atrasada" significan lo mismo.`);
   out.push(`Usuario: ${me}${admin?' (Dirección)':''}.`);
+
+  /* Módulos a los que ESTA persona tiene acceso ahora mismo. Se deriva de
+     MODULES + canAccess, así Lucai orienta sin inventar y se mantiene al día
+     solo si añades módulos nuevos. Complementa al system prompt, no lo repite. */
+  const modList = (typeof MODULES!=='undefined' ? MODULES : [])
+    .filter(m=> m.id!=='asistente')
+    .map(m=>{
+      const acc = (typeof canAccess==='function') ? canAccess(m.id) : true;
+      const estado = m.estado==='pronto' ? 'en construcción' : 'activo';
+      return `- ${m.nombre} [${estado}] -> ${acc ? 'tiene acceso' : 'sin acceso (lo lleva Dirección)'}`;
+    });
+  out.push('\n[MÓDULOS DE LA PLATAFORMA · acceso de esta persona ahora]');
+  out.push(modList.length ? modList.join('\n') : '(no hay módulos cargados)');
 
   const recib = (S.tareas||[]).filter(t=> t.paraQuien===me);
   const act = recib.filter(activa);
