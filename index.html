@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-61">
+<meta name="lucai-version" content="2026-06-08-62">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -392,7 +392,7 @@
   .modcard{text-align:left;background:var(--white);border:1.5px solid var(--line);border-radius:16px;
     padding:20px;transition:.15s;display:flex;flex-direction:column;gap:7px;min-height:176px}
   .modcard:hover{border-color:var(--madera);transform:translateY(-2px);box-shadow:var(--shadow)}
-  .mc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .mc-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
   .mc-ic{width:48px;height:48px;border-radius:13px;background:var(--arena-2);color:var(--ink);
     font-family:var(--serif);font-size:23px;display:flex;align-items:center;justify-content:center}
   .modcard.soon-card .mc-ic{background:var(--arena-1);color:var(--grey-2)}
@@ -5520,7 +5520,7 @@ homeView = function(){
 
 
 /* ===== USUARIOS Y PERMISOS (Dirección) ===== */
-const DEFAULT_PERMS = ['incidencias','tareas','asistente','comunicaciones'];
+const DEFAULT_PERMS = ['incidencias','tareas','asistente','comunicaciones','accesos'];
 
 /* --- credenciales: usuario + contraseña (con hash) --- */
 function _slug(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'').slice(0,20); }
@@ -6051,8 +6051,7 @@ document.addEventListener('paste', tarOnPaste);
 if(!Array.isArray(S.accesos)) S.accesos=[];
 if(!PERSIST_FIELDS.includes('accesos')) PERSIST_FIELDS.push('accesos');
 function appAccesos(){ return Array.isArray(S.accesos)?S.accesos:[]; }
-const _canAccess_acc = canAccess;
-canAccess = function(id){ if(id==='accesos') return !!S.user; return _canAccess_acc(id); };
+/* Accesos respeta los permisos por usuario como el resto de módulos (sin excepción de "siempre abierto"). */
 
 function accesosView(){
   const admin=isAdmin();
