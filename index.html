@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-65">
+<meta name="lucai-version" content="2026-06-08-67">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -632,9 +632,9 @@ async function boot(){
   try{ if(typeof lucaiMigrarUsuarios==='function') await lucaiMigrarUsuarios(); }catch(_){}
   render();
   try{
-    setInterval(lucaiCheckUpdate, 90000);
+    setInterval(lucaiCheckUpdate, 60000);
     document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) lucaiCheckUpdate(); });
-    setTimeout(lucaiCheckUpdate, 8000);
+    [3000, 15000, 30000, 60000, 90000].forEach(ms=> setTimeout(lucaiCheckUpdate, ms));
   }catch(_){}
 }
 async function loadEstado(){
@@ -1258,6 +1258,25 @@ function addPedidoLinea(){
   F.pcod=''; F.pcant=1; F.pprecio=''; render();
 }
 function removePedidoLinea(i){ F.lineas.splice(i,1); render(); }
+/* --- sugerir lo que falta (bajo mínimo) al crear un pedido --- */
+function pedFaltan(){
+  var en={}; (F.lineas||[]).forEach(function(l){ en[l.cod]=1; });
+  var f=lowItems().filter(function(a){ return !en[a.cod]; });
+  var prov=(F.proveedor && F.proveedor!=='__nuevo__')?F.proveedor:'';
+  if(prov) f=f.filter(function(a){ return !a.proveedor || a.proveedor===prov; });
+  return f;
+}
+function pedidoAddArt(cod){
+  if(!Array.isArray(F.lineas)) F.lineas=[];
+  if(F.lineas.some(function(l){ return l.cod===cod; })) return;
+  var a=(typeof art==='function')?art(cod):null; if(!a) return;
+  var sug=Math.max((Number(a.min)||0)-(Number(a.stock)||0),1);
+  var precio=Number(a.precioRef)||Number(a.cost)||0;
+  F.lineas.push({cod:cod, cant:sug, precio:precio});
+  render();
+}
+function pedidoAddTodosFaltan(){ pedFaltan().forEach(function(a){ pedidoAddArt(a.cod); }); }
+function setPedLineaCant(i,v){ if(!Array.isArray(F.lineas)) return; var n=parseInt(v)||0; if(n<1){ F.lineas.splice(i,1); } else { F.lineas[i].cant=n; } render(); }
 function commitPedido(){
   if(!F.lineas.length) return;
   const prov=(F.proveedor==='__nuevo__'?(F.proveedorNuevo||''):(F.proveedor||'')).trim();
@@ -1269,7 +1288,7 @@ function commitPedido(){
 function pedidoModalContent(){
   const total=F.lineas.reduce((s,l)=>s+(l.precio||0)*l.cant,0);
   const lineList=F.lineas.length
-    ? F.lineas.map((l,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;font-size:14px"><span><strong>${nombreOf(l.cod)}</strong> · ×${l.cant}${l.precio>0?` · <span class="mono">${eur(l.precio)}/ud.</span>`:' · <span class="muted">sin precio</span>'}</span><button class="btn btn-ghost btn-sm" onclick="removePedidoLinea(${i})">Quitar</button></div>`).join("")
+    ? F.lineas.map((l,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;font-size:14px"><span><strong>${nombreOf(l.cod)}</strong> · ×<input type="number" min="1" value="${l.cant}" onchange="setPedLineaCant(${i},this.value)" onclick="event.stopPropagation()" style="width:54px;padding:2px 5px;font-size:13px;border:1px solid var(--line);border-radius:6px;margin:0 2px">${l.precio>0?` · <span class="mono">${eur(l.precio)}/ud.</span>`:' · <span class="muted">sin precio</span>'}</span><button class="btn btn-ghost btn-sm" onclick="removePedidoLinea(${i})">Quitar</button></div>`).join("")
     : '<div class="muted" style="font-size:13px">Aún no has añadido ninguna línea.</div>';
   const totalRow=total>0?`<div style="text-align:right;font-size:14px;margin-top:8px">Coste estimado: <strong class="mono">${eur(total)}</strong></div>`:'';
   const provOk=F.proveedor && (F.proveedor!=='__nuevo__' || (F.proveedorNuevo||'').trim());
@@ -1287,6 +1306,11 @@ function pedidoModalContent(){
         </select></div>
       ${F.proveedor==='__nuevo__'?`<div class="fld" style="margin-top:8px"><label>Nombre del proveedor nuevo</label>
         <input class="inp" type="text" placeholder="Ej. Ormco Ibérica" value="${F.proveedorNuevo||''}" oninput="F.proveedorNuevo=this.value" onchange="render()"></div>`:''}
+      ${(function(){ var f=pedFaltan(); if(!f.length) return ''; return `<div class="fld"><label>Lo que falta (bajo mínimo) · ${f.length}</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px">
+          ${f.map(function(a){ return `<button type="button" class="btn btn-ghost btn-sm" onclick="pedidoAddArt('${a.cod}')" title="stock ${a.stock} / mín ${a.min}${a.proveedor?' · '+incEsc(a.proveedor):''}">＋ ${incEsc(a.nombre)} <span class="muted">(${a.stock}/${a.min})</span></button>`; }).join('')}
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" style="font-weight:700" onclick="pedidoAddTodosFaltan()">＋ Añadir todos los que faltan (${f.length})</button></div>`; })()}
       <div class="fld"><label>Artículo</label>
         <select class="inp" onchange="setInp('pcod',this.value)">${artOptions(F.pcod,false)}</select></div>
       <div class="grid2">
