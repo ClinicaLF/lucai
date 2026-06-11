@@ -4539,7 +4539,8 @@ function commitTarea(){
     nuevas.forEach(t=>S.tareas.unshift(t)); closeModal(); render();
     srvTarInsertMany(nuevas, `Serie creada · ${nuevas.length} tareas`);
     const _primer = (base.paraQuien||'').split(' ')[0];
-    let _txt = `Hola ${_primer}, ${base.deQuien} te ha asignado una tarea que se repite:\n\n${base.titulo}\n${tarRecurLabel(rule)} · ${nuevas.length} fechas · prioridad ${base.prioridad}`;
+    const _emo = base.prioridad==='Alta'?'🔴':(base.prioridad==='Baja'?'🟢':'🟡');
+    let _txt = `🔁 Hola ${_primer}, ${base.deQuien} te ha asignado una tarea que se repite:\n\n${base.titulo}\n${_emo} ${base.prioridad} · ${tarRecurLabel(rule)} · ${nuevas.length} fechas`;
     if(base.descripcion) _txt += `\n\n${base.descripcion}`;
     _txt += `\n\nLa tienes en Lucai, en Tareas.`;
     tgNotify(base.paraQuien, _txt);
@@ -4550,11 +4551,12 @@ function commitTarea(){
   S.tareas.unshift(t); closeModal(); render();
   srvTarInsert(t, 'Tarea enviada');
   const _primer = (t.paraQuien||'').split(' ')[0];
-  const _meta = ['prioridad '+(t.prioridad||'Media')];
+  const _emo = t.prioridad==='Alta'?'🔴':(t.prioridad==='Baja'?'🟢':'🟡');
+  const _meta = [`${_emo} ${t.prioridad||'Media'}`];
   if(t.area && t.area!=='General') _meta.push(t.area);
-  if(t.fechaLimite) _meta.push('para el '+fmtFecha(t.fechaLimite));
-  if(t.horaInicio) _meta.push(t.horaInicio+(t.horaFin?'–'+t.horaFin:''));
-  let _txt = `Hola ${_primer}, ${t.deQuien} te ha asignado una tarea:\n\n${t.titulo}\n${_meta.join(' · ')}`;
+  if(t.fechaLimite) _meta.push(`📅 ${fmtFecha(t.fechaLimite)}`);
+  if(t.horaInicio) _meta.push(`${t.horaInicio}${t.horaFin?'–'+t.horaFin:''}`);
+  let _txt = `📋 Hola ${_primer}, ${t.deQuien} te ha asignado una tarea:\n\n${t.titulo}\n${_meta.join(' · ')}`;
   if(t.descripcion) _txt += `\n\n${t.descripcion}`;
   _txt += `\n\nLa tienes en Lucai, en Tareas.`;
   tgNotify(t.paraQuien, _txt);
