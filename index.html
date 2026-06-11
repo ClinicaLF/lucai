@@ -826,7 +826,7 @@ function moduleHeader(title, showBell){
   return `<header><div class="brand">
     <button class="backbtn" onclick="goHome()" title="Inicio">‹</button>
     <img src="${LOGO_WHITE}" alt="Laura Fernández">
-    <div class="t">${title}<small>Lucai · Gestión interna · ${APP_VERSION}</small></div>
+    <div class="t">${title}<small>Lucai · Gestión interna</small></div>
   </div>${whoBlock(showBell)}</header>`;
 }
 function homeView(){
@@ -840,11 +840,12 @@ function homeView(){
     </button>`).join("");
   return `<header><div class="brand">
       <img src="${LOGO_WHITE}" alt="Laura Fernández">
-      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández · ${APP_VERSION}</small></div>
+      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández</small></div>
     </div>${whoBlock(false)}</header>
   <main class="homearea"><div class="wrap">
     <div class="hello">Hola, ${first}. ¿Con qué quieres trabajar?</div>
     <div class="modgrid">${cards}</div>
+    <div style="text-align:center;margin-top:30px;font-size:10.5px;color:var(--grey-2);opacity:.6;letter-spacing:.3px">Lucai · ${APP_VERSION}</div>
   </div></main>`;
 }
 function modulePlaceholder(){
@@ -2507,11 +2508,12 @@ function homeView(){
   }).join("");
   return `<header><div class="brand">
       <img src="${LOGO_WHITE}" alt="Laura Fernández">
-      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández · ${APP_VERSION}</small></div>
+      <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández</small></div>
     </div>${whoBlock(false)}</header>
   <main class="homearea"><div class="wrap">
     <div class="hello">Hola, ${first}. ¿Con qué quieres trabajar?</div>
     <div class="modgrid">${cards}</div>
+    <div style="text-align:center;margin-top:30px;font-size:10.5px;color:var(--grey-2);opacity:.6;letter-spacing:.3px">Lucai · ${APP_VERSION}</div>
   </div></main>`;
 }
 
