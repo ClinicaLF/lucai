@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-76">
+<meta name="lucai-version" content="2026-06-08-77">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -6329,6 +6329,8 @@ async function srvTemaUpdate(id, t){
 function temaById(id){ return (S.temas||[]).find(x=>String(x.id)===String(id)); }
 function temaParticipa(t){ const me=S.user&&S.user.nombre; if(!me) return false; if(t.autor===me) return true; if(Array.isArray(t.participantes)&&t.participantes.length) return t.participantes.includes(me); return true; }
 function temaVisible(t){ if(typeof isAdmin==='function' && isAdmin()) return true; return temaParticipa(t); }
+function setTemaBuscar(v){ S.temaBuscar=v; render(); const e=el('temaBuscar'); if(e){ e.focus(); const val=e.value; e.value=''; e.value=val; } }
+function temaToggleArchivados(){ S.temasVerArchivados=!S.temasVerArchivados; render(); }
 function temaDelMsg(id, idx){
   const t=temaById(id); if(!t) return;
   const m=(t.mensajes||[])[idx]; if(!m) return;
@@ -6406,7 +6408,14 @@ function temasView(){
 }
 function temasListView(){
   const me=S.user.nombre;
-  const list=[...(S.temas||[])].filter(temaVisible).sort((a,b)=>{
+  const verArch=!!S.temasVerArchivados;
+  const q=(S.temaBuscar||'').trim().toLowerCase();
+  const visibles=[...(S.temas||[])].filter(temaVisible);
+  const nArch=visibles.filter(t=>t.estado==='cerrado').length;
+  let list=visibles;
+  if(!verArch) list=list.filter(t=> t.estado!=='cerrado');
+  if(q) list=list.filter(t=> [t.titulo,t.descripcion,t.autor,(t.participantes||[]).join(' ')].join(' ').toLowerCase().includes(q));
+  list=list.sort((a,b)=>{
     if((a.estado==='cerrado')!==(b.estado==='cerrado')) return a.estado==='cerrado'?1:-1;
     const la=(a.mensajes&&a.mensajes.length?a.mensajes[a.mensajes.length-1].ts:a.ts)||'';
     const lb=(b.mensajes&&b.mensajes.length?b.mensajes[b.mensajes.length-1].ts:b.ts)||'';
@@ -6428,11 +6437,15 @@ function temasListView(){
       </div>
       <div style="flex:0 0 auto;color:#B8A88F;font-size:22px">›</div>
     </div>`;
-  }).join('') : `<div class="muted" style="text-align:center;padding:32px">Aún no tienes temas. Crea uno nuevo o pide que te añadan como participante.</div>`;
+  }).join('') : `<div class="muted" style="text-align:center;padding:32px">${q?'Ningún tema coincide con la búsqueda.':(verArch?'No hay temas archivados.':'Aún no tienes temas abiertos. Crea uno nuevo o pide que te añadan como participante.')}</div>`;
   return `<div class="toolbar" style="margin:6px 0 14px">
       <div><div class="section-title">Temas de coordinación</div>
       <div class="section-sub" style="margin:0">Hilos para tratar cosas en equipo. Se comenta, se adjuntan pantallazos y, cuando se resuelve, se cierra.</div></div>
       <div class="actions"><button class="btn btn-primary" onclick="nuevoTema()">＋ Nuevo tema</button></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <input id="temaBuscar" class="inp" placeholder="Buscar tema…" value="${incEsc(S.temaBuscar||'')}" oninput="setTemaBuscar(this.value)" style="max-width:300px">
+      <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#46525B;cursor:pointer;user-select:none"><input type="checkbox" ${verArch?'checked':''} onchange="temaToggleArchivados()" style="width:16px;height:16px;cursor:pointer"> Ver archivados${nArch?` (${nArch})`:''}</label>
     </div>
     ${rows}`;
 }
@@ -6464,7 +6477,7 @@ function temaDetalleView(t){
         <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${incEsc(t.titulo)}${cerrado?'<span style="font-size:11px;font-weight:600;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px">Cerrado</span>':''}</div>
         <div class="section-sub" style="margin:0">Abierto por ${incEsc(t.autor||'—')} · ${incEsc(temaFmtTs(t.ts))}${(t.participantes&&t.participantes.length>1)?` · con ${incEsc(t.participantes.filter(n=>n!==t.autor).join(', '))}`:''}</div>
         ${t.descripcion?`<div style="font-size:13px;color:#5A6770;margin-top:7px;background:#F7F4EE;border-radius:8px;padding:8px 11px;max-width:640px">${incEsc(t.descripcion)}</div>`:''}</div>
-      <div class="actions">${(t.autor===me||isAdmin())?`<button class="btn btn-ghost" onclick="openTemaPartes('${t.id}')">Participantes</button>`:''}${!cerrado?`<button class="btn btn-ghost" onclick="temaCerrar('${t.id}')">Cerrar tema</button>`:''}</div>
+      <div class="actions">${(t.autor===me)?`<button class="btn btn-ghost" onclick="openTemaPartes('${t.id}')">Participantes</button>`:''}${!cerrado?`<button class="btn btn-ghost" onclick="temaCerrar('${t.id}')">Cerrar tema</button>`:''}</div>
     </div>
     <div style="margin-bottom:12px">${list}</div>
     ${compose}`;
@@ -6485,7 +6498,7 @@ modalContent = function(){
 function openTemaPartes(id){
   const t=temaById(id); if(!t) return;
   const me=S.user.nombre;
-  if(!(t.autor===me || isAdmin())){ toast('Solo quien creó el tema (o Dirección) puede cambiar los participantes'); return; }
+  if(t.autor!==me){ toast('Solo quien creó el tema puede cambiar los participantes'); return; }
   F={type:'tema_edit_partes', editId:String(id), tparts:(t.participantes||[]).slice()};
   S.modal='tema_edit_partes'; render();
 }
