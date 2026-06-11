@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-11-86">
+<meta name="lucai-version" content="2026-06-11-87">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -794,7 +794,7 @@ function resetIdle(){
 }
 
 /* ---- APP SHELL ---- */
-const APP_VERSION = 'v2026.06.11-12';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
+const APP_VERSION = 'v2026.06.11-13';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
 const MODULES = [
   {id:'material', nombre:'Control de material', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
   {id:'tareas', nombre:'Tareas', ini:'T', desc:'Tareas que van surgiendo en la clínica: qué hay que hacer, quién es responsable, estado y seguimiento.', estado:'pronto'},
@@ -5192,7 +5192,10 @@ async function iaSend(textoFijo){
     }
     clearTimeout(killer);
     if(!started){ last.a = last.a || 'No he recibido respuesta.'; S.iaLoading=false; }
-    last._live=false; S.iaBusy=false; render(); setTimeout(scrollDown,30);
+    last._live=false; S.iaBusy=false;
+    const _kc=el('iaScroll'); const _kt=_kc?_kc.scrollTop:0;
+    render();
+    const _kc2=el('iaScroll'); if(_kc2) _kc2.scrollTop=_kt;
   }catch(e){
     clearTimeout(killer);
     const abort = e && (e.name==='AbortError');
