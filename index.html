@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-11-80">
+<meta name="lucai-version" content="2026-06-11-81">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -794,7 +794,7 @@ function resetIdle(){
 }
 
 /* ---- APP SHELL ---- */
-const APP_VERSION = 'v2026.06.11-6';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
+const APP_VERSION = 'v2026.06.11-7';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
 const MODULES = [
   {id:'material', nombre:'Control de material', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
   {id:'tareas', nombre:'Tareas', ini:'T', desc:'Tareas que van surgiendo en la clínica: qué hay que hacer, quién es responsable, estado y seguimiento.', estado:'pronto'},
@@ -5045,11 +5045,18 @@ function iaContexto(pregunta){
   const incsAll = (S.incidencias||[]);
   const incsPend = incsAll.filter(i=> !i.revisada);
   const TOPE_INC = 40;
-  out.push(`\n[INCIDENCIAS] ${incsAll.length} en total · ${incsPend.length} sin revisar (sin datos de pacientes).`);
-  if(!incsPend.length) out.push('(ninguna sin revisar)');
+  out.push(`\n[INCIDENCIAS] ${incsAll.length} en total · ${incsPend.length} sin revisar. El texto es interno del equipo; no incluye el código ni el nombre del paciente.`);
+  if(!incsAll.length) out.push('(no hay incidencias registradas)');
   else {
-    incsPend.slice(0,TOPE_INC).forEach(i=> out.push(`- ${i.fecha||i.ts||'?'} | categoría: ${i.categoria||'—'} | importancia: ${i.importancia||'—'} | la reportó: ${i.reporta||'—'}`));
-    if(incsPend.length>TOPE_INC) out.push(`...y ${incsPend.length-TOPE_INC} más sin revisar (no listadas aquí).`);
+    incsAll.slice(0,TOPE_INC).forEach(i=>{
+      const est = i.revisada ? ('REVISADA'+(i.revPor?(' por '+i.revPor):'')) : 'SIN REVISAR';
+      let li = `- [${est}] ${i.fecha||i.ts||'?'} | categoría: ${i.categoria||'—'} | importancia: ${i.importancia||'—'} | la reportó: ${i.reporta||'—'}`;
+      if(i.detalle) li += `\n   Qué pasó: ${i.detalle}`;
+      if(i.sugerencia) li += `\n   Sugerencia de quien la reportó: ${i.sugerencia}`;
+      if(i.revisada && i.notaDir) li += `\n   Resolución (Dirección): ${i.notaDir}`;
+      out.push(li);
+    });
+    if(incsAll.length>TOPE_INC) out.push(`...y ${incsAll.length-TOPE_INC} incidencias más antiguas no listadas aquí.`);
   }
 
   if(admin){
