@@ -211,6 +211,10 @@
   .modal-head h2{font-family:var(--serif);font-weight:400;font-size:21px}
   .modal-head .x{font-size:24px;color:var(--grey-2);line-height:1;padding:4px}
   .modal-body{padding:8px 24px 24px}
+  .tcompact .fld{margin-top:10px}
+  .tcompact .fld>label{margin-bottom:4px;font-size:11px;letter-spacing:.04em}
+  .tcompact .inp{padding:8px 10px}
+  .tcompact textarea.inp{line-height:1.35}
   .fld{margin-top:18px}
   .fld>label{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;
     color:var(--grey);font-weight:700;margin-bottom:9px}
@@ -3559,6 +3563,9 @@ if(!Array.isArray(S.tareas)) S.tareas = [
 S.tarVerHechas = S.tarVerHechas || false;
 S.tarWeek = S.tarWeek || 0;
 S.tarF = S.tarF || {estado:'',prio:'',de:'',para:'',area:''};
+if(!S.tarBuzF) S.tarBuzF = {prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''};
+else { if(S.tarBuzF.desde===undefined) S.tarBuzF.desde=''; if(S.tarBuzF.hasta===undefined) S.tarBuzF.hasta=''; if(S.tarBuzF.kpi===undefined) S.tarBuzF.kpi=''; }
+if(!S.tarRes){ const _m=(function(){const t=new Date(); const day=(t.getDay()+6)%7; const m=new Date(t); m.setDate(t.getDate()-day); const p=x=>String(x).padStart(2,'0'); return `${m.getFullYear()}-${p(m.getMonth()+1)}-${p(m.getDate())}`; })(); S.tarRes={desde:_m, hasta:todayStr()}; }
 if(!Array.isArray(S.tarAreas) || !S.tarAreas.length) S.tarAreas = TAR_AREAS.slice();
 S.tarBuzonArea = S.tarBuzonArea || '';
 function tarAreas(){ return (Array.isArray(S.tarAreas)&&S.tarAreas.length) ? S.tarAreas : TAR_AREAS; }
@@ -3579,6 +3586,9 @@ loadFromDB = async function(){
         id:x.id, titulo:x.titulo, descripcion:x.descripcion, prioridad:x.prioridad||'Media',
         area:x.area||'General',
         fechaLimite:x.fecha_limite, deQuien:x.de_quien, paraQuien:x.para_quien,
+        horaInicio:x.hora_inicio||'', horaFin:x.hora_fin||'',
+        serieId:x.serie_id||null,
+        recurrencia: (x.recurrencia && typeof x.recurrencia==='object' && !Array.isArray(x.recurrencia)) ? x.recurrencia : (function(){ try{ return x.recurrencia?JSON.parse(x.recurrencia):null; }catch(_){ return null; } })(),
         estado:x.estado||'Pendiente', ts:x.ts, fechaHecha:x.fecha_hecha,
         tiempos: Array.isArray(x.tiempos) ? x.tiempos : (function(){ try{ return x.tiempos?JSON.parse(x.tiempos):[]; }catch(_){ return []; } })(),
         mensajes: Array.isArray(x.mensajes) ? x.mensajes : (function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
@@ -3589,15 +3599,27 @@ loadFromDB = async function(){
   }catch(e){ console.error('loadTareas', e); }
   await _prev;
 };
+function tarToRow(t){
+  return { id:t.id, titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
+    area:t.area||'General',
+    fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
+    hora_inicio:t.horaInicio||null, hora_fin:t.horaFin||null,
+    serie_id:t.serieId||null, recurrencia:t.recurrencia||null,
+    estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]) };
+}
 async function srvTarInsert(t, okMsg){
   try{
-    const { error } = await sbc.from('tar_tareas').insert({
-      id:t.id, titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
-      area:t.area||'General',
-      fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
-      estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]) });
+    const { error } = await sbc.from('tar_tareas').insert(tarToRow(t));
     if(error) throw error;
   }catch(e){ console.error('srvTarInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvTarInsertMany(arr, okMsg){
+  if(!arr || !arr.length) return;
+  try{
+    const { error } = await sbc.from('tar_tareas').insert(arr.map(tarToRow));
+    if(error) throw error;
+  }catch(e){ console.error('srvTarInsertMany', e); await syncAll(); toast('Error al guardar la serie: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
 }
 async function srvTarUpdate(id, t, okMsg){
@@ -3606,6 +3628,8 @@ async function srvTarUpdate(id, t, okMsg){
       titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
       area:t.area||'General',
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
+      hora_inicio:t.horaInicio||null, hora_fin:t.horaFin||null,
+      serie_id:t.serieId||null, recurrencia:t.recurrencia||null,
       estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]) }).eq('id', id);
     if(error) throw error;
   }catch(e){ console.error('srvTarUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
@@ -3661,18 +3685,90 @@ function tarFechaEdit(t){
   </div>`;
 }
 
+/* ---- recurrencia (estilo Google Calendar: serie + instancias) ---- */
+const TAR_RECUR_HORIZON = 90;   // días que se generan por adelantado en series sin fecha de fin
+const TAR_DOW_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+function tarDow(iso){ const d=tarDParse(iso); return (d.getDay()+6)%7; } // 0=Lun … 6=Dom
+function tarRecurLabel(r){
+  if(!r||!r.tipo) return '';
+  if(r.tipo==='diaria') return 'Cada día';
+  if(r.tipo==='semanal'){ const ds=(r.dias||[]).slice().sort((a,b)=>a-b).map(i=>TAR_DOW[i]); return ds.length? ('Cada semana · '+ds.join(', ')) : 'Cada semana'; }
+  if(r.tipo==='mensual') return 'Cada mes · día '+(r.diaMes||'?');
+  return '';
+}
+/* genera las fechas (ISO) de una serie desde 'startISO' (incl.) hasta 'untilISO' (incl.), según la regla */
+function tarSerieFechas(rule, startISO, untilISO){
+  const out=[]; if(!rule||!rule.tipo||!startISO) return out;
+  const start=tarDParse(startISO), until=tarDParse(untilISO);
+  if(until<start) return [startISO];
+  const cap=400;
+  if(rule.tipo==='diaria'){
+    let d=new Date(start);
+    while(d<=until && out.length<cap){ out.push(tarIso(d)); d.setDate(d.getDate()+1); }
+  } else if(rule.tipo==='semanal'){
+    const dias=(rule.dias&&rule.dias.length)?rule.dias:[ (start.getDay()+6)%7 ];
+    let d=new Date(start);
+    while(d<=until && out.length<cap){ if(dias.includes((d.getDay()+6)%7)) out.push(tarIso(d)); d.setDate(d.getDate()+1); }
+  } else if(rule.tipo==='mensual'){
+    const dm=rule.diaMes||start.getDate();
+    let y=start.getFullYear(), m=start.getMonth();
+    while(out.length<cap){
+      const ult=new Date(y,m+1,0).getDate();
+      const dd=Math.min(dm,ult);
+      const cand=new Date(y,m,dd);
+      if(cand>until) break;
+      if(cand>=start) out.push(tarIso(cand));
+      m++; if(m>11){ m=0; y++; }
+    }
+  }
+  return out;
+}
+function tarSerieHermanas(serieId){ return (S.tareas||[]).filter(t=>t.serieId && t.serieId===serieId); }
+/* relleno automático de series abiertas (sin fecha de fin): una vez por sesión, solo el emisor */
+function tarTopUpSeries(){
+  try{
+    const me=S.user&&S.user.nombre; if(!me) return;
+    const hoy=todayStr();
+    const horizonte=tarAddDias(hoy, TAR_RECUR_HORIZON);
+    const series={};
+    (S.tareas||[]).forEach(t=>{ if(t.serieId && t.recurrencia && !t.recurrencia.hasta && t.deQuien===me){ (series[t.serieId]=series[t.serieId]||[]).push(t); } });
+    const nuevas=[];
+    Object.keys(series).forEach(sid=>{
+      const hs=series[sid];
+      const fechas=new Set(hs.map(t=>t.fechaLimite));
+      const base=hs[0];
+      const maxF=hs.map(t=>t.fechaLimite).filter(Boolean).sort().slice(-1)[0]||hoy;
+      if(maxF >= tarAddDias(hoy,30)) return; // aún hay colchón
+      const desde=tarAddDias(maxF,1);
+      const cand=tarSerieFechas(base.recurrencia, desde, horizonte);
+      cand.forEach(f=>{
+        if(fechas.has(f)) return;
+        const id=sid+'_'+f;
+        if((S.tareas||[]).some(x=>x.id===id)) return;
+        nuevas.push({ id, titulo:base.titulo, descripcion:base.descripcion, prioridad:base.prioridad, area:base.area,
+          fechaLimite:f, deQuien:base.deQuien, paraQuien:base.paraQuien, horaInicio:base.horaInicio||'', horaFin:base.horaFin||'',
+          serieId:sid, recurrencia:base.recurrencia, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[] });
+      });
+    });
+    if(nuevas.length){ nuevas.forEach(t=>S.tareas.push(t)); srvTarInsertMany(nuevas); }
+  }catch(e){ console.error('tarTopUpSeries', e); }
+}
+
 /* ---- vista principal ---- */
 function tareasView(){
+  if(!window._tarToppedUp){ window._tarToppedUp=true; setTimeout(tarTopUpSeries, 50); }
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_recibidas','tar_emitidas','tar_semana','tar_todas','tar_resumen'] : ['tar_recibidas','tar_emitidas','tar_semana','tar_resumen'];
-  const sub = subs.includes(S.sub) ? S.sub : 'tar_recibidas';
-  const lbl = {tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_semana:'Semana',tar_todas:'Todas (equipo)',tar_resumen:'Resumen'};
+  const subs = admin ? ['tar_todas_mias','tar_recibidas','tar_emitidas','tar_semana','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_recibidas','tar_emitidas','tar_semana','tar_resumen'];
+  const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
+  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_semana:'Semana',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
   else if(sub==='tar_todas') body=tarTodasView();
   else if(sub==='tar_resumen') body=tarResumenView();
-  else body=tarBuzonView(sub==='tar_emitidas'?'emitidas':'recibidas');
+  else if(sub==='tar_emitidas') body=tarBuzonView('emitidas');
+  else if(sub==='tar_recibidas') body=tarBuzonView('recibidas');
+  else body=tarBuzonView('todas');
   const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
   <main><div class="wrap">
@@ -3687,7 +3783,8 @@ function tareasView(){
     ${body}
   </div></main>
   ${S.modal?modalContent():''}
-  ${S.tarAlert?tarAlertModal():''}`;
+  ${S.tarAlert?tarAlertModal():''}
+  ${S.tarDelId?tarDelScopeModal():''}`;
 }
 
 function tarKpis(arr){
@@ -3696,64 +3793,99 @@ function tarKpis(arr){
   const espera=act.filter(t=>t.estado==='En espera').length;
   const venc=act.filter(tarVencida).length;
   const hoy=act.filter(t=>t.estado!=='En espera' && t.fechaLimite===todayStr()).length;
+  const sel=(S.tarBuzF&&S.tarBuzF.kpi)||'';
+  const card=(key, label, val, color, dark)=>{
+    const on=sel===key;
+    const base = dark
+      ? `background:#333F48;color:#fff`
+      : `background:#fff;border:1px solid ${on?color:'var(--line)'}`;
+    const ring = on ? `box-shadow:0 0 0 2px ${color}` : '';
+    return `<button onclick="setTarKpi('${key}')" title="Filtrar por ${label.toLowerCase()}" style="text-align:left;cursor:pointer;${base};${ring};border-radius:12px;padding:14px 18px;min-width:110px;transition:box-shadow .15s">
+      <div style="font-size:12px;${dark?'opacity:.7':'color:#8A949B'}">${label}${on?' ·':''}</div>
+      <div style="font-size:28px;font-weight:700;${dark?'':`color:${color}`}">${val}</div>
+    </button>`;
+  };
   return `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px">
-    <div style="background:#333F48;color:#fff;border-radius:12px;padding:14px 18px;min-width:110px"><div style="font-size:12px;opacity:.7">Por hacer</div><div style="font-size:28px;font-weight:700">${porHacer}</div></div>
-    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:110px"><div style="font-size:12px;color:#8A949B">En espera</div><div style="font-size:28px;font-weight:700;color:#8A5A00">${espera}</div></div>
-    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:110px"><div style="font-size:12px;color:#8A949B">Vencidas</div><div style="font-size:28px;font-weight:700;color:#C0392B">${venc}</div></div>
-    <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;min-width:110px"><div style="font-size:12px;color:#8A949B">Para hoy</div><div style="font-size:28px;font-weight:700;color:#B8860B">${hoy}</div></div>
+    ${card('porhacer','Por hacer', porHacer, '#333F48', true)}
+    ${card('espera','En espera', espera, '#8A5A00', false)}
+    ${card('vencidas','Vencidas', venc, '#C0392B', false)}
+    ${card('hoy','Para hoy', hoy, '#B8860B', false)}
   </div>`;
+}
+function setTarKpi(k){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''}; S.tarBuzF.kpi = (S.tarBuzF.kpi===k?'':k); render(); }
+function tarKpiMatch(t, kpi){
+  if(!kpi) return true;
+  if(kpi==='porhacer') return tarActiva(t) && t.estado!=='En espera';
+  if(kpi==='espera') return tarActiva(t) && t.estado==='En espera';
+  if(kpi==='vencidas') return tarVencida(t);
+  if(kpi==='hoy') return tarActiva(t) && t.estado!=='En espera' && t.fechaLimite===todayStr();
+  return true;
 }
 
 function tarAreaChip(a){ if(!a) a='General'; return `<span style="display:inline-block;font-size:11px;font-weight:500;background:#EAE3D7;color:#5A6770;border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:middle">${incEsc(a)}</span>`; }
+function tarRecurMark(t){ return (t&&(t.serieId||t.recurrencia)) ? ` <span title="${incEsc(tarRecurLabel(t.recurrencia)||'Tarea recurrente')}" style="color:#5A6770;font-size:12px;vertical-align:middle">⟳</span>` : ''; }
+function tarHoraChip(t){ if(!t||!t.horaInicio) return ''; const fin=t.horaFin?('–'+t.horaFin):''; return `<span style="display:inline-block;font-size:11px;font-weight:500;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:middle">${incEsc(t.horaInicio)}${incEsc(fin)}</span>`; }
 function tarBuzonView(modo){
   const me=S.user.nombre;
-  const all=(S.tareas||[]).filter(t=> modo==='emitidas' ? t.deQuien===me : t.paraQuien===me);
-  const bf = S.tarBuzF = S.tarBuzF || {prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc'};
+  const esTodas = modo==='todas';
+  const all=(S.tareas||[]).filter(t=> esTodas ? (t.deQuien===me||t.paraQuien===me) : (modo==='emitidas' ? t.deQuien===me : t.paraQuien===me));
+  const otroDe = t => esTodas ? (t.deQuien===me ? t.paraQuien : t.deQuien) : (modo==='emitidas'?t.paraQuien:t.deQuien);
+  const bf = S.tarBuzF = S.tarBuzF || {prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''};
   const toggle=`<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px">
     <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#6C757D;cursor:pointer;margin:0">
       <input type="checkbox" ${S.tarVerHechas?'checked':''} onchange="toggleTarHechas()"> Ver también las hechas/archivadas</label>
   </div>`;
   const q=(bf.q||'').toLowerCase();
+  const enRango = t => { if(!bf.desde && !bf.hasta) return true; if(!t.fechaLimite) return false; if(bf.desde && t.fechaLimite<bf.desde) return false; if(bf.hasta && t.fechaLimite>bf.hasta) return false; return true; };
   const list=all.filter(t=>
       (S.tarVerHechas ? true : tarActiva(t)) &&
+      tarKpiMatch(t, bf.kpi) &&
       (!bf.prio || t.prioridad===bf.prio) &&
       (!bf.cat || (t.area||'General')===bf.cat) &&
-      (!bf.persona || (modo==='emitidas'?t.paraQuien:t.deQuien)===bf.persona) &&
+      (!bf.persona || otroDe(t)===bf.persona) &&
       (!bf.estado || t.estado===bf.estado) &&
+      enRango(t) &&
       (!q || (t.titulo||'').toLowerCase().includes(q)))
     .sort((a,b)=>{ const rk=t=>(!tarActiva(t)?2:(t.estado==='En espera'?1:0)); const ra=rk(a),rb=rk(b); if(ra!==rb) return ra-rb; return (bf.sortDir==='desc'?-1:1)*String(a.fechaLimite||'9999').localeCompare(String(b.fechaLimite||'9999')); });
-  if(!all.length) return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${modo==='emitidas'?'No has mandado ninguna tarea todavía. Usa “Nueva tarea”.':'No tienes tareas en tu buzón. ¡Buen trabajo!'}</div>`;
-  const otro = modo==='emitidas' ? 'Para' : 'De';
-  const personas=[...new Set(all.map(t=> modo==='emitidas'?t.paraQuien:t.deQuien).filter(Boolean))].sort();
+  if(!all.length){ const msg = esTodas ? 'No tienes ninguna tarea (ni recibida ni emitida). Usa “Nueva tarea”.' : (modo==='emitidas'?'No has mandado ninguna tarea todavía. Usa “Nueva tarea”.':'No tienes tareas en tu buzón. ¡Buen trabajo!'); return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${msg}</div>`; }
+  const otro = esTodas ? 'Con' : (modo==='emitidas' ? 'Para' : 'De');
+  const personas=[...new Set(all.map(otroDe).filter(Boolean))].sort();
   const ss=`class="inp" style="margin:4px 0 0;padding:3px 6px;font-size:12px;max-width:150px"`;
+  const ds=`class="inp" style="margin:2px 0 0;padding:3px 6px;font-size:12px;width:124px"`;
   const selPrio=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('prio',this.value)"><option value="">Todas</option>${TAR_PRIOS.map(p=>`<option ${bf.prio===p?'selected':''}>${p}</option>`).join('')}</select>`;
   const selCat=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('cat',this.value)"><option value="">Todas</option>${tarAreas().map(a=>`<option ${bf.cat===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>`;
   const selPersona=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('persona',this.value)"><option value="">Todos</option>${personas.map(n=>`<option ${bf.persona===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>`;
   const selEstado=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('estado',this.value)"><option value="">Todos</option>${TAR_ESTADOS.map(s=>`<option ${bf.estado===s?'selected':''}>${s}</option>`).join('')}</select>`;
   const search=`<input ${ss} placeholder="Buscar…" value="${incEsc(bf.q||'')}" onchange="setTarBuzF('q',this.value)">`;
   const arrow = bf.sortDir==='desc'?'▼':'▲';
-  const hayFiltro = bf.prio||bf.cat||bf.persona||bf.estado||bf.q;
+  const rangoEntrega=`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:3px;margin-top:2px">
+      <input type="date" ${ds} title="Desde" value="${incEsc(bf.desde||'')}" onchange="setTarBuzF('desde',this.value)">
+      <input type="date" ${ds} title="Hasta" value="${incEsc(bf.hasta||'')}" onchange="setTarBuzF('hasta',this.value)">
+    </div>`;
+  const hayFiltro = bf.prio||bf.cat||bf.persona||bf.estado||bf.q||bf.desde||bf.hasta||bf.kpi;
   const clear = hayFiltro?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()">Limpiar</button>`:'';
   const thead=`<thead><tr>
       <th style="vertical-align:top">Prior.<div>${selPrio}</div></th>
       <th style="vertical-align:top">Tarea<div>${search}</div></th>
       <th class="col-hide-m" style="vertical-align:top">Categoría<div>${selCat}</div></th>
       <th class="col-hide-m" style="vertical-align:top">${otro}<div>${selPersona}</div></th>
-      <th style="vertical-align:top;cursor:pointer" title="Ordenar por fecha" onclick="tarBuzSort()">Entrega ${arrow}</th>
+      <th style="vertical-align:top"><span style="cursor:pointer" title="Ordenar por fecha" onclick="tarBuzSort()">Entrega ${arrow}</span>${rangoEntrega}</th>
       <th class="col-hide-m" style="vertical-align:top">Estado<div>${selEstado}</div></th>
       <th style="vertical-align:top">${clear}</th>
     </tr></thead>`;
   if(!list.length) return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable">${thead}<tbody><tr><td colspan="7" class="muted" style="padding:20px;text-align:center">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</td></tr></tbody></table></div>`;
   const rows=list.map(t=>{
-    const persona = modo==='emitidas' ? t.paraQuien : t.deQuien;
-    const quick = (modo==='recibidas' && tarActiva(t))
+    const persona = otroDe(t);
+    const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:#8A949B">↗ </span>':'<span title="Te la mandaron" style="color:#6E8E00">↙ </span>') : '';
+    const recibida = t.paraQuien===me;
+    const quick = ((modo==='recibidas' || (esTodas && recibida)) && tarActiva(t))
       ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
       : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
       <td>${tarPrioChip(t.prioridad)}</td>
-      <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}</td>
+      <td style="font-weight:600">${incEsc(t.titulo)}${tarRecurMark(t)}${tarNvBadge(t)}</td>
       <td class="col-hide-m" style="color:#5A6770;font-size:13px">${incEsc(t.area||'General')}</td>
-      <td class="col-hide-m">${incEsc(persona||'—')}</td>
+      <td class="col-hide-m">${dir}${incEsc(persona||'—')}</td>
       <td>${tarFechaEdit(t)}</td>
       <td class="col-hide-m">${tarEstadoSelect(t)}</td>
       <td style="text-align:right;white-space:nowrap">${quick}</td>
@@ -3761,9 +3893,9 @@ function tarBuzonView(modo){
   }).join('');
   return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable">${thead}<tbody>${rows}</tbody></table></div>`;
 }
-function setTarBuzF(field,v){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc'}; S.tarBuzF[field]=v; render(); }
-function clearTarBuzF(){ S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:(S.tarBuzF&&S.tarBuzF.sortDir)||'asc'}; render(); }
-function tarBuzSort(){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc'}; S.tarBuzF.sortDir = S.tarBuzF.sortDir==='desc'?'asc':'desc'; render(); }
+function setTarBuzF(field,v){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''}; S.tarBuzF[field]=v; render(); }
+function clearTarBuzF(){ S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:(S.tarBuzF&&S.tarBuzF.sortDir)||'asc',desde:'',hasta:'',kpi:''}; render(); }
+function tarBuzSort(){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''}; S.tarBuzF.sortDir = S.tarBuzF.sortDir==='desc'?'asc':'desc'; render(); }
 
 function tarTodasView(){
   const f=S.tarF, all=S.tareas||[];
@@ -3789,7 +3921,7 @@ function tarTodasView(){
   if(!filt.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay tareas con esos filtros.</div>`;
   const rows=filt.map(t=>`<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
     <td>${tarPrioChip(t.prioridad)}</td>
-    <td style="font-weight:600">${incEsc(t.titulo)}${tarNvBadge(t)}</td>
+    <td style="font-weight:600">${incEsc(t.titulo)}${tarRecurMark(t)}${tarNvBadge(t)}</td>
     <td class="col-hide-m" style="color:#5A6770;font-size:13px">${incEsc(t.area||'General')}</td>
     <td class="col-hide-m">${incEsc(t.deQuien||'—')}</td>
     <td>${incEsc(t.paraQuien||'—')}</td>
@@ -3824,7 +3956,7 @@ function tarSemanaView(){
     if(activa && (recibida||admin)) btns += `<button class="btn btn-ghost btn-sm" title="Marcar hecha" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Hecha</button>`;
     return `<div onclick="openTarDet('${t.id}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-left:3px solid ${col};border-radius:8px;padding:7px 10px;${tach}">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tarNuevosPara(t,me)?'<span style="color:#6E8E00">● </span>':''}${incEsc(t.titulo)}</div>
+        <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tarNuevosPara(t,me)?'<span style="color:#6E8E00">● </span>':''}${t.horaInicio?`<span style="color:#5A6770;font-weight:700">${incEsc(t.horaInicio)} </span>`:''}${incEsc(t.titulo)}${(t.serieId||t.recurrencia)?' <span title="Recurrente" style="color:#8A949B">⟳</span>':''}</div>
         <div class="muted" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${incEsc(quien)}${(t.area&&t.area!=='General')?' · '+incEsc(t.area):''}${t.estado==='En espera'?' · <span style="color:#8A5A00;font-weight:600">en espera</span>':''}</div>
       </div>
       <div onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-shrink:0">${btns}</div>
@@ -3939,15 +4071,33 @@ function tarEquipoPanel(desde, hasta, perLabel){
     ${card('Carga de trabajo', `<div class="inctable-wrap"><table class="inctable"><thead><tr><th>Persona</th><th style="text-align:center">Por hacer</th><th style="text-align:center">Vencidas</th><th style="text-align:center">En espera</th><th style="text-align:center">Hechas (${perLabel})</th></tr></thead><tbody>${cargaRows}</tbody></table></div>`)}
     ${card('Atascado / pendiente de alguien', atascHtml)}`;
 }
+function tarFmtDM(iso){ const d=(iso||'').split('-'); return d.length===3?`${d[2]}/${d[1]}`:iso; }
+function setTarResRango(field,v){ if(!S.tarRes) S.tarRes={desde:todayStr(),hasta:todayStr()}; S.tarRes[field]=v; if(S.tarRes.desde && S.tarRes.hasta && S.tarRes.desde>S.tarRes.hasta){ if(field==='desde') S.tarRes.hasta=v; else S.tarRes.desde=v; } render(); }
+function tarResPreset(p){
+  const hoy=todayStr();
+  if(p==='hoy'){ S.tarRes={desde:hoy,hasta:hoy}; }
+  else if(p==='semana'){ const r=tarSemRango(); S.tarRes={desde:r[0],hasta:r[1]}; }
+  else if(p==='mes'){ const d=tarDParse(hoy); const ini=tarIso(new Date(d.getFullYear(),d.getMonth(),1)); const fin=tarIso(new Date(d.getFullYear(),d.getMonth()+1,0)); S.tarRes={desde:ini,hasta:fin}; }
+  render();
+}
 function tarResumenView(){
   const me=S.user.nombre, admin=isAdmin();
-  const per = (S.tarResPeriodo==='hoy')?'hoy':'semana';
-  let desde,hasta,perLabel;
-  if(per==='hoy'){ desde=hasta=todayStr(); perLabel='hoy'; }
-  else { const r=tarSemRango(); desde=r[0]; hasta=r[1]; perLabel='esta semana'; }
-  const pertog=`<div class="seg" style="margin-bottom:16px"><button class="${per==='hoy'?'on':''}" onclick="setTarResPeriodo('hoy')">Hoy</button><button class="${per==='semana'?'on':''}" onclick="setTarResPeriodo('semana')">Esta semana</button></div>`;
+  if(!S.tarRes) S.tarRes={desde:todayStr(),hasta:todayStr()};
+  const desde=S.tarRes.desde, hasta=S.tarRes.hasta;
+  const perLabel = (desde===hasta) ? `el ${tarFmtDM(desde)}` : `del ${tarFmtDM(desde)} al ${tarFmtDM(hasta)}`;
+  const hoy=todayStr(); const r=tarSemRango();
+  const dD=tarDParse(hoy); const mIni=tarIso(new Date(dD.getFullYear(),dD.getMonth(),1)), mFin=tarIso(new Date(dD.getFullYear(),dD.getMonth()+1,0));
+  const isHoy=(desde===hoy&&hasta===hoy), isSem=(desde===r[0]&&hasta===r[1]), isMes=(desde===mIni&&hasta===mFin);
+  const ds=`class="inp" style="padding:5px 8px;font-size:13px;width:150px"`;
+  const ctrl=`<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+    <div class="seg"><button class="${isHoy?'on':''}" onclick="tarResPreset('hoy')">Hoy</button><button class="${isSem?'on':''}" onclick="tarResPreset('semana')">Esta semana</button><button class="${isMes?'on':''}" onclick="tarResPreset('mes')">Este mes</button></div>
+    <div style="display:flex;gap:8px;align-items:center;font-size:13px;color:#6C757D">
+      <span>Del</span><input type="date" ${ds} value="${incEsc(desde)}" onchange="setTarResRango('desde',this.value)">
+      <span>al</span><input type="date" ${ds} value="${incEsc(hasta)}" onchange="setTarResRango('hasta',this.value)">
+    </div>
+  </div>`;
   const mi=tarMiResumen(me, desde, hasta, perLabel);
-  return admin ? (pertog+mi+tarEquipoPanel(desde, hasta, perLabel)) : (pertog+mi);
+  return admin ? (ctrl+mi+tarEquipoPanel(desde, hasta, perLabel)) : (ctrl+mi);
 }
 
 /* ---- interacciones ---- */
@@ -4026,8 +4176,44 @@ function tarAlDiaCard(){
 function tarEliminar(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   if(!(isAdmin() || t.deQuien===S.user.nombre)){ toast('Solo puede eliminarla quien la creó o Dirección'); return; }
+  if(t.serieId){ S.tarDelId=id; closeModal(); render(); return; }
   S.tareas=S.tareas.filter(x=>x.id!==id); closeModal(); render();
   srvTarDelete(id, 'Tarea eliminada');
+}
+function tarDelScopeModal(){
+  const t=(S.tareas||[]).find(x=>x.id===S.tarDelId); if(!t) return '';
+  return `<div class="overlay" onclick="if(event.target===this){S.tarDelId=null;render()}"><div class="modal" style="max-width:460px">
+    <div class="modal-head"><h2>Eliminar tarea recurrente</h2><button class="x" onclick="S.tarDelId=null;render()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">"${incEsc(t.titulo)}" forma parte de una serie (${incEsc(tarRecurLabel(t.recurrencia)||'recurrente')}). ¿Qué quieres eliminar?</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+        <button class="btn btn-ghost" onclick="tarDoDelete('${t.id}','una')">Solo esta (${incEsc(fmtFecha(t.fechaLimite))})</button>
+        <button class="btn btn-ghost" onclick="tarDoDelete('${t.id}','siguientes')">Esta y las siguientes</button>
+        <button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="tarDoDelete('${t.id}','todas')">Toda la serie</button>
+        <button class="btn btn-ghost" onclick="S.tarDelId=null;render()">Cancelar</button>
+      </div>
+    </div></div></div>`;
+}
+function tarDoDelete(id, scope){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t){ S.tarDelId=null; render(); return; }
+  let ids=[id];
+  if(t.serieId && scope!=='una'){
+    ids = tarSerieHermanas(t.serieId).filter(x=> scope==='todas' || (x.fechaLimite||'') >= (t.fechaLimite||'') ).map(x=>x.id);
+    if(!ids.includes(id)) ids.push(id);
+  }
+  const set=new Set(ids);
+  S.tareas=S.tareas.filter(x=>!set.has(x.id));
+  S.tarDelId=null; render();
+  if(ids.length===1) srvTarDelete(ids[0], 'Tarea eliminada');
+  else srvTarDeleteMany(ids, `${ids.length} tareas eliminadas`);
+}
+async function srvTarDeleteMany(ids, okMsg){
+  if(!ids||!ids.length) return;
+  try{
+    const { error } = await sbc.from('tar_tareas').delete().in('id', ids);
+    if(error) throw error;
+  }catch(e){ console.error('srvTarDeleteMany', e); await syncAll(); toast('Error al eliminar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
 }
 
 /* ---- alta / edición ---- */
@@ -4080,41 +4266,84 @@ function tarAreaDelete(i){
   areas.splice(i,1); S.tarAreas=areas; _tarPersistAreas(); render(); toast('Área borrada');
 }
 function openTarea(){
-  F={type:'tar_nuevo', id:uid(), titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre, adjuntos:[]};
+  F={type:'tar_nuevo', id:uid(), titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre, horaInicio:'', horaFin:'', adjuntos:[], recurTipo:'no', recurDias:[], recurHasta:''};
   S.modal='tar_nuevo'; render();
 }
+function setTarRecurTipo(v){ F.recurTipo=v; if(v==='semanal' && (!F.recurDias||!F.recurDias.length) && F.fechaLimite){ F.recurDias=[tarDow(F.fechaLimite)]; } render(); }
+function tarToggleDia(i){ if(!Array.isArray(F.recurDias)) F.recurDias=[]; const k=F.recurDias.indexOf(i); if(k>=0) F.recurDias.splice(k,1); else F.recurDias.push(i); render(); }
 function tarFormBody(){
   const u=tarUsers();
   const puedeFecha = !F.deQuien || F.deQuien===S.user.nombre; // la fecha solo la cambia quien emitió
-  return `
-    <div class="fld" style="margin-top:0"><label>Tarea (título)</label>
-      <input class="inp" value="${incEsc(F.titulo||'')}" oninput="setInp('titulo',this.value)" placeholder="Qué hay que hacer, en una frase."></div>
-    <div class="fld"><label>Detalle (opcional)</label>
-      <textarea class="inp" rows="3" oninput="setInp('descripcion',this.value)" placeholder="Contexto, dónde, con qué, lo que haga falta para hacerla bien.">${incEsc(F.descripcion||'')}</textarea></div>
-    <div class="fld"><label>Para quién</label>
-      <select class="inp" onchange="setSel('paraQuien',this.value)"><option value="">Elige a quién se la mandas…</option>${u.map(n=>`<option ${F.paraQuien===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select></div>
+  const esNuevo = F.type==='tar_nuevo';
+  const areaSel=`<select class="inp" onchange="setSel('area',this.value)">${(function(){const a=tarAreas().slice(); if(F.area&&!a.includes(F.area)) a.unshift(F.area); return a;})().map(a=>`<option ${(F.area||'General')===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>`;
+  const paraSel=`<select class="inp" onchange="setSel('paraQuien',this.value)"><option value="">Elige a quién…</option>${u.map(n=>`<option ${F.paraQuien===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>`;
+  const prioSel=`<select class="inp" onchange="setSel('prioridad',this.value)">${TAR_PRIOS.map(p=>`<option ${(F.prioridad||'Media')===p?'selected':''}>${p}</option>`).join('')}</select>`;
+  const fechaInp=`<input class="inp" type="date" value="${incEsc(F.fechaLimite||'')}" oninput="setInp('fechaLimite',this.value)" ${puedeFecha?'':'disabled style="background:#F4F0E9;color:#8A949B"'}>`;
+  const tipo=F.recurTipo||'no';
+  // selector de repetir (solo al crear) — va en línea con las horas
+  const repetirSel = esNuevo ? `<div class="fld" style="flex:0 0 170px;min-width:150px;margin-top:0"><label>Repetir</label>
+      <select class="inp" onchange="setTarRecurTipo(this.value)">
+        <option value="no" ${tipo==='no'?'selected':''}>No se repite</option>
+        <option value="diaria" ${tipo==='diaria'?'selected':''}>Cada día</option>
+        <option value="semanal" ${tipo==='semanal'?'selected':''}>Cada semana</option>
+        <option value="mensual" ${tipo==='mensual'?'selected':''}>Cada mes</option>
+      </select></div>` : '';
+  // detalle de la recurrencia (días / día del mes / hasta) — solo si procede
+  let recurDetalle='';
+  if(esNuevo && tipo!=='no'){
+    let campo='';
+    if(tipo==='semanal'){
+      const dias=Array.isArray(F.recurDias)?F.recurDias:[];
+      campo=`<div class="fld" style="flex:1;min-width:220px;margin-top:0"><label>Días</label>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">${TAR_DOW.map((d,i)=>`<button type="button" onclick="tarToggleDia(${i})" style="cursor:pointer;border:1px solid ${dias.includes(i)?'#6E8E00':'var(--line)'};background:${dias.includes(i)?'#6E8E00':'#fff'};color:${dias.includes(i)?'#fff':'#5A6770'};border-radius:7px;width:32px;height:30px;font-size:12px;font-weight:600">${d}</button>`).join('')}</div></div>`;
+    } else if(tipo==='mensual'){
+      const dm=F.fechaLimite?tarDParse(F.fechaLimite).getDate():null;
+      campo=`<div class="fld" style="flex:1;min-width:160px;margin-top:0"><label>Repetición</label>
+        <div class="muted" style="font-size:13px;padding-top:6px">${dm?`El día <strong>${dm}</strong> de cada mes`:'Pon antes la fecha'}</div></div>`;
+    }
+    recurDetalle=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        ${campo}
+        <div class="fld" style="flex:0 0 160px;min-width:140px;margin-top:0"><label>Hasta (opcional)</label>
+          <input class="inp" type="date" value="${incEsc(F.recurHasta||'')}" oninput="setInp('recurHasta',this.value)" min="${incEsc(F.fechaLimite||'')}"></div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px">Se crean varias copias (como en Google Calendar); luego podrás editarlas o borrarlas todas a la vez.</div>`;
+  }
+  return `<div class="tcompact">
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <div class="fld" style="flex:1;min-width:150px"><label>Prioridad</label>
-        <select class="inp" onchange="setSel('prioridad',this.value)">${TAR_PRIOS.map(p=>`<option ${(F.prioridad||'Media')===p?'selected':''}>${p}</option>`).join('')}</select></div>
-      <div class="fld" style="flex:1;min-width:150px"><label>Área</label>
-        <select class="inp" onchange="setSel('area',this.value)">${(function(){const a=tarAreas().slice(); if(F.area&&!a.includes(F.area)) a.unshift(F.area); return a;})().map(a=>`<option ${(F.area||'General')===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select></div>
-      <div class="fld" style="flex:1;min-width:170px"><label>Fecha de entrega</label>
-        <input class="inp" type="date" value="${incEsc(F.fechaLimite||'')}" oninput="setInp('fechaLimite',this.value)" ${puedeFecha?'':'disabled style="background:#F4F0E9;color:#8A949B"'}>
-        ${puedeFecha?'':'<div class="muted" style="font-size:12px;margin-top:4px">Solo la cambia quien emitió la tarea.</div>'}</div>
+      <div class="fld" style="flex:0 0 180px;min-width:140px;margin-top:0"><label>Área</label>${areaSel}</div>
+      <div class="fld" style="flex:1;min-width:200px;margin-top:0"><label>Tarea (título)</label>
+        <input class="inp" value="${incEsc(F.titulo||'')}" oninput="setInp('titulo',this.value)" placeholder="Qué hay que hacer, en una frase."></div>
     </div>
-    ${tarFormAdjuntosHtml()}`;
+    <div class="fld"><label>Detalle (opcional)</label>
+      <textarea class="inp" rows="2" oninput="setInp('descripcion',this.value)" placeholder="Contexto, dónde, con qué, lo que haga falta.">${incEsc(F.descripcion||'')}</textarea></div>
+    ${tarFormAdjuntosHtml()}
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="fld" style="flex:1;min-width:170px"><label>Para quién</label>${paraSel}</div>
+      <div class="fld" style="flex:0 0 140px;min-width:120px"><label>Prioridad</label>${prioSel}</div>
+      <div class="fld" style="flex:0 0 155px;min-width:130px"><label>Fecha de entrega</label>${fechaInp}</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <div class="fld" style="flex:0 0 120px;min-width:100px"><label>Hora inicio <span class="muted" style="font-weight:400">(opc.)</span></label>
+        <input class="inp" type="time" value="${incEsc(F.horaInicio||'')}" oninput="setInp('horaInicio',this.value)"></div>
+      <div class="fld" style="flex:0 0 120px;min-width:100px"><label>Hora fin <span class="muted" style="font-weight:400">(opc.)</span></label>
+        <input class="inp" type="time" value="${incEsc(F.horaFin||'')}" oninput="setInp('horaFin',this.value)"></div>
+      ${repetirSel}
+    </div>
+    ${recurDetalle}
+    ${puedeFecha?'':'<div class="muted" style="font-size:11px;margin-top:4px">La fecha de entrega solo la cambia quien emitió la tarea.</div>'}
+  </div>`;
 }
 function tarFormAdjuntosHtml(){
   const adj=Array.isArray(F.adjuntos)?F.adjuntos:[];
   const thumbs=adj.map((a,i)=>`<div style="position:relative;display:inline-block">
-      <img data-tarpath="${a.path}" onclick="tarVerImg('${a.path}')" alt="adjunto" style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;background:#E8EAED;border:1px solid var(--line)">
-      <button type="button" onclick="tarFormDelAdjunto(${i})" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#C0392B;color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer">×</button>
+      <img data-tarpath="${a.path}" onclick="tarVerImg('${a.path}')" alt="adjunto" style="width:42px;height:42px;object-fit:cover;border-radius:7px;cursor:pointer;background:#E8EAED;border:1px solid var(--line)">
+      <button type="button" onclick="tarFormDelAdjunto(${i})" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#C0392B;color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer">×</button>
     </div>`).join('');
-  return `<div class="fld"><label>Imágenes (opcional)</label>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      ${thumbs}
-      <button type="button" class="btn btn-ghost btn-sm" onclick="tarFormAddImagen()">+ Imagen</button>
-    </div></div>`;
+  return `<div class="fld" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <label style="margin:0">Imágenes <span class="muted" style="font-weight:400">(opcional)</span></label>
+    ${thumbs}
+    <button type="button" class="btn btn-ghost btn-sm" onclick="tarFormAddImagen()">+ Imagen</button>
+  </div>`;
 }
 function tarFormAddImagen(){
   if(!F.id) F.id=uid();
@@ -4141,42 +4370,70 @@ function tarValid(){
 }
 function tarNuevoModalContent(){
   const ready=(F.titulo||'').trim() && F.paraQuien && F.fechaLimite;
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
-    <div class="modal-head"><h2>Nueva tarea</h2><button class="x" onclick="closeModal()">×</button></div>
-    <div class="modal-body">
-      <div class="note" style="margin-top:0">Manda una tarea a alguien del equipo. La <strong>prioridad</strong> y la <strong>fecha de entrega</strong> son lo que hace que se le dé importancia.</div>
+  const rec=(F.recurTipo&&F.recurTipo!=='no');
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:720px">
+    <div class="modal-head" style="padding-bottom:2px"><h2>Nueva tarea</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body" style="padding-top:4px">
       ${tarFormBody()}
-      <div class="note" style="margin-top:8px">${ready?'✓ Lista para enviar.':'Faltan: título, a quién y fecha de entrega.'}</div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
-        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="commitTarea()">Enviar tarea</button>
+      <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:14px;flex-wrap:wrap">
+        <div class="muted" style="font-size:12px">${ready?(rec?'✓ Se creará la serie de tareas.':'✓ Lista para enviar.'):'Faltan: título, a quién y fecha.'}</div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="commitTarea()">${rec?'Crear serie':'Enviar tarea'}</button>
+        </div>
       </div>
     </div></div></div>`;
 }
+function tarReglaDesdeForm(){
+  const tipo=F.recurTipo||'no'; if(tipo==='no') return null;
+  const r={tipo:tipo, hasta:(F.recurHasta||'')||null};
+  if(tipo==='semanal'){ let dias=Array.isArray(F.recurDias)?F.recurDias.slice():[]; if(!dias.length && F.fechaLimite) dias=[tarDow(F.fechaLimite)]; r.dias=dias.sort((a,b)=>a-b); }
+  if(tipo==='mensual'){ r.diaMes = F.fechaLimite?tarDParse(F.fechaLimite).getDate():1; }
+  return r;
+}
 function commitTarea(){
   if(!tarValid()) return;
-  const t={ id:F.id||uid(), titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
-    prioridad:F.prioridad||'Media', area:F.area||'General', fechaLimite:F.fechaLimite, deQuien:S.user.nombre,
-    paraQuien:F.paraQuien, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[],
-    adjuntos:Array.isArray(F.adjuntos)?F.adjuntos:[] };
+  const base={ titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
+    prioridad:F.prioridad||'Media', area:F.area||'General', deQuien:S.user.nombre, paraQuien:F.paraQuien,
+    horaInicio:F.horaInicio||'', horaFin:F.horaFin||'' };
+  const rule=tarReglaDesdeForm();
+  if(rule){
+    const start=F.fechaLimite;
+    const until = rule.hasta || tarAddDias(todayStr(), TAR_RECUR_HORIZON);
+    const startGen = (start>=todayStr()) ? start : todayStr();
+    let fechas=tarSerieFechas(rule, startGen, until);
+    if(!fechas.length) fechas=[start];
+    const serieId='S'+Date.now().toString(36)+Math.floor(Math.random()*1000);
+    const nuevas=fechas.map(f=>Object.assign({}, base, { id:serieId+'_'+f, fechaLimite:f, serieId, recurrencia:rule, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[] }));
+    // los adjuntos del formulario van solo en la primera instancia
+    if(Array.isArray(F.adjuntos)&&F.adjuntos.length) nuevas[0].adjuntos=F.adjuntos.slice();
+    nuevas.forEach(t=>S.tareas.unshift(t)); closeModal(); render();
+    srvTarInsertMany(nuevas, `Serie creada · ${nuevas.length} tareas`);
+    tgNotify(base.paraQuien, `📋 ${base.deQuien} te ha asignado una tarea recurrente: "${base.titulo}" (${tarRecurLabel(rule)}) · ${nuevas.length} fechas`);
+    return;
+  }
+  const t=Object.assign({}, base, { id:F.id||uid(), fechaLimite:F.fechaLimite, serieId:null, recurrencia:null,
+    estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:Array.isArray(F.adjuntos)?F.adjuntos:[] });
   S.tareas.unshift(t); closeModal(); render();
   srvTarInsert(t, 'Tarea enviada');
-  tgNotify(t.paraQuien, `📋 Nueva tarea de ${t.deQuien}: "${t.titulo}" · prioridad ${t.prioridad}${t.fechaLimite?` · entrega ${fmtFecha(t.fechaLimite)}`:''}`);
+  tgNotify(t.paraQuien, `📋 Nueva tarea de ${t.deQuien}: "${t.titulo}" · prioridad ${t.prioridad}${t.fechaLimite?` · entrega ${fmtFecha(t.fechaLimite)}`:''}${t.horaInicio?` · ${t.horaInicio}${t.horaFin?'–'+t.horaFin:''}`:''}`);
 }
 
 function openTarDet(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
-  F={type:'tar_det', id}; S.modal='tar_det'; render();
+  F={type:'tar_det', id, detTab:'conv'}; S.modal='tar_det'; render();
   const me=S.user.nombre;
   const primera = !(t.vistos && t.vistos[me]);
   if(primera || tarNuevosPara(t,me)>0){ if(!t.vistos||typeof t.vistos!=='object'||Array.isArray(t.vistos)) t.vistos={}; t.vistos[me]=now(); srvTarUpdate(id, t); }
 }
+function tarDetTab(tab){ F.detTab=tab; render(); }
 function tarDetModalContent(){
   const t=(S.tareas||[]).find(x=>x.id===F.id)||{};
   const me=S.user.nombre, admin=isAdmin();
   const soyPara=t.paraQuien===me, soyDe=t.deQuien===me;
   const d=tarDiasRest(t);
   const limTxt = !t.fechaLimite ? 'sin fecha' : (t.estado==='Hecha' ? fmtFecha(t.fechaLimite) : (d<0?`${fmtFecha(t.fechaLimite)} · vencida hace ${-d} d`:(d===0?`${fmtFecha(t.fechaLimite)} · hoy`:`${fmtFecha(t.fechaLimite)} · faltan ${d} d`)));
+  const horaTxt = t.horaInicio ? ` · ${incEsc(t.horaInicio)}${t.horaFin?'–'+incEsc(t.horaFin):''}` : '';
   let acciones='';
   if((soyPara||admin) && tarActiva(t)){
     if(t.estado==='Pendiente') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','En curso')">Marcar en curso</button>`;
@@ -4187,24 +4444,38 @@ function tarDetModalContent(){
   if((soyPara||soyDe||admin) && t.estado==='Hecha') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','Pendiente')">Reabrir</button>`;
   if(soyDe||admin) acciones+=`<button class="btn btn-ghost" onclick="openTarEdit('${t.id}')">Editar</button>`;
   if(soyDe||admin) acciones+=`<button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="tarEliminar('${t.id}')">Eliminar</button>`;
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  const recurInfo = (t.serieId||t.recurrencia) ? `<span style="display:inline-block;font-size:11px;font-weight:600;background:#EAF1D8;color:#3f5400;border-radius:10px;padding:1px 9px;margin-left:6px;vertical-align:middle">⟳ ${incEsc(tarRecurLabel(t.recurrencia)||'Recurrente')}</span>` : '';
+  const tab=F.detTab||'conv';
+  const nMsg=(t.mensajes||[]).length, nTime=(t.tiempos||[]).length, nImg=(t.adjuntos||[]).length, totMin=tarTotalMin(t);
+  const tabBtn=(k,lbl)=>`<button onclick="tarDetTab('${k}')" style="cursor:pointer;border:none;background:none;padding:8px 2px;margin-right:18px;font-size:13.5px;font-weight:600;color:${tab===k?'#333F48':'#8A949B'};border-bottom:2px solid ${tab===k?'#6E8E00':'transparent'}">${lbl}</button>`;
+  const tabBar=`<div style="display:flex;border-bottom:1px solid var(--line);margin:4px 0 10px">
+    ${tabBtn('conv','Conversación'+(nMsg?` (${nMsg})`:''))}
+    ${tabBtn('time','Tiempo'+(totMin?` · ${tarFmtMin(totMin)}`:''))}
+    ${tabBtn('img','Imágenes'+(nImg?` (${nImg})`:''))}
+  </div>`;
+  let tabBody='';
+  if(tab==='time') tabBody=tarTiempoHtml(t,true);
+  else if(tab==='img') tabBody=tarAdjuntosHtml(t,true);
+  else tabBody=tarThreadHtml(t,true);
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
     <div class="modal-head"><h2>Tarea</h2><button class="x" onclick="closeModal()">×</button></div>
-    <div class="modal-body">
-      <div class="inc-top" style="margin-bottom:10px;align-items:center">${tarPrioChip(t.prioridad)} ${tarEstadoChip(t.estado)} ${tarVencida(t)?'<span class="inc-imp imp-Alta">Vencida</span>':''}</div>
-      <div style="font-family:var(--serif);font-size:19px;margin-bottom:8px">${incEsc(t.titulo||'')}</div>
-      <div class="inc-meta" style="margin:0 0 6px">De ${incEsc(t.deQuien||'—')} · Para ${incEsc(t.paraQuien||'—')}</div>
-      <div class="inc-meta" style="margin:0 0 10px">Entrega: ${incEsc(limTxt)}${t.fechaHecha?` · Hecha el ${incEsc(fmtFecha(t.fechaHecha))}`:''}</div>
-      ${t.descripcion?`<div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:12px 14px">${incEsc(t.descripcion)}</div>`:''}
-      ${tarAdjuntosHtml(t)}
-      ${tarThreadHtml(t)}
-      ${tarTiempoHtml(t)}
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
+    <div class="modal-body" style="display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1">
+      <div style="flex:0 0 auto">
+        <div class="inc-top" style="margin-bottom:8px;align-items:center">${tarPrioChip(t.prioridad)} ${tarEstadoChip(t.estado)} ${tarVencida(t)?'<span class="inc-imp imp-Alta">Vencida</span>':''}${recurInfo}</div>
+        <div style="font-family:var(--serif);font-size:19px;margin-bottom:6px">${incEsc(t.titulo||'')}</div>
+        <div class="inc-meta" style="margin:0 0 4px">De ${incEsc(t.deQuien||'—')} · Para ${incEsc(t.paraQuien||'—')}</div>
+        <div class="inc-meta" style="margin:0 0 ${t.descripcion?'8px':'2px'}">Entrega: ${incEsc(limTxt)}${horaTxt}${t.fechaHecha?` · Hecha el ${incEsc(fmtFecha(t.fechaHecha))}`:''}</div>
+        ${t.descripcion?`<div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:10px 12px;max-height:84px;overflow-y:auto;font-size:14px">${incEsc(t.descripcion)}</div>`:''}
+      </div>
+      <div style="flex:0 0 auto">${tabBar}</div>
+      <div style="flex:1 1 auto;min-height:90px;overflow-y:auto">${tabBody}</div>
+      <div style="flex:0 0 auto;display:flex;gap:10px;justify-content:flex-end;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);flex-wrap:wrap">
         ${acciones}
         <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
       </div>
     </div></div></div>`;
 }
-function tarThreadHtml(t){
+function tarThreadHtml(t, bare){
   const me=S.user.nombre, admin=isAdmin();
   const puede = admin || t.deQuien===me || t.paraQuien===me;
   const msgs=Array.isArray(t.mensajes)?t.mensajes:[];
@@ -4222,12 +4493,14 @@ function tarThreadHtml(t){
       <input class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}">
       <button class="btn btn-primary" onclick="tarAddMsg('${t.id}')">Enviar</button>
     </div>` : '';
+  if(bare) return `<div>${list}</div>${compose}`;
   return `<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
     <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Conversación</div>
     <div style="max-height:240px;overflow-y:auto">${list}</div>
     ${compose}</div>`;
 }
 function tarMsgTime(ts){ ts=String(ts||''); const d=ts.slice(0,10).split('-'); const hm=ts.slice(11,16); return (d.length===3?`${d[2]}/${d[1]}`:ts)+(hm?` ${hm}`:''); }
+function tarAutoEnCurso(t){ if(t && t.estado==='Pendiente'){ t.estado='En curso'; return true; } return false; }
 function tarAddMsg(id){
   const txt=(F.msgDraft||'').trim(); if(!txt) return;
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
@@ -4235,6 +4508,7 @@ function tarAddMsg(id){
   if(!(isAdmin()||t.deQuien===me||t.paraQuien===me)){ toast('No puedes escribir en esta tarea'); return; }
   if(!Array.isArray(t.mensajes)) t.mensajes=[];
   t.mensajes.push({de:me, texto:txt, ts:now()});
+  tarAutoEnCurso(t);
   F.msgDraft=''; render();
   srvTarUpdate(id, t);
   const otros=[...new Set([t.deQuien,t.paraQuien].filter(n=>n && n!==me))];
@@ -4243,7 +4517,7 @@ function tarAddMsg(id){
 function tarFmtMin(m){ m=Math.max(0,Math.round(Number(m)||0)); const h=Math.floor(m/60), mm=m%60; return h ? (mm?`${h}h ${mm}m`:`${h}h`) : `${mm}m`; }
 function tarTotalMin(t){ return (Array.isArray(t.tiempos)?t.tiempos:[]).reduce((s,e)=>s+(Number(e.min)||0),0); }
 function tarTiempoChip(t){ const m=tarTotalMin(t); return m>0?`<span style="display:inline-block;font-size:11px;font-weight:500;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:middle">${tarFmtMin(m)}</span>`:''; }
-function tarTiempoHtml(t){
+function tarTiempoHtml(t, bare){
   const me=S.user.nombre, admin=isAdmin();
   const puede = admin || t.deQuien===me || t.paraQuien===me;
   const ents=Array.isArray(t.tiempos)?t.tiempos:[];
@@ -4258,6 +4532,8 @@ function tarTiempoHtml(t){
       <div class="fld" style="margin:0;flex:1;min-width:120px"><label style="font-size:12px">Nota (opcional)</label><input class="inp" value="${incEsc(F.tNota||'')}" oninput="setInp('tNota',this.value)" placeholder="Qué hiciste"></div>
       <button class="btn btn-primary" onclick="tarAddTiempo('${t.id}')">Añadir tiempo</button>
     </div>` : '';
+  const totLine=`<div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:6px"><div style="font-weight:700;font-size:13px">${tarFmtMin(total)}${ents.length?` · ${ents.length} apunte${ents.length>1?'s':''}`:''}</div></div>`;
+  if(bare) return `${totLine}${list}${form}`;
   return `<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B">Tiempo dedicado</div>
@@ -4287,28 +4563,66 @@ function tarDelTiempo(id, idx){
 function openTarEdit(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   if(!(isAdmin()||t.deQuien===S.user.nombre)){ toast('Solo puede editarla quien la creó o Dirección'); return; }
-  F={type:'tar_edit', id, titulo:t.titulo||'', descripcion:t.descripcion||'', prioridad:t.prioridad||'Media', area:t.area||'General', fechaLimite:t.fechaLimite||'', paraQuien:t.paraQuien||'', deQuien:t.deQuien||''};
+  F={type:'tar_edit', id, titulo:t.titulo||'', descripcion:t.descripcion||'', prioridad:t.prioridad||'Media', area:t.area||'General', fechaLimite:t.fechaLimite||'', paraQuien:t.paraQuien||'', deQuien:t.deQuien||'', horaInicio:t.horaInicio||'', horaFin:t.horaFin||''};
   S.modal='tar_edit'; render();
 }
 function tarEditModalContent(){
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  const t=(S.tareas||[]).find(x=>x.id===F.id)||{};
+  const esSerie=!!t.serieId;
+  const botones = esSerie
+    ? `<div style="display:flex;flex-direction:column;gap:8px;width:100%">
+         <div class="muted" style="font-size:12px">Esta tarea es recurrente (${incEsc(tarRecurLabel(t.recurrencia)||'serie')}). ¿A qué tareas aplico los cambios?</div>
+         <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+           <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+           <button class="btn btn-ghost" onclick="commitTarEdit('una')">Solo esta</button>
+           <button class="btn btn-ghost" onclick="commitTarEdit('siguientes')">Esta y siguientes</button>
+           <button class="btn btn-primary" onclick="commitTarEdit('todas')">Todas</button>
+         </div>
+       </div>`
+    : `<div style="display:flex;gap:10px;justify-content:flex-end">
+         <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+         <button class="btn btn-primary" onclick="commitTarEdit('una')">Guardar cambios</button>
+       </div>`;
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:700px">
     <div class="modal-head"><h2>Editar tarea</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${tarFormBody()}
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
-        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="commitTarEdit()">Guardar cambios</button>
-      </div>
+      <div style="margin-top:16px">${botones}</div>
     </div></div></div>`;
 }
-function commitTarEdit(){
+async function srvTarUpdateMany(ids, fields, okMsg){
+  if(!ids || !ids.length) return;
+  try{
+    const { error } = await sbc.from('tar_tareas').update(fields).in('id', ids);
+    if(error) throw error;
+  }catch(e){ console.error('srvTarUpdateMany', e); await syncAll(); toast('Error al guardar la serie: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+function commitTarEdit(scope){
+  scope=scope||'una';
   if(!tarValid()) return;
   const t=(S.tareas||[]).find(x=>x.id===F.id); if(!t) return;
-  t.titulo=(F.titulo||'').trim(); t.descripcion=(F.descripcion||'').trim();
-  t.prioridad=F.prioridad||'Media'; t.area=F.area||'General'; t.paraQuien=F.paraQuien;
-  if(t.deQuien===S.user.nombre) t.fechaLimite=F.fechaLimite; // la fecha de entrega solo la cambia quien emitió
+  const cont={ titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(), prioridad:F.prioridad||'Media', area:F.area||'General', paraQuien:F.paraQuien, horaInicio:F.horaInicio||'', horaFin:F.horaFin||'' };
+  // aplicar siempre a esta tarea (incluida su fecha, si soy el emisor)
+  Object.assign(t, cont);
+  if(t.deQuien===S.user.nombre) t.fechaLimite=F.fechaLimite;
+  if(scope==='una' || !t.serieId){
+    closeModal(); render();
+    srvTarUpdate(t.id, t, 'Tarea actualizada');
+    return;
+  }
+  // propagar a la serie (contenido, NO fecha/estado)
+  const hermanas=tarSerieHermanas(t.serieId).filter(x=> x.id!==t.id && (scope==='todas' || (x.fechaLimite||'') >= (t.fechaLimite||'')) );
+  hermanas.forEach(x=> Object.assign(x, cont));
+  const ids=hermanas.map(x=>x.id);
+  const fields={ titulo:cont.titulo, descripcion:cont.descripcion||null, prioridad:cont.prioridad, area:cont.area, para_quien:cont.paraQuien, hora_inicio:cont.horaInicio||null, hora_fin:cont.horaFin||null };
   closeModal(); render();
-  srvTarUpdate(t.id, t, 'Tarea actualizada');
+  // esta tarea por separado (puede llevar fecha distinta), y el resto en lote
+  (async()=>{
+    await srvTarUpdate(t.id, t);
+    if(ids.length) await srvTarUpdateMany(ids, fields);
+    toast(scope==='todas'?`Serie actualizada · ${ids.length+1} tareas`:`Actualizadas ${ids.length+1} tareas`);
+  })();
 }
 
 /* ---- export ---- */
@@ -4519,6 +4833,50 @@ function iaContexto(pregunta){
   const dias = f => { if(!f) return null; return Math.round((new Date(f+'T00:00:00')-new Date(hoy+'T00:00:00'))/86400000); };
   const dsc = t => { const d=(t.descripcion||'').trim(); return d ? ` | nota: "${d.length>320?d.slice(0,320)+'…':d}"` : ''; };
   const out = [];
+
+  /* ===== QUIÉN ES LUCAI · conciencia de toda la plataforma =====
+     Se construye a partir de MODULES y canAccess, así que se mantiene
+     al día solo: si añades un módulo nuevo, Lucai lo conoce sin tocar esto. */
+  const modList = (typeof MODULES!=='undefined' ? MODULES : [])
+    .filter(m=> m.id!=='asistente')   // no hace falta que se describa a sí mismo
+    .map(m=>{
+      const acc = (typeof canAccess==='function') ? canAccess(m.id) : true;
+      const estado = m.estado==='pronto' ? 'EN CONSTRUCCIÓN' : 'activo';
+      const quien = acc ? 'esta persona SÍ puede entrar' : 'esta persona NO tiene acceso (lo gestiona Dirección)';
+      return `  · ${m.nombre}: ${m.desc} [${estado} · ${quien}]`;
+    });
+
+  out.push('========================================');
+  out.push('QUIÉN ERES Y DÓNDE VIVES');
+  out.push('========================================');
+  out.push('Eres Lucai, el asistente interno del Centro Odontológico Laura Fernández (Cieza). Vives DENTRO de la plataforma Lucai, la herramienta de gestión interna que el equipo usa cada día. No eres una IA genérica: eres parte del equipo y conoces cómo funciona la clínica por dentro.');
+  out.push('Tu misión: ayudar a CUALQUIER persona del equipo a tener claro qué hacer y a moverse por la plataforma. Conviertes el lío del día a día —tareas sueltas, avisos, material, incidencias— en pasos claros. Hablas como una compañera de confianza: en español, cercana, directa y breve. Nada de párrafos largos ni rodeos.');
+
+  out.push('\n========================================');
+  out.push('EL EQUIPO');
+  out.push('========================================');
+  out.push('· Dirección: David Lucas y Laura Fernández (ven y gestionan todo).');
+  out.push('· Coordinadoras: Encarna, Noemi, Cristina.');
+  out.push('· Atención al paciente: Dessire, Irene.');
+  out.push(`La persona que te escribe ahora es ${me}${admin?', de Dirección' : ''}. Adapta lo que ve y lo que puede hacer a su rol.`);
+
+  out.push('\n========================================');
+  out.push('LA PLATAFORMA · MÓDULOS');
+  out.push('========================================');
+  out.push('Lucai está organizada en módulos. Esto es lo que hay ahora mismo y si esta persona puede entrar:');
+  out.push(modList.length ? modList.join('\n') : '  (no hay módulos cargados)');
+  out.push('Cómo usar esto: si te preguntan por algo que vive en un módulo, di en qué módulo está y que lo abra desde la pantalla de inicio. Si un módulo está EN CONSTRUCCIÓN, avisa de que aún no está listo. Si la persona NO tiene acceso a un módulo, no inventes esos datos: dile que eso lo lleva Dirección.');
+
+  out.push('\n========================================');
+  out.push('TUS LÍMITES');
+  out.push('========================================');
+  out.push('· NUNCA manejas datos de pacientes (nombres, historiales, diagnósticos). Si te los piden, recuerda que no trabajas con datos de pacientes.');
+  out.push('· Puedes equivocarte. Para algo importante, di que lo comprueben en la app.');
+  out.push('· Trabaja SOLO con la información que aparece a continuación. Si no la tienes, dilo claro y guía al módulo correcto en vez de inventar.');
+
+  out.push('\n========================================');
+  out.push('LOS DATOS DE AHORA MISMO');
+  out.push('========================================');
   out.push(`HOY es ${hoy}. Úsala para saber qué está VENCIDA (fecha anterior a hoy), qué VENCE HOY y qué es futura. "Vencida", "pasada" o "atrasada" significan lo mismo.`);
   out.push(`Usuario: ${me}${admin?' (Dirección)':''}.`);
 
@@ -5604,6 +5962,7 @@ function tarAddMsgImg(id){
       if(!Array.isArray(t.mensajes)) t.mensajes=[];
       const txt=(F.msgDraft||'').trim();
       t.mensajes.push({de:me, texto:txt, adj:ref, ts:now()});
+      tarAutoEnCurso(t);
       F.msgDraft=''; render();
       srvTarUpdate(id, t);
       const otros=[...new Set([t.deQuien,t.paraQuien].filter(n=>n && n!==me))];
@@ -5612,20 +5971,22 @@ function tarAddMsgImg(id){
   });
 }
 
-function tarAdjuntosHtml(t){
+function tarAdjuntosHtml(t, bare){
   const puede=tarPuedeTocar(t);
   const adj=Array.isArray(t.adjuntos)?t.adjuntos:[];
   const thumbs=adj.map((a,i)=>`<div style="position:relative;display:inline-block">
       <img data-tarpath="${a.path}" onclick="tarVerImg('${a.path}')" alt="adjunto" style="width:74px;height:74px;object-fit:cover;border-radius:8px;cursor:pointer;background:#E8EAED;border:1px solid var(--line)">
       ${puede?`<button onclick="tarDelAdjunto('${t.id}',${i})" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#C0392B;color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer">×</button>`:''}
     </div>`).join('');
-  return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-    <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Imágenes</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  const cuerpo=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       ${thumbs}
       ${puede?`<button class="btn btn-ghost btn-sm" onclick="tarAddImagen('${t.id}')">+ Imagen</button>`:''}
     </div>
-    ${(!adj.length&&!puede)?'<div class="muted" style="font-size:13px">Sin imágenes.</div>':''}
+    ${(!adj.length&&!puede)?'<div class="muted" style="font-size:13px">Sin imágenes.</div>':''}`;
+  if(bare) return cuerpo;
+  return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+    <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Imágenes</div>
+    ${cuerpo}
   </div>`;
 }
 
@@ -5681,6 +6042,7 @@ function tarOnPaste(e){
     const me=S.user.nombre;
     const txt=(F.msgDraft||'').trim();
     t.mensajes.push({de:me, texto:txt, adj:ref, ts:now()});
+    tarAutoEnCurso(t);
     F.msgDraft=''; render();
     srvTarUpdate(id, t);
     const otros=[...new Set([t.deQuien,t.paraQuien].filter(n=>n && n!==me))];
