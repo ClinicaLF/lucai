@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-11-78">
+<meta name="lucai-version" content="2026-06-11-79">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -794,7 +794,7 @@ function resetIdle(){
 }
 
 /* ---- APP SHELL ---- */
-const APP_VERSION = 'v2026.06.11-4';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
+const APP_VERSION = 'v2026.06.11-5';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
 const MODULES = [
   {id:'material', nombre:'Control de material', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
   {id:'tareas', nombre:'Tareas', ini:'T', desc:'Tareas que van surgiendo en la clínica: qué hay que hacer, quién es responsable, estado y seguimiento.', estado:'pronto'},
@@ -4538,14 +4538,26 @@ function commitTarea(){
     if(Array.isArray(F.adjuntos)&&F.adjuntos.length) nuevas[0].adjuntos=F.adjuntos.slice();
     nuevas.forEach(t=>S.tareas.unshift(t)); closeModal(); render();
     srvTarInsertMany(nuevas, `Serie creada · ${nuevas.length} tareas`);
-    tgNotify(base.paraQuien, `📋 ${base.deQuien} te ha asignado una tarea recurrente: "${base.titulo}" (${tarRecurLabel(rule)}) · ${nuevas.length} fechas`);
+    const _primer = (base.paraQuien||'').split(' ')[0];
+    let _txt = `Hola ${_primer}, ${base.deQuien} te ha asignado una tarea que se repite:\n\n${base.titulo}\n${tarRecurLabel(rule)} · ${nuevas.length} fechas · prioridad ${base.prioridad}`;
+    if(base.descripcion) _txt += `\n\n${base.descripcion}`;
+    _txt += `\n\nLa tienes en Lucai, en Tareas.`;
+    tgNotify(base.paraQuien, _txt);
     return;
   }
   const t=Object.assign({}, base, { id:F.id||uid(), fechaLimite:F.fechaLimite, serieId:null, recurrencia:null,
     estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:Array.isArray(F.adjuntos)?F.adjuntos:[] });
   S.tareas.unshift(t); closeModal(); render();
   srvTarInsert(t, 'Tarea enviada');
-  tgNotify(t.paraQuien, `📋 Nueva tarea de ${t.deQuien}: "${t.titulo}" · prioridad ${t.prioridad}${t.fechaLimite?` · entrega ${fmtFecha(t.fechaLimite)}`:''}${t.horaInicio?` · ${t.horaInicio}${t.horaFin?'–'+t.horaFin:''}`:''}`);
+  const _primer = (t.paraQuien||'').split(' ')[0];
+  const _meta = ['prioridad '+(t.prioridad||'Media')];
+  if(t.area && t.area!=='General') _meta.push(t.area);
+  if(t.fechaLimite) _meta.push('para el '+fmtFecha(t.fechaLimite));
+  if(t.horaInicio) _meta.push(t.horaInicio+(t.horaFin?'–'+t.horaFin:''));
+  let _txt = `Hola ${_primer}, ${t.deQuien} te ha asignado una tarea:\n\n${t.titulo}\n${_meta.join(' · ')}`;
+  if(t.descripcion) _txt += `\n\n${t.descripcion}`;
+  _txt += `\n\nLa tienes en Lucai, en Tareas.`;
+  tgNotify(t.paraQuien, _txt);
 }
 
 function openTarDet(id){
