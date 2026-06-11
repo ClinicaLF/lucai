@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-60">
+<meta name="lucai-version" content="2026-06-08-61">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -1711,7 +1711,7 @@ async function loadFromDB(){
       try{
         const { data: estRow } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
         const d = estRow && estRow.data;
-        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
+        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
       }catch(_){}
       window._estadoLoaded=true;
     }
@@ -5690,6 +5690,92 @@ function tarOnPaste(e){
 document.addEventListener('paste', tarOnPaste);
 /* ===== FIN IMÁGENES EN TAREAS ===== */
 
+
+/* ===== MÓDULO ACCESOS (apps y enlaces externos) ===== */
+(function(){
+  if(!MODULES.find(x=>x.id==='accesos')){
+    MODULES.push({ id:'accesos', ini:'A', nombre:'Accesos',
+      desc:'Accesos directos a las apps y herramientas externas de la clínica: NAS, Power BI, Drive, WhatsApp…',
+      estado:'activo' });
+  }
+})();
+if(!Array.isArray(S.accesos)) S.accesos=[];
+if(!PERSIST_FIELDS.includes('accesos')) PERSIST_FIELDS.push('accesos');
+function appAccesos(){ return Array.isArray(S.accesos)?S.accesos:[]; }
+const _canAccess_acc = canAccess;
+canAccess = function(id){ if(id==='accesos') return !!S.user; return _canAccess_acc(id); };
+
+function accesosView(){
+  const admin=isAdmin();
+  const items=appAccesos();
+  const cards = items.map(ac=>`
+    <div style="position:relative;border:1px solid var(--line);border-radius:14px;background:var(--white)">
+      <a href="${incEsc(ac.url||'#')}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:8px;padding:16px;min-height:104px">
+        <div style="width:44px;height:44px;border-radius:11px;background:${incEsc(ac.color||'#EAE3D7')};display:flex;align-items:center;justify-content:center;font-size:22px">${incEsc(ac.icono||'🔗')}</div>
+        <div style="font-weight:700;color:var(--ink)">${incEsc(ac.nombre||'Acceso')}</div>
+        <div style="font-size:12px;color:#8A949B;word-break:break-all">${incEsc((ac.url||'').replace(/^https?:\/\//,'').slice(0,40))}</div>
+      </a>
+      ${admin?`<button class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px" onclick="openAccesoEdit('${ac.id}')">Editar</button>`:''}
+    </div>`).join('');
+  return `${moduleHeader('Accesos', true)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:14px">
+      <div><div class="section-title">Accesos</div>
+      <div class="section-sub" style="margin:0">Apps y herramientas externas de la clínica. Se abren en una pestaña nueva (o en su app, si la tienes instalada en el móvil).</div></div>
+      ${admin?`<button class="btn btn-primary" onclick="openAccesoEdit(null)">+ Añadir acceso</button>`:''}
+    </div>
+    ${items.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">${cards}</div>`
+      :`<div class="soon" style="text-align:center;padding:30px"><div class="ico">🔗</div><h3>Aún no hay accesos</h3><p>${admin?'Pulsa “Añadir acceso” para crear el primero (por ejemplo, tu NAS Synology).':'Dirección aún no ha añadido accesos.'}</p></div>`}
+  </div></main>
+  ${S.modal?modalContent():''}`;
+}
+function openAccesoEdit(id){
+  if(!isAdmin()){ toast('Solo Dirección gestiona los accesos'); return; }
+  const ac = id ? appAccesos().find(a=>a.id===id) : null;
+  F = ac ? {type:'acceso_edit', id:ac.id, nombre:ac.nombre, url:ac.url, icono:ac.icono||'🔗', color:ac.color||'#EAE3D7'}
+         : {type:'acceso_edit', id:null, nombre:'', url:'', icono:'🔗', color:'#EAE3D7'};
+  S.modal='acceso_edit'; render();
+}
+function accesoEditModalContent(){
+  const colores=['#EAE3D7','#E8F1CC','#E8EAED','#D4C4A0','#CBE08A','#F5D9C8'];
+  const emojis=['🔗','💾','📊','📁','💬','📷','🗂️','🌐','📅','🧾','🦷','📨'];
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-head"><h2>${F.id!=null?'Editar acceso':'Nuevo acceso'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)" placeholder="p. ej. NAS Synology"></div>
+      <div class="fld"><label>Enlace (URL)</label><input class="inp" value="${incEsc(F.url||'')}" oninput="setInp('url',this.value)" placeholder="https://…"></div>
+      <div class="fld"><label>Icono</label><div class="chips">${emojis.map(e=>`<button class="chip-sel ${F.icono===e?'on':''}" style="min-width:44px;font-size:18px" onclick="setSel('icono','${e}')">${e}</button>`).join('')}</div></div>
+      <div class="fld"><label>Color</label><div class="chips">${colores.map(c=>`<button onclick="setSel('color','${c}')" style="width:34px;height:34px;border-radius:9px;background:${c};border:2px solid ${F.color===c?'var(--ink)':'transparent'};cursor:pointer"></button>`).join('')}</div></div>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:16px;align-items:center">
+        ${F.id!=null?`<button class="btn btn-ghost" style="color:#C0392B" onclick="accesoDel('${F.id}')">Eliminar</button>`:'<span></span>'}
+        <div style="display:flex;gap:8px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="commitAcceso()">Guardar</button></div>
+      </div>
+    </div></div></div>`;
+}
+function commitAcceso(){
+  const nombre=(F.nombre||'').trim(); let url=(F.url||'').trim();
+  if(!nombre){ toast('Pon un nombre'); return; }
+  if(!url){ toast('Pon el enlace'); return; }
+  if(!/^[a-z][a-z0-9+.-]*:/i.test(url)) url='https://'+url;   // si no trae http(s):// u otro esquema, lo añadimos
+  let list=appAccesos().slice();
+  if(F.id!=null){ list=list.map(a=> a.id===F.id ? {...a, nombre, url, icono:F.icono||'🔗', color:F.color||'#EAE3D7'} : a); }
+  else { list.push({ id:uid(), nombre, url, icono:F.icono||'🔗', color:F.color||'#EAE3D7' }); }
+  S.accesos=list; _usuariosPersist(); closeModal(); render(); toast('Acceso guardado');
+}
+function accesoDel(id){
+  S.accesos=appAccesos().filter(a=>a.id!==id); _usuariosPersist(); closeModal(); render(); toast('Acceso eliminado');
+}
+const _appView_acc = appView;
+appView = function(){
+  if(S.module==='accesos'){ if(!canAccess('accesos')){ S.module=null; return homeView(); } return accesosView(); }
+  return _appView_acc();
+};
+const _modalContent_acc = modalContent;
+modalContent = function(){
+  if(F.type==='acceso_edit') return accesoEditModalContent();
+  return _modalContent_acc();
+};
+/* ===== FIN MÓDULO ACCESOS ===== */
 
 boot();
 
