@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-70">
+<meta name="lucai-version" content="2026-06-08-71">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -2590,10 +2590,11 @@ function homeView(){
     equipos:'<path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.1-.6-.6-2.1 2.4-2.4z"/>',
     presupuestos:'<path d="M7 3h10a1 1 0 0 1 1 1v16l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9.5 8.5h5M9.5 12h5"/>',
     orto:'<path d="M6 4c1.6 0 2.4 1 3.2 1s1.2-1 2.8-1 2 1 2.8 1S18 4 18 4c1.6 0 2.5 1.3 2.5 3.2 0 2.4-1 4-1.6 6.8-.5 2.3-1 5-2.4 5-1.2 0-1.3-2.4-2.5-2.4S13 19 12 19s-1.3-2.4-2.5-2.4S8.7 19 7.5 19c-1.4 0-1.9-2.7-2.4-5C4.5 11.2 3.5 9.6 3.5 7.2 3.5 5.3 4.4 4 6 4z"/>',
-    documentos:'<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 16.5h6"/>'
+    documentos:'<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 16.5h6"/>',
+    temas:'<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 12h5"/>'
   };
   const GROUPS = [
-    {lbl:'Tu día', ids:['tareas','comunicaciones','incidencias','accesos']},
+    {lbl:'Tu día', ids:['tareas','temas','comunicaciones','incidencias','accesos']},
     {lbl:'Almacén y equipos', ids:['material','equipos']},
     {lbl:'Pacientes y negocio', ids:['presupuestos','orto','documentos']}
   ];
@@ -6248,6 +6249,209 @@ modalContent = function(){
   return _modalContent_acc();
 };
 /* ===== FIN MÓDULO ACCESOS ===== */
+
+/* ===== MÓDULO TEMAS (coordinación de equipo · sin datos de pacientes) ===== */
+const TEMA_CATS = ['Coordinación','Organización','Agenda','Protocolos','General'];
+S.temas = S.temas || [];
+
+(function(){
+  if(!MODULES.find(x=>x.id==='temas')){
+    MODULES.push({ id:'temas', ini:'T', nombre:'Temas de coordinación',
+      desc:'Hilos para tratar cosas en equipo: se comenta, se adjuntan pantallazos y, cuando se resuelve, se cierra.',
+      estado:'activo' });
+  }
+})();
+
+const _canAccess_tema = canAccess;
+canAccess = function(id){ if(id==='temas') return !!S.user; return _canAccess_tema(id); };
+
+/* ---- persistencia (tabla propia lucai_temas) ---- */
+const _loadFromDB_tema = loadFromDB;
+loadFromDB = async function(){
+  const _prev=_loadFromDB_tema();
+  try{
+    const r=await sbc.from('lucai_temas').select('*').order('created_at',{ascending:false});
+    if(r.data){
+      S.temas=r.data.map(x=>({
+        id:x.id, titulo:x.titulo, categoria:x.categoria||'General', autor:x.autor,
+        estado:x.estado||'abierto', ts:x.ts, fechaCierre:x.fecha_cierre||null, cerradoPor:x.cerrado_por||null,
+        mensajes: Array.isArray(x.mensajes)?x.mensajes:(function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
+        vistos: (x.vistos&&typeof x.vistos==='object'&&!Array.isArray(x.vistos))?x.vistos:{}
+      }));
+    }
+  }catch(e){ console.error('loadTemas', e); }
+  await _prev;
+};
+async function srvTemaInsert(t, okMsg){
+  try{
+    const { error } = await sbc.from('lucai_temas').insert({
+      id:t.id, titulo:t.titulo, categoria:t.categoria||'General', autor:t.autor,
+      estado:t.estado||'abierto', ts:t.ts, fecha_cierre:t.fechaCierre||null, cerrado_por:t.cerradoPor||null,
+      mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) });
+    if(error) throw error;
+  }catch(e){ console.error('srvTemaInsert', e); await syncAll(); toast('Error al crear el tema: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvTemaUpdate(id, t){
+  try{
+    const { error } = await sbc.from('lucai_temas').update({
+      titulo:t.titulo, categoria:t.categoria||'General', estado:t.estado||'abierto',
+      fecha_cierre:t.fechaCierre||null, cerrado_por:t.cerradoPor||null,
+      mensajes:(t.mensajes||[]), vistos:(t.vistos||{}) }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('srvTemaUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+
+/* ---- helpers ---- */
+function temaById(id){ return (S.temas||[]).find(x=>String(x.id)===String(id)); }
+function temaNoLeido(t){ const me=S.user&&S.user.nombre; if(!me) return false; const last=(t.vistos&&t.vistos[me])||''; const msgs=Array.isArray(t.mensajes)?t.mensajes:[]; return msgs.some(m=> m.de!==me && String(m.ts||'')>String(last)); }
+function temasNoLeidosCount(){ return (S.temas||[]).filter(t=>t.estado!=='cerrado' && temaNoLeido(t)).length; }
+function temaFmtTs(ts){ ts=String(ts||''); const d=ts.slice(0,10).split('-'); const hm=ts.slice(11,16); return (d.length===3?`${d[2]}/${d[1]}`:ts)+(hm?` ${hm}`:''); }
+
+/* ---- navegación detalle ---- */
+function abrirTema(id){ const t=temaById(id); if(!t) return; const me=S.user.nombre; if(!t.vistos) t.vistos={}; t.vistos[me]=now(); S.temaOpen=String(id); F.temaDraft=''; S.temaAdj=null; S.temaReply=null; render(); srvTemaUpdate(id, t); }
+function volverTemas(){ S.temaOpen=null; S.temaReply=null; S.temaAdj=null; render(); }
+
+/* ---- crear tema ---- */
+function nuevoTema(){ F={type:'tema_nuevo', ttitulo:'', tcat:TEMA_CATS[0]}; S.modal='tema_nuevo'; render(); }
+function commitTemaNuevo(){
+  const titulo=(F.ttitulo||'').trim(); if(!titulo){ toast('Ponle un título al tema'); return; }
+  const me=S.user.nombre;
+  const t={ id:'T'+Date.now().toString(36), titulo, categoria:F.tcat||'General', autor:me, estado:'abierto', ts:now(), fechaCierre:null, cerradoPor:null, mensajes:[], vistos:{} };
+  t.vistos[me]=now();
+  S.temas.unshift(t); S.modal=null; S.module='temas'; S.temaOpen=String(t.id); render();
+  srvTemaInsert(t, 'Tema creado');
+}
+
+/* ---- mensajes ---- */
+function temaSetReply(id, idx){ const t=temaById(id); if(!t) return; const m=(t.mensajes||[])[idx]; if(!m) return; S.temaReply={de:m.de, texto:(m.texto||'(imagen)').slice(0,120)}; render(); const e=el('temaInput'); if(e) e.focus(); }
+function temaClearReply(){ S.temaReply=null; render(); }
+function temaQuitarAdj(){ S.temaAdj=null; render(); }
+function temaAddImg(id){
+  const t=temaById(id); if(!t) return;
+  tarPickImagen(function(f){
+    toast('Subiendo imagen…');
+    tarSubirImagen(f, 'tema_'+id).then(function(ref){ S.temaAdj=ref; render(); }).catch(function(e){ toast('No se pudo subir: '+(e.message||e)); });
+  });
+}
+function temaPostMsg(id){
+  const t=temaById(id); if(!t) return;
+  if(t.estado==='cerrado'){ toast('Este tema está cerrado. Reábrelo para escribir.'); return; }
+  const txt=(F.temaDraft||'').trim();
+  if(!txt && !S.temaAdj){ return; }
+  const me=S.user.nombre;
+  if(!Array.isArray(t.mensajes)) t.mensajes=[];
+  const msg={ id:uid(), de:me, texto:txt, ts:now(), adj:S.temaAdj||null, reply:S.temaReply||null };
+  t.mensajes.push(msg);
+  if(!t.vistos) t.vistos={}; t.vistos[me]=now();
+  F.temaDraft=''; S.temaAdj=null; S.temaReply=null; render();
+  srvTemaUpdate(id, t);
+  const otros=appUsers().map(u=>u.nombre).filter(n=>n && n!==me);
+  otros.forEach(n=> tgNotify(n, `💬 ${me} en el tema "${t.titulo}": ${txt||'(imagen)'}`));
+}
+function temaCerrar(id){ const t=temaById(id); if(!t) return; t.estado='cerrado'; t.fechaCierre=todayStr(); t.cerradoPor=S.user.nombre; render(); srvTemaUpdate(id, t); toast('Tema cerrado'); }
+function temaReabrir(id){ const t=temaById(id); if(!t) return; t.estado='abierto'; t.fechaCierre=null; t.cerradoPor=null; render(); srvTemaUpdate(id, t); toast('Tema reabierto'); }
+
+/* ---- vistas ---- */
+function temasView(){
+  let inner;
+  if(S.temaOpen){
+    const t=temaById(S.temaOpen);
+    if(t){ inner=temaDetalleView(t); }
+    else { S.temaOpen=null; inner=temasListView(); }
+  } else { inner=temasListView(); }
+  return `${inner}
+  ${S.modal?modalContent():''}`;
+}
+function temasListView(){
+  const list=[...(S.temas||[])].sort((a,b)=>{
+    if((a.estado==='cerrado')!==(b.estado==='cerrado')) return a.estado==='cerrado'?1:-1;
+    const la=(a.mensajes&&a.mensajes.length?a.mensajes[a.mensajes.length-1].ts:a.ts)||'';
+    const lb=(b.mensajes&&b.mensajes.length?b.mensajes[b.mensajes.length-1].ts:b.ts)||'';
+    return String(lb).localeCompare(String(la));
+  });
+  const rows=list.length? list.map(t=>{
+    const nMsg=(t.mensajes||[]).length; const nuevo=t.estado!=='cerrado'&&temaNoLeido(t);
+    const cerrado=t.estado==='cerrado';
+    return `<div onclick="abrirTema('${t.id}')" style="cursor:pointer;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:${cerrado?'#F7F7F5':'#fff'};display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          ${nuevo?'<span style="width:8px;height:8px;border-radius:50%;background:#C0392B;display:inline-block;flex:0 0 auto"></span>':''}
+          <strong style="font-size:15px;color:#333F48">${incEsc(t.titulo)}</strong>
+          <span style="font-size:11px;font-weight:500;background:#EAF1D8;color:#5A6E00;border-radius:10px;padding:1px 8px">${incEsc(t.categoria||'General')}</span>
+          ${cerrado?'<span style="font-size:11px;font-weight:600;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px">Cerrado</span>':''}
+        </div>
+        <div style="font-size:12px;color:#8A949B;margin-top:3px">${incEsc(t.autor||'—')} · ${nMsg} mensaje${nMsg===1?'':'s'}${cerrado&&t.fechaCierre?` · cerrado ${incEsc(fmtFecha(t.fechaCierre))}`:''}</div>
+      </div>
+      <div style="flex:0 0 auto;color:#B8A88F;font-size:22px">›</div>
+    </div>`;
+  }).join('') : `<div class="muted" style="text-align:center;padding:32px">Aún no hay temas. Crea el primero para empezar a coordinar.</div>`;
+  return `<div class="toolbar" style="margin:6px 0 14px">
+      <div><div class="section-title">Temas de coordinación</div>
+      <div class="section-sub" style="margin:0">Hilos para tratar cosas en equipo. Se comenta, se adjuntan pantallazos y, cuando se resuelve, se cierra.</div></div>
+      <div class="actions"><button class="btn btn-primary" onclick="nuevoTema()">＋ Nuevo tema</button></div>
+    </div>
+    ${rows}`;
+}
+function temaDetalleView(t){
+  const me=S.user.nombre; const cerrado=t.estado==='cerrado';
+  const msgs=Array.isArray(t.mensajes)?t.mensajes:[];
+  const list = msgs.length ? msgs.map((mm,idx)=>{
+    const mine=mm.de===me;
+    return `<div style="margin-bottom:9px;display:flex;${mine?'justify-content:flex-end':''}">
+      <div style="max-width:84%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px">
+        <div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(mm.de||'—')} · ${incEsc(temaFmtTs(mm.ts))}</div>
+        ${mm.reply?`<div style="border-left:3px solid #B8A88F;padding:2px 8px;margin:0 0 5px;background:#fff;border-radius:6px;font-size:12px;color:#6C757D"><strong>${incEsc(mm.reply.de||'')}</strong>: ${incEsc(mm.reply.texto||'')}</div>`:''}
+        ${mm.texto?`<div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto)}</div>`:''}
+        ${mm.adj&&mm.adj.path?`<img data-tarpath="${mm.adj.path}" onclick="tarVerImg('${mm.adj.path}')" alt="imagen" style="margin-top:6px;max-width:200px;max-height:200px;border-radius:8px;cursor:pointer;display:block;background:#E8EAED">`:''}
+        ${!cerrado?`<div style="margin-top:4px"><button onclick="temaSetReply('${t.id}',${idx})" style="border:none;background:none;color:#8A949B;font-size:11px;cursor:pointer;padding:0">↩ responder</button></div>`:''}
+      </div></div>`;
+  }).join('') : `<div class="muted" style="font-size:13px;padding:8px 0">Aún no hay mensajes. Escribe el primero.</div>`;
+  const replyBar = (S.temaReply&&!cerrado) ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#F7F4EE;border-radius:8px;padding:5px 10px;font-size:12px;color:#6C757D;border:1px solid var(--line);margin-bottom:6px"><span>Respondiendo a <strong>${incEsc(S.temaReply.de)}</strong>: ${incEsc(S.temaReply.texto)}</span><button onclick="temaClearReply()" style="border:none;background:none;cursor:pointer;color:#8A949B;font-size:15px">×</button></div>` : '';
+  const adjBar = (S.temaAdj&&!cerrado) ? `<div style="background:#EAF1D8;border-radius:8px;padding:5px 10px;font-size:12px;color:#5A6E00;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><span>📷 Imagen lista para enviar</span><button onclick="temaQuitarAdj()" style="border:none;background:none;cursor:pointer;color:#5A6E00;font-size:15px">×</button></div>` : '';
+  const compose = cerrado
+    ? `<div class="muted" style="text-align:center;font-size:13px;padding:12px;background:#F7F7F5;border-radius:10px">Tema cerrado por ${incEsc(t.cerradoPor||'—')}${t.fechaCierre?` · ${incEsc(fmtFecha(t.fechaCierre))}`:''}. <button class="btn btn-ghost btn-sm" onclick="temaReabrir('${t.id}')" style="margin-left:6px">Reabrir</button></div>`
+    : `${adjBar}${replyBar}<div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="temaAddImg('${t.id}')" title="Adjuntar pantallazo" style="flex:0 0 auto;padding:8px 11px">📷</button>
+        <input id="temaInput" class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.temaDraft||'')}" oninput="setInp('temaDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();temaPostMsg('${t.id}')}">
+        <button class="btn btn-primary" onclick="temaPostMsg('${t.id}')">Enviar</button>
+      </div>`;
+  return `<div class="toolbar" style="margin:6px 0 12px">
+      <div style="min-width:0"><button class="btn btn-ghost btn-sm" onclick="volverTemas()" style="margin-bottom:8px">‹ Temas</button>
+        <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${incEsc(t.titulo)} <span style="font-size:11px;font-weight:500;background:#EAF1D8;color:#5A6E00;border-radius:10px;padding:1px 8px">${incEsc(t.categoria||'General')}</span>${cerrado?'<span style="font-size:11px;font-weight:600;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px">Cerrado</span>':''}</div>
+        <div class="section-sub" style="margin:0">Abierto por ${incEsc(t.autor||'—')} · ${incEsc(temaFmtTs(t.ts))}</div></div>
+      ${!cerrado?`<div class="actions"><button class="btn btn-ghost" onclick="temaCerrar('${t.id}')">Cerrar tema</button></div>`:''}
+    </div>
+    <div style="margin-bottom:12px">${list}</div>
+    ${compose}`;
+}
+
+/* ---- enrutado ---- */
+const _appView_tema = appView;
+appView = function(){
+  if(S.module==='temas'){ if(!canAccess('temas')){ S.module=null; return homeView(); } return temasView(); }
+  return _appView_tema();
+};
+const _modalContent_tema = modalContent;
+modalContent = function(){
+  if(F.type==='tema_nuevo') return temaNuevoModalContent();
+  return _modalContent_tema();
+};
+function temaNuevoModalContent(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
+    <div class="modal-head"><h2>Nuevo tema</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Un hilo para tratar algo en equipo. Cuando se resuelva, lo cierras.</div>
+      <div class="fld"><label>Título</label><input class="inp" placeholder="Ej. Reorganizar la agenda de los viernes" value="${incEsc(F.ttitulo||'')}" oninput="setInp('ttitulo',this.value)"></div>
+      <div class="fld"><label>Categoría</label><select class="inp" onchange="setSel('tcat',this.value)">${TEMA_CATS.map(c=>`<option ${F.tcat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="commitTemaNuevo()">Crear tema</button></div>
+  </div></div>`;
+}
+/* ===== FIN MÓDULO TEMAS ===== */
+
 
 boot();
 
