@@ -5016,7 +5016,7 @@ function iaBurbujas(){
     return `<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 2px">
       <span style="flex:0 0 auto;display:flex">${typeof lucaiAvatar==='function'?lucaiAvatar(32):''}</span>
       <div style="background:#fff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:10px 12px;font-size:14px;line-height:1.5;max-width:85%">
-        ¡Hola${nombre?', '+incEsc(nombre):''}! Soy <strong>Lucai</strong>, tu asistente en el Centro. Te echo una mano con el día a día —tus tareas, las comunicaciones del equipo, las incidencias— y te guío por el resto de la plataforma para que sepas dónde se hace cada cosa. ¿En qué te ayudo?
+        ¡Hola${nombre?', '+incEsc(nombre):''}! Soy <strong>Lucai</strong>, tu asistente. ¿En qué te puedo ayudar?
       </div>
     </div>`;
   }
@@ -5836,7 +5836,7 @@ function lucaiSaludoShow(){
   d.style.cssText = 'position:fixed;right:18px;bottom:88px;z-index:1190;max-width:min(300px,calc(100vw - 40px));opacity:0;transform:translateY(12px) scale(.9);transition:opacity .38s ease, transform .42s cubic-bezier(.2,.85,.3,1.12);transform-origin:bottom right';
   d.innerHTML = `<div style="display:flex;gap:9px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:16px 16px 4px 16px;box-shadow:0 12px 34px rgba(51,63,72,.2);padding:11px 12px;cursor:pointer">
       <span style="flex:0 0 auto;display:flex">${lucaiAvatar(36)}</span>
-      <div style="font-size:13px;line-height:1.45">¡Hola${nombre?', '+incEsc(nombre):''}! Te damos la bienvenida a <strong>Centro Odontológico Laura Fernández</strong>. Soy <strong>Lucai</strong>; si necesitas algo, pregúntame aquí.</div>
+      <div style="font-size:13px;line-height:1.45">¡Hola${nombre?', '+incEsc(nombre):''}! Soy <strong>Lucai</strong>, tu asistente. ¿En qué te puedo ayudar?</div>
       <span class="lucaiSalX" style="color:#8A949B;font-size:18px;line-height:1;flex:0 0 auto;padding:0 2px">×</span>
     </div>`;
   d.onclick = function(e){
