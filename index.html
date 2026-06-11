@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-69">
+<meta name="lucai-version" content="2026-06-08-70">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -945,7 +945,7 @@ function pedidosView(){
     const total=p.lineas.reduce((s,l)=>s+(l.precio||0)*l.cant,0);
     const cell=arts+(total>0?`<small style="display:block;color:var(--grey);margin-top:4px">Total: ${eur(total)}</small>`:'');
     const estado=p.estado==='recibido'
-      ? `<span class="tag sal">Recibido</span><small style="display:block;color:var(--grey);margin-top:3px">${fmtFecha(p.recTs)} · ${p.recUser}</small>`
+      ? `<span class="tag sal">Recibido</span><small style="display:block;color:var(--grey);margin-top:3px">Recepcionado por ${p.recUser||'—'} · ${fmtFecha(p.recTs)}</small>`
       : `<span class="tag inc">Pendiente</span>`;
     const accion=p.estado==='pendiente'
       ? `<button class="btn btn-ghost btn-sm" onclick="openPedidoEdit('${p.id}')">Editar</button> <button class="btn btn-primary btn-sm" onclick="openRecepcion('${p.id}')">Marcar recibido</button>` : '<span class="muted">—</span>';
@@ -1111,7 +1111,7 @@ function valorView(){
 function seguiView(){
   const rows=[...S.seguimientos].sort((a,b)=>String(b.ts).localeCompare(String(a.ts))).map(s=>`<tr>
     <td data-label="Fecha" class="mono muted">${fmtFecha(s.ts)}</td>
-    <td data-label="Artículo">${s.nombre||'<span class="muted">General</span>'}</td>
+    <td data-label="Categorías">${(Array.isArray(s.categorias)&&s.categorias.length)?(s.categorias.length===CATEGORIAS.length?'Todas':incEsc(s.categorias.join(', '))):(s.nombre||'<span class="muted">General</span>')}</td>
     <td data-label="Estado">${s.estado==='ok'?'<span class="tag sal">OK</span>':'<span class="tag inc">Incidencia</span>'}</td>
     <td data-label="Registrado por">${s.user}</td>
     <td data-label="Comentario"><span class="muted">${s.comentario||'—'}</span></td>
@@ -1122,7 +1122,7 @@ function seguiView(){
       <div class="actions"><button class="btn btn-primary" onclick="openModal('seguimiento')">＋ Nuevo seguimiento</button></div>
     </div>
     <div class="matrix"><table>
-      <thead><tr><th>Fecha</th><th>Artículo</th><th>Estado</th><th>Registrado por</th><th>Comentario</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Categorías</th><th>Estado</th><th>Registrado por</th><th>Comentario</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
 }
@@ -1213,8 +1213,8 @@ function cadModal(){
 let F={};
 function openModal(type){
   S.alert="";
-  if(type==='articulo') F={type, acod:"", anombre:"", acat:"", aprov:"", amin:3, aprecio:"", aprovNuevo:"", aviso:true, acaduca:"", atraz:false};
-  else if(type==='seguimiento') F={type, scod:"", estado:"ok", comentario:""};
+  if(type==='articulo') F={type, acod:"", anombre:"", adesc:"", acat:"", aprov:"", amin:3, aprecio:"", aprovNuevo:"", aviso:true, acaduca:"", atraz:false};
+  else if(type==='seguimiento') F={type, scats:[], estado:"ok", comentario:""};
   else if(type==='pedido') F={type, pcod:"", pcant:1, pprecio:"", proveedor:"", proveedorNuevo:"", fecha:todayStr(), lineas:[]};
   else if(type==='salida') F={type, cod:"", cant:1, doctor:null, pcod:"", pnombre:"", papellido:"", incidencia:false, incidComentario:""};
   else if(type==='entrada') F={type, cod:"", cant:1, precio:"", fecha:todayStr()};
@@ -1227,7 +1227,7 @@ function setInp(field,v){ F[field]=v; }
 function setProv(v){ F.proveedor=v; if(v!=='__nuevo__') F.proveedorNuevo=''; render(); }
 function setToggle(field,val){ F[field]=val; render(); }
 function selDoctor(i){ F.doctor=DOCTORS[i]; render(); }
-function openEdit(cod){ const a=art(cod); S.alert=""; F={type:'editart', cod, enombre:a.nombre, ecat:a.categoria, eprov:a.proveedor||'', emin:a.min, eprecio:a.precioRef||'', eaviso:a.aviso!==false, eactivo:a.activo!==false, ecaduca:a.caduca||'', etraz:a.trazable===true}; S.modal='editart'; render(); }
+function openEdit(cod){ const a=art(cod); S.alert=""; F={type:'editart', cod, enombre:a.nombre, edesc:a.descripcion||'', ecat:a.categoria, eprov:a.proveedor||'', emin:a.min, eprecio:a.precioRef||'', eaviso:a.aviso!==false, eactivo:a.activo!==false, ecaduca:a.caduca||'', etraz:a.trazable===true}; S.modal='editart'; render(); }
 
 function modalContent(){
   if(F.type==='articulo') return articleModalContent();
@@ -1387,6 +1387,7 @@ function articleModalContent(){
         <div class="fld" style="margin-top:0"><label>Categoría</label><select class="inp" onchange="setSel('acat',this.value)">${catOptions(F.acat)}</select></div>
       </div>
       <div class="fld"><label>Nombre</label><input class="inp" placeholder="Nombre del artículo" value="${F.anombre}" oninput="setInp('anombre',this.value)"></div>
+      <div class="fld"><label>Descripción (opcional)</label><textarea class="inp" placeholder="Notas sobre el material: referencia, medidas, marca, dónde se usa…" oninput="setInp('adesc',this.value)">${F.adesc||''}</textarea></div>
       <div class="fld"><label>Proveedor habitual</label>
         <select class="inp" onchange="setSel('aprov',this.value)">
           ${provOptions(F.aprov)}
@@ -1430,6 +1431,7 @@ function editArticleModalContent(){
     <div class="modal-head"><h2>Editar · ${a.cod}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${F.enombre}" oninput="setInp('enombre',this.value)"></div>
+      <div class="fld"><label>Descripción (opcional)</label><textarea class="inp" placeholder="Notas sobre el material: referencia, medidas, marca, dónde se usa…" oninput="setInp('edesc',this.value)">${F.edesc||''}</textarea></div>
       <div class="grid2">
         <div class="fld" style="margin-top:0"><label>Categoría</label><select class="inp" onchange="setSel('ecat',this.value)">${CATEGORIAS.map(c=>`<option ${F.ecat===c?'selected':''}>${c}</option>`).join('')}</select></div>
         <div class="fld" style="margin-top:0"><label>Proveedor habitual</label><select class="inp" onchange="setInp('eprov',this.value)"><option value="">Sin proveedor</option>${S.proveedores.map(p=>`<option ${F.eprov===p?'selected':''}>${p}</option>`).join('')}</select></div>
@@ -1466,8 +1468,12 @@ function seguiModalContent(){
   return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
     <div class="modal-head"><h2>Nuevo seguimiento</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="fld" style="margin-top:0"><label>Artículo (opcional)</label>
-        <select class="inp" onchange="setInp('scod',this.value)"><option value="">General (sin artículo)</option>${activeArts().map(a=>`<option value="${a.cod}" ${F.scod===a.cod?'selected':''}>${a.nombre} · ${a.cod}</option>`).join("")}</select></div>
+      <div class="fld" style="margin-top:0"><label>Categorías (puedes elegir varias)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <button type="button" class="chip-sel ${(F.scats||[]).length===CATEGORIAS.length?'on':''}" onclick="seguiAllCats()">Todas</button>
+          ${CATEGORIAS.map(c=>`<button type="button" class="chip-sel ${(F.scats||[]).includes(c)?'on':''}" onclick="seguiToggleCat('${c}')">${c}</button>`).join("")}
+        </div>
+        <div class="hint" style="text-align:left;margin-top:5px">Si no eliges ninguna, será un seguimiento general.</div></div>
       <div class="fld"><label>Estado</label>
         <button class="chip-sel ${F.estado==='ok'?'on':''}" onclick="setToggle('estado','ok')">OK</button>
         <button class="chip-sel ${F.estado==='incidencia'?'on':''}" onclick="setToggle('estado','incidencia')">Incidencia</button></div>
@@ -1709,7 +1715,7 @@ async function loadFromDB(){
       sbc.from('lucai_seguimientos').select('*').order('created_at',{ascending:false}),
     ]);
     if(arts.data) S.articulos = arts.data.map(r=>({
-      cod:r.cod, nombre:r.nombre, categoria:r.categoria, proveedor:r.proveedor,
+      cod:r.cod, nombre:r.nombre, descripcion:r.descripcion||'', categoria:r.categoria, proveedor:r.proveedor,
       min:Number(r.min)||0, precioRef:Number(r.precio_ref)||0, stock:Number(r.stock)||0,
       cost:Number(r.cost)||0, aviso:r.aviso!==false, activo:r.activo!==false,
       caduca:r.caduca||null, trazable:r.trazable===true }));
@@ -1726,7 +1732,8 @@ async function loadFromDB(){
       id:r.id, ts:r.ts, proveedor:r.proveedor, user:r.user_nombre, estado:r.estado,
       recTs:r.rec_ts, recUser:r.rec_user, lineas:Array.isArray(r.lineas)?r.lineas:[] }));
     if(segs.data) S.seguimientos = segs.data.map(r=>({
-      id:r.id, ts:r.ts, user:r.user_nombre, cod:r.cod, nombre:r.nombre, estado:r.estado, comentario:r.comentario }));
+      id:r.id, ts:r.ts, user:r.user_nombre, cod:r.cod, nombre:r.nombre, estado:r.estado, comentario:r.comentario,
+      categorias:Array.isArray(r.categorias)?r.categorias:(function(){try{return r.categorias?JSON.parse(r.categorias):[];}catch(_){return [];}})() }));
     // restaurar (una vez) los campos que viven en lucai_estado: usuarios, doctores, áreas, grupos, categorías
     if(!window._estadoLoaded){
       try{
@@ -1776,7 +1783,7 @@ async function srvProveedor(nombre){
 async function srvArticulo(a, okMsg){
   try{
     const { error } = await sbc.from('lucai_articulos').upsert({
-      cod:a.cod, nombre:a.nombre, categoria:a.categoria||null, proveedor:a.proveedor||null,
+      cod:a.cod, nombre:a.nombre, descripcion:a.descripcion||null, categoria:a.categoria||null, proveedor:a.proveedor||null,
       min:a.min||0, precio_ref:a.precioRef||0, stock:a.stock||0, cost:a.cost||0,
       aviso:a.aviso!==false, activo:a.activo!==false, caduca:a.caduca||null, trazable:a.trazable===true,
       updated_at:new Date().toISOString() }, { onConflict:'cod' });
@@ -1805,7 +1812,7 @@ async function srvSegui(s, okMsg){
   try{
     const { error } = await sbc.from('lucai_seguimientos').insert({
       id:s.id, ts:s.ts||null, user_nombre:s.user||null, cod:s.cod||null, nombre:s.nombre||null,
-      estado:s.estado||null, comentario:s.comentario||null });
+      estado:s.estado||null, comentario:s.comentario||null, categorias:s.categorias||[] });
     if(error) throw error;
   }catch(e){ console.error('srvSegui', e); await syncAll(); toast('Error al guardar seguimiento: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
@@ -1915,7 +1922,7 @@ function commitArticulo(){
   const prov=(F.aprov==='__nuevo__'?(F.aprovNuevo||''):(F.aprov||'')).trim();
   if(prov && !S.proveedores.includes(prov)) S.proveedores.push(prov);
   const precio=parseFloat(String(F.aprecio).replace(',','.'))||0;
-  const nuevo={cod,nombre,categoria:F.acat,proveedor:prov,min:parseInt(F.amin)||0,precioRef:precio,stock:0,cost:precio,aviso:F.aviso!==false,activo:true,caduca:(F.acaduca||'').trim()||null,trazable:F.atraz===true};
+  const nuevo={cod,nombre,descripcion:(F.adesc||'').trim(),categoria:F.acat,proveedor:prov,min:parseInt(F.amin)||0,precioRef:precio,stock:0,cost:precio,aviso:F.aviso!==false,activo:true,caduca:(F.acaduca||'').trim()||null,trazable:F.atraz===true};
   S.articulos.push(nuevo);
   closeModal(); S.sub='arts'; render();
   srvProveedor(prov); srvArticulo(nuevo, 'Artículo creado');
@@ -1924,6 +1931,7 @@ function commitArticulo(){
 function commitEdit(){
   const a=art(F.cod); if(!a) return;
   a.nombre=(F.enombre||'').trim()||a.nombre;
+  a.descripcion=(F.edesc||'').trim();
   a.categoria=F.ecat||a.categoria;
   a.proveedor=(F.eprov||'').trim();
   a.min=parseInt(F.emin)||0;
@@ -1937,10 +1945,13 @@ function commitEdit(){
   srvProveedor(a.proveedor); srvArticulo(a, 'Artículo actualizado');
 }
 
+function seguiToggleCat(c){ if(!Array.isArray(F.scats)) F.scats=[]; var i=F.scats.indexOf(c); if(i>=0) F.scats.splice(i,1); else F.scats.push(c); render(); }
+function seguiAllCats(){ F.scats = (Array.isArray(F.scats)&&F.scats.length===CATEGORIAS.length)?[]:CATEGORIAS.slice(); render(); }
 function commitSegui(){
   if(F.estado==='incidencia' && !(F.comentario||'').trim()){ toast('En una incidencia escribe un comentario'); return; }
-  const a=F.scod?art(F.scod):null;
-  const seg={id:uid(), ts:tsFrom(todayStr()), user:S.user.nombre, cod:F.scod, nombre:a?a.nombre:'', estado:F.estado, comentario:(F.comentario||'').trim()};
+  var cats=Array.isArray(F.scats)?F.scats.slice():[];
+  var nombre=!cats.length?'General':(cats.length===CATEGORIAS.length?'Todas':cats.join(', '));
+  const seg={id:uid(), ts:tsFrom(todayStr()), user:S.user.nombre, categorias:cats, cod:'', nombre:nombre, estado:F.estado, comentario:(F.comentario||'').trim()};
   S.seguimientos.unshift(seg);
   closeModal(); render();
   srvSegui(seg, 'Seguimiento registrado');
