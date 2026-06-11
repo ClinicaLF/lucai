@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-08-71">
+<meta name="lucai-version" content="2026-06-08-73">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -2594,9 +2594,9 @@ function homeView(){
     temas:'<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 12h5"/>'
   };
   const GROUPS = [
-    {lbl:'Tu día', ids:['tareas','temas','comunicaciones','incidencias','accesos']},
+    {lbl:'Tu día', ids:['tareas','temas','comunicaciones','incidencias']},
     {lbl:'Almacén y equipos', ids:['material','equipos']},
-    {lbl:'Pacientes y negocio', ids:['presupuestos','orto','documentos']}
+    {lbl:'Pacientes y negocio', ids:['presupuestos','orto','documentos','accesos']}
   ];
   const byId={}; MODULES.forEach(m=> byId[m.id]=m);
   const usados={};
@@ -6361,7 +6361,10 @@ function temasView(){
     if(t){ inner=temaDetalleView(t); }
     else { S.temaOpen=null; inner=temasListView(); }
   } else { inner=temasListView(); }
-  return `${inner}
+  return `${moduleHeader('Temas de coordinación', false)}
+  <main><div class="wrap">
+    ${inner}
+  </div></main>
   ${S.modal?modalContent():''}`;
 }
 function temasListView(){
