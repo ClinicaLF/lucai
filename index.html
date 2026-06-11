@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-11-84">
+<meta name="lucai-version" content="2026-06-11-85">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -794,7 +794,7 @@ function resetIdle(){
 }
 
 /* ---- APP SHELL ---- */
-const APP_VERSION = 'v2026.06.11-10';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
+const APP_VERSION = 'v2026.06.11-11';  // súbela cada vez que cambie el archivo: confirma que la web desplegada es la última
 const MODULES = [
   {id:'material', nombre:'Control de material', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
   {id:'tareas', nombre:'Tareas', ini:'T', desc:'Tareas que van surgiendo en la clínica: qué hay que hacer, quién es responsable, estado y seguimiento.', estado:'pronto'},
@@ -2257,28 +2257,36 @@ function incListView(){
   const cats=[...new Set(all.map(x=>x.categoria))].filter(Boolean).sort();
   const reps=[...new Set(all.map(x=>x.reporta))].filter(Boolean).sort();
   const list=incFiltered();
-  const filtros=`<div class="inc-filters">
-    <select class="inp" onchange="setIncF('incCat',this.value)"><option value="">Todas las categorías</option>${cats.map(c=>`<option ${S.incCat===c?'selected':''}>${incEsc(c)}</option>`).join('')}</select>
-    <select class="inp" onchange="setIncF('incImp',this.value)"><option value="">Toda importancia</option>${['Alta','Media','Baja'].map(i=>`<option ${S.incImp===i?'selected':''}>${i}</option>`).join('')}</select>
-    <select class="inp" onchange="setIncF('incRep',this.value)"><option value="">Todas las personas</option>${reps.map(r=>`<option ${S.incRep===r?'selected':''}>${incEsc(r)}</option>`).join('')}</select>
-    <select class="inp" onchange="setIncF('incEstado',this.value)"><option value="">Revisadas y pendientes</option><option value="pend" ${S.incEstado==='pend'?'selected':''}>Solo sin revisar</option><option value="rev" ${S.incEstado==='rev'?'selected':''}>Solo revisadas</option></select>
-    <input type="date" class="inp" value="${S.incDesde||''}" onchange="setIncF('incDesde',this.value)" title="Desde" style="max-width:150px">
-    <input type="date" class="inp" value="${S.incHasta||''}" onchange="setIncF('incHasta',this.value)" title="Hasta" style="max-width:150px">
-    <button class="btn btn-ghost btn-sm" onclick="clearIncF()">Limpiar</button>
+  const SS='style="width:100%;font-size:12px;padding:4px 6px;min-width:84px;font-weight:400"';
+  const SD='style="display:block;width:100%;max-width:150px;font-size:11px;padding:3px 5px;margin-bottom:3px;font-weight:400"';
+  const TH='style="padding:6px 8px;vertical-align:top;background:#F7F4EE"';
+  const opt=(v,sel)=>`<option value="${incEsc(v)}" ${sel===v?'selected':''}>${incEsc(v)}</option>`;
+  const fFecha=`<input type="date" class="inp" ${SD} value="${S.incDesde||''}" onchange="setIncF('incDesde',this.value)" title="Desde"><input type="date" class="inp" ${SD} value="${S.incHasta||''}" onchange="setIncF('incHasta',this.value)" title="Hasta">`;
+  const fRep=`<select class="inp" ${SS} onchange="setIncF('incRep',this.value)"><option value="">Todas</option>${reps.map(r=>opt(r,S.incRep)).join('')}</select>`;
+  const fCat=`<select class="inp" ${SS} onchange="setIncF('incCat',this.value)"><option value="">Todas</option>${cats.map(c=>opt(c,S.incCat)).join('')}</select>`;
+  const fImp=`<select class="inp" ${SS} onchange="setIncF('incImp',this.value)"><option value="">Todas</option>${['Alta','Media','Baja'].map(i=>`<option ${S.incImp===i?'selected':''}>${i}</option>`).join('')}</select>`;
+  const fEst=`<select class="inp" ${SS} onchange="setIncF('incEstado',this.value)"><option value="">Todas</option><option value="pend" ${S.incEstado==='pend'?'selected':''}>Sin revisar</option><option value="rev" ${S.incEstado==='rev'?'selected':''}>Revisadas</option></select>`;
+  const algun = S.incCat||S.incImp||S.incRep||S.incEstado||S.incDesde||S.incHasta;
+  const toolbar=`<div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-bottom:8px">
     <span class="muted" style="font-size:12px">${list.length} incidencia${list.length===1?'':'s'}</span>
+    ${algun?`<button class="btn btn-ghost btn-sm" onclick="clearIncF()">Quitar filtros</button>`:''}
   </div>`;
-  if(!list.length) return filtros+`<div class="muted" style="padding:20px;text-align:center">No hay incidencias con esos filtros.</div>`;
-  const rows=list.map(o=>`<tr onclick="openIncDetalle('${o.id}')">
-    <td class="inc-c-fecha">${incEsc((o.fecha||'').slice(0,10))}</td>
-    <td class="col-hide-m">${incEsc(o.reporta||'—')}</td>
-    <td><span class="inc-cat">${incEsc(o.categoria||'—')}</span></td>
-    <td class="col-hide-m"><span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span></td>
-    <td class="inc-c-det col-hide-m">${incEsc(incPreview(o.detalle))}</td>
-    <td>${o.revisada?'<span class="inc-rev">Revisada</span>':'<span class="inc-pend">Pendiente</span>'}</td>
-  </tr>`).join('');
-  return filtros+`<div class="inctable-wrap"><table class="inctable">
-    <thead><tr><th>Fecha</th><th class="col-hide-m">Persona</th><th>Categoría</th><th class="col-hide-m">Import.</th><th class="col-hide-m">Detalle</th><th>Estado</th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
+  const body = list.length
+    ? list.map(o=>`<tr onclick="openIncDetalle('${o.id}')">
+        <td class="inc-c-fecha">${incEsc((o.fecha||'').slice(0,10))}</td>
+        <td class="col-hide-m">${incEsc(o.reporta||'\u2014')}</td>
+        <td><span class="inc-cat">${incEsc(o.categoria||'\u2014')}</span></td>
+        <td class="col-hide-m"><span class="inc-imp imp-${o.importancia||'Media'}">${o.importancia||'Media'}</span></td>
+        <td class="inc-c-det col-hide-m">${incEsc(incPreview(o.detalle))}</td>
+        <td>${o.revisada?'<span class="inc-rev">Revisada</span>':'<span class="inc-pend">Pendiente</span>'}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="6" class="muted" style="text-align:center;padding:22px">No hay incidencias con esos filtros.</td></tr>`;
+  return toolbar+`<div class="inctable-wrap"><table class="inctable">
+    <thead>
+      <tr><th>Fecha</th><th class="col-hide-m">Persona</th><th>Categor\u00eda</th><th class="col-hide-m">Import.</th><th class="col-hide-m">Detalle</th><th>Estado</th></tr>
+      <tr><th ${TH}>${fFecha}</th><th class="col-hide-m" ${TH}>${fRep}</th><th ${TH}>${fCat}</th><th class="col-hide-m" ${TH}>${fImp}</th><th class="col-hide-m" ${TH}></th><th ${TH}>${fEst}</th></tr>
+    </thead>
+    <tbody>${body}</tbody></table></div>`;
 }
 
 function openIncDetalle(id){
