@@ -4496,14 +4496,26 @@ function tarFormBody(){
 function tarFormAdjuntosHtml(){
   const adj=Array.isArray(F.adjuntos)?F.adjuntos:[];
   const thumbs=adj.map((a,i)=>`<div style="position:relative;display:inline-block">
-      <img data-tarpath="${a.path}" onclick="tarVerImg('${a.path}')" alt="adjunto" style="width:42px;height:42px;object-fit:cover;border-radius:7px;cursor:pointer;background:#E8EAED;border:1px solid var(--line)">
+      ${tarAdjView(a,'thumb')}
       <button type="button" onclick="tarFormDelAdjunto(${i})" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#C0392B;color:#fff;border:none;font-size:11px;line-height:1;cursor:pointer">×</button>
     </div>`).join('');
   return `<div class="fld" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <label style="margin:0">Imágenes <span class="muted" style="font-weight:400">(opcional)</span></label>
+    <label style="margin:0">Adjuntos <span class="muted" style="font-weight:400">(opcional)</span></label>
     ${thumbs}
     <button type="button" class="btn btn-ghost btn-sm" onclick="tarFormAddImagen()">+ Imagen</button>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="tarFormAddArchivo()">+ Archivo</button>
   </div>`;
+}
+function tarFormAddArchivo(){
+  if(!F.id) F.id=uid();
+  tarPickArchivo(async (f)=>{
+    toast('Subiendo archivo…');
+    try{
+      const ref=await tarSubirArchivo(f, F.id);
+      if(!Array.isArray(F.adjuntos)) F.adjuntos=[];
+      F.adjuntos.push(ref); render();
+    }catch(e){ toast('No se pudo subir: '+(e.message||e)); }
+  });
 }
 function tarFormAddImagen(){
   if(!F.id) F.id=uid();
@@ -4659,11 +4671,12 @@ function tarThreadHtml(t, bare){
       <div style="max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px">
         <div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(mm.de||'—')} · ${incEsc(tarMsgTime(mm.ts))}</div>
         <div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div>
-        ${mm.adj&&mm.adj.path?`<img data-tarpath="${mm.adj.path}" onclick="tarVerImg('${mm.adj.path}')" alt="imagen" style="margin-top:6px;max-width:190px;max-height:190px;border-radius:8px;cursor:pointer;display:block;background:#E8EAED">`:''}
+        ${tarAdjView(mm.adj,'msg')}
       </div></div>`;
   }).join('') : `<div class="muted" style="font-size:13px">Aún no hay mensajes. Escribe el primero para aclarar o comentar la tarea.</div>`;
   const compose = puede ? `<div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-ghost" onclick="tarAddMsgImg('${t.id}')" title="Adjuntar imagen (o pega una con Ctrl+V)" style="flex:0 0 auto;padding:8px 11px">📷</button>
+      <button class="btn btn-ghost" onclick="tarAddMsgArchivo('${t.id}')" title="Adjuntar archivo (PDF, Word, Excel…)" style="flex:0 0 auto;padding:8px 11px">📎</button>
       <input class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}">
       <button class="btn btn-primary" onclick="tarAddMsg('${t.id}')">Enviar</button>
     </div>` : '';
@@ -6117,6 +6130,74 @@ function tarPickImagen(cb){
   inp.click();
 }
 
+/* ===== ARCHIVOS (cualquier tipo, sin comprimir) ===== */
+const TAR_MAX_FILE = 25 * 1024 * 1024; // 25 MB de cortesía (el bucket no limita)
+function tarPickArchivo(cb){
+  const inp=document.createElement('input');
+  inp.type='file'; // sin accept: admite cualquier tipo
+  inp.onchange=()=>{ const f=inp.files && inp.files[0]; if(f) cb(f); };
+  inp.click();
+}
+function tarExt(name){ const m=String(name||'').match(/\.([a-z0-9]+)$/i); return m?m[1].toLowerCase():'bin'; }
+function tarSubirArchivo(file, tareaId){
+  return new Promise((resolve,reject)=>{
+    if(!file){ reject(new Error('Archivo no válido')); return; }
+    if(file.size > TAR_MAX_FILE){ reject(new Error('El archivo supera 25 MB')); return; }
+    const ext=tarExt(file.name);
+    const path=`${tareaId}/${uid()}.${ext}`;
+    const mime=file.type||'application/octet-stream';
+    sbc.storage.from(TAR_BUCKET).upload(path, file, {contentType:mime, upsert:false}).then(res=>{
+      if(res && res.error){ reject(res.error); return; }
+      resolve({ path, name:(file.name||'archivo.'+ext), ts:now(), quien:S.user.nombre, tipo:'file', mime, size:file.size });
+    }).catch(reject);
+  });
+}
+function tarAdjEsImagen(adj){
+  if(!adj) return false;
+  if(adj.tipo==='file'){ return /^image\//.test(adj.mime||''); }
+  return true; // los adjuntos antiguos (sin tipo) siempre fueron imágenes
+}
+function tarFmtSize(b){ b=Number(b)||0; if(b<1024) return b+' B'; if(b<1048576) return (b/1024).toFixed(0)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
+function tarFileIcon(adj){
+  const e=tarExt(adj&&adj.name);
+  if(['pdf'].includes(e)) return '📕';
+  if(['doc','docx','odt'].includes(e)) return '📘';
+  if(['xls','xlsx','csv','ods'].includes(e)) return '📗';
+  if(['ppt','pptx','odp'].includes(e)) return '📙';
+  if(['zip','rar','7z'].includes(e)) return '🗜️';
+  if(['mp4','mov','avi','mkv','webm'].includes(e)) return '🎬';
+  if(['mp3','wav','m4a','ogg'].includes(e)) return '🎵';
+  return '📄';
+}
+function tarAbrirArchivo(path){
+  if(window._tarImgUrls[path]){ window.open(window._tarImgUrls[path],'_blank'); return; }
+  toast('Abriendo archivo…');
+  sbc.storage.from(TAR_BUCKET).createSignedUrl(path, 3600).then(res=>{
+    if(res && res.data && res.data.signedUrl){ window._tarImgUrls[path]=res.data.signedUrl; window.open(res.data.signedUrl,'_blank'); }
+    else toast('No se pudo abrir el archivo');
+  }).catch(()=>toast('No se pudo abrir el archivo'));
+}
+/* Render unificado de un adjunto: imagen -> miniatura/visor ; archivo -> ficha clicable.
+   mode: 'thumb' (cuadrado en listados) | 'msg' (dentro de un mensaje) */
+function tarAdjView(adj, mode){
+  if(!adj || !adj.path) return '';
+  if(tarAdjEsImagen(adj)){
+    if(mode==='thumb'){
+      return `<img data-tarpath="${adj.path}" onclick="tarVerImg('${adj.path}')" alt="adjunto" style="width:74px;height:74px;object-fit:cover;border-radius:8px;cursor:pointer;background:#E8EAED;border:1px solid var(--line)">`;
+    }
+    return `<img data-tarpath="${adj.path}" onclick="tarVerImg('${adj.path}')" alt="imagen" style="margin-top:6px;max-width:200px;max-height:200px;border-radius:8px;cursor:pointer;display:block;background:#E8EAED">`;
+  }
+  // Ficha de archivo
+  const nombre=incEsc(adj.name||'archivo');
+  const meta=adj.size?` · ${tarFmtSize(adj.size)}`:'';
+  const mt=mode==='thumb'?'':'margin-top:6px;';
+  return `<div onclick="tarAbrirArchivo('${adj.path}')" title="Abrir / descargar" style="${mt}display:inline-flex;align-items:center;gap:8px;max-width:260px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:7px 11px;cursor:pointer">
+      <span style="font-size:20px;line-height:1">${tarFileIcon(adj)}</span>
+      <span style="min-width:0"><span style="display:block;font-size:13px;font-weight:600;color:#333F48;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nombre}</span><span style="font-size:11px;color:#8A949B">Abrir${meta}</span></span>
+    </div>`;
+}
+/* ===== FIN ARCHIVOS ===== */
+
 function tarPuedeTocar(t){ const me=S.user.nombre; return isAdmin() || t.deQuien===me || t.paraQuien===me; }
 
 function tarAddImagen(id){
@@ -6161,16 +6242,49 @@ function tarAddMsgImg(id){
   });
 }
 
+function tarAddMsgArchivo(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const me=S.user.nombre;
+  if(!tarPuedeTocar(t)){ toast('No puedes escribir en esta tarea'); return; }
+  tarPickArchivo(async (f)=>{
+    toast('Subiendo archivo…');
+    try{
+      const ref=await tarSubirArchivo(f, id);
+      if(!Array.isArray(t.mensajes)) t.mensajes=[];
+      const txt=(F.msgDraft||'').trim();
+      t.mensajes.push({de:me, texto:txt, adj:ref, ts:now()});
+      tarAutoEnCurso(t);
+      F.msgDraft=''; render();
+      srvTarUpdate(id, t);
+      const otros=[...new Set([t.deQuien,t.paraQuien].filter(n=>n && n!==me))];
+      otros.forEach(n=>tgNotify(n, `📎 ${me} ha enviado un archivo en "${t.titulo}"`));
+    }catch(e){ toast('No se pudo subir: '+(e.message||e)); }
+  });
+}
+function tarAddArchivoAdj(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  if(!tarPuedeTocar(t)){ toast('No puedes adjuntar en esta tarea'); return; }
+  tarPickArchivo(async (f)=>{
+    toast('Subiendo archivo…');
+    try{
+      const ref=await tarSubirArchivo(f, id);
+      if(!Array.isArray(t.adjuntos)) t.adjuntos=[];
+      t.adjuntos.push(ref); render();
+      srvTarUpdate(id, t, 'Archivo añadido');
+    }catch(e){ toast('No se pudo subir: '+(e.message||e)); }
+  });
+}
 function tarAdjuntosHtml(t, bare){
   const puede=tarPuedeTocar(t);
   const adj=Array.isArray(t.adjuntos)?t.adjuntos:[];
   const thumbs=adj.map((a,i)=>`<div style="position:relative;display:inline-block">
-      <img data-tarpath="${a.path}" onclick="tarVerImg('${a.path}')" alt="adjunto" style="width:74px;height:74px;object-fit:cover;border-radius:8px;cursor:pointer;background:#E8EAED;border:1px solid var(--line)">
+      ${tarAdjView(a,'thumb')}
       ${puede?`<button onclick="tarDelAdjunto('${t.id}',${i})" title="Quitar" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#C0392B;color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer">×</button>`:''}
     </div>`).join('');
   const cuerpo=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       ${thumbs}
       ${puede?`<button class="btn btn-ghost btn-sm" onclick="tarAddImagen('${t.id}')">+ Imagen</button>`:''}
+      ${puede?`<button class="btn btn-ghost btn-sm" onclick="tarAddArchivoAdj('${t.id}')">+ Archivo</button>`:''}
     </div>
     ${(!adj.length&&!puede)?'<div class="muted" style="font-size:13px">Sin imágenes.</div>':''}`;
   if(bare) return cuerpo;
@@ -6468,6 +6582,13 @@ function temaAddImg(id){
     tarSubirImagen(f, 'tema_'+id).then(function(ref){ S.temaAdj=ref; render(); }).catch(function(e){ toast('No se pudo subir: '+(e.message||e)); });
   });
 }
+function temaAddArchivo(id){
+  const t=temaById(id); if(!t) return;
+  tarPickArchivo(function(f){
+    toast('Subiendo archivo…');
+    tarSubirArchivo(f, 'tema_'+id).then(function(ref){ S.temaAdj=ref; render(); }).catch(function(e){ toast('No se pudo subir: '+(e.message||e)); });
+  });
+}
 function temaPostMsg(id){
   const t=temaById(id); if(!t) return;
   if(t.estado==='cerrado'){ toast('Este tema está cerrado. Reábrelo para escribir.'); return; }
@@ -6558,16 +6679,17 @@ function temaDetalleView(t){
         <div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(mm.de||'—')} · ${incEsc(temaFmtTs(mm.ts))}</div>
         ${mm.reply?`<div style="border-left:3px solid #B8A88F;padding:2px 8px;margin:0 0 5px;background:#fff;border-radius:6px;font-size:12px;color:#6C757D"><strong>${incEsc(mm.reply.de||'')}</strong>: ${incEsc(mm.reply.texto||'')}</div>`:''}
         ${mm.texto?`<div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto)}</div>`:''}
-        ${mm.adj&&mm.adj.path?`<img data-tarpath="${mm.adj.path}" onclick="tarVerImg('${mm.adj.path}')" alt="imagen" style="margin-top:6px;max-width:200px;max-height:200px;border-radius:8px;cursor:pointer;display:block;background:#E8EAED">`:''}
+        ${tarAdjView(mm.adj,'msg')}
         ${!cerrado?`<div style="margin-top:4px;display:flex;gap:14px"><button onclick="temaSetReply('${t.id}',${idx})" style="border:none;background:none;color:#8A949B;font-size:11px;cursor:pointer;padding:0">↩ responder</button>${(mm.de===me||isAdmin())?`<button onclick="temaDelMsg('${t.id}',${idx})" style="border:none;background:none;color:#C0392B;font-size:11px;cursor:pointer;padding:0">eliminar</button>`:''}</div>`:''}
       </div></div>`;
   }).join('') : `<div class="muted" style="font-size:13px;padding:8px 0">Aún no hay mensajes. Escribe el primero.</div>`;
   const replyBar = (S.temaReply&&!cerrado) ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#F7F4EE;border-radius:8px;padding:5px 10px;font-size:12px;color:#6C757D;border:1px solid var(--line);margin-bottom:6px"><span>Respondiendo a <strong>${incEsc(S.temaReply.de)}</strong>: ${incEsc(S.temaReply.texto)}</span><button onclick="temaClearReply()" style="border:none;background:none;cursor:pointer;color:#8A949B;font-size:15px">×</button></div>` : '';
-  const adjBar = (S.temaAdj&&!cerrado) ? `<div style="background:#EAF1D8;border-radius:8px;padding:5px 10px;font-size:12px;color:#5A6E00;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><span>📷 Imagen lista para enviar</span><button onclick="temaQuitarAdj()" style="border:none;background:none;cursor:pointer;color:#5A6E00;font-size:15px">×</button></div>` : '';
+  const adjBar = (S.temaAdj&&!cerrado) ? `<div style="background:#EAF1D8;border-radius:8px;padding:5px 10px;font-size:12px;color:#5A6E00;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><span>${tarAdjEsImagen(S.temaAdj)?'📷 Imagen':(tarFileIcon(S.temaAdj)+' '+incEsc(S.temaAdj.name||'Archivo'))} lista para enviar</span><button onclick="temaQuitarAdj()" style="border:none;background:none;cursor:pointer;color:#5A6E00;font-size:15px">×</button></div>` : '';
   const compose = cerrado
     ? `<div class="muted" style="text-align:center;font-size:13px;padding:12px;background:#F7F7F5;border-radius:10px">Tema cerrado por ${incEsc(t.cerradoPor||'—')}${t.fechaCierre?` · ${incEsc(fmtFecha(t.fechaCierre))}`:''}. <button class="btn btn-ghost btn-sm" onclick="temaReabrir('${t.id}')" style="margin-left:6px">Reabrir</button></div>`
     : `${adjBar}${replyBar}<div style="display:flex;gap:8px;align-items:flex-end">
         <button class="btn btn-ghost" onclick="temaAddImg('${t.id}')" title="Adjuntar pantallazo" style="flex:0 0 auto;padding:8px 11px">📷</button>
+        <button class="btn btn-ghost" onclick="temaAddArchivo('${t.id}')" title="Adjuntar archivo" style="flex:0 0 auto;padding:8px 11px">📎</button>
         <textarea id="temaInput" class="inp" rows="2" placeholder="Escribe un mensaje… (Enter = salto de línea · Ctrl+Enter = enviar)" oninput="setInp('temaDraft',this.value)" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();temaPostMsg('${t.id}')}" style="resize:vertical;min-height:44px;font-family:inherit">${incEsc(F.temaDraft||'')}</textarea>
         <button class="btn btn-primary" onclick="temaPostMsg('${t.id}')" style="flex:0 0 auto">Enviar</button>
       </div>`;
