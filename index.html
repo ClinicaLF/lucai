@@ -6099,18 +6099,24 @@ function iaFloatHtml(){
 }
 /* ---- comprobador de versión en vivo (mientras la app está abierta) ---- */
 var _lucaiNewVer = null;
+var _lucaiVerSig = null;   // firma de la versión que tengo cargada (se fija en la 1ª comprobación)
+/* Firma del archivo realmente desplegado. Usa ETag/Last-Modified (cambian en CADA subida,
+   sin tener que tocar ningún número a mano). Si el host no los diera, cae al meta o al tamaño. */
+async function _lucaiFetchSig(){
+  const base=location.href.split('#')[0].split('?')[0];
+  const r=await fetch(base+'?cb='+Date.now(),{cache:'no-store',headers:{'Range':'bytes=0-2047'}});
+  let sig = r.headers.get('etag') || r.headers.get('last-modified') || '';
+  if(!sig){ const t=await r.text(); const m=t.match(/name="lucai-version"\s+content="([^"]+)"/); sig = m?m[1]:('len'+t.length); }
+  return sig;
+}
 async function lucaiCheckUpdate(){
   try{
     if(navigator.onLine===false) return;
     if(document.getElementById('lucaiUpd')) return;          // ya está avisado
-    var cur=document.querySelector('meta[name=lucai-version]');
-    cur=cur?cur.getAttribute('content'):'';
-    var base=location.href.split('#')[0].split('?')[0];
-    const r=await fetch(base+'?cb='+Date.now(),{cache:'no-store',headers:{'Range':'bytes=0-2047'}});
-    const t=await r.text();
-    const m=t.match(/name="lucai-version"\s+content="([^"]+)"/);
-    const net=m?m[1]:'';
-    if(net && cur && net!==cur){ _lucaiNewVer=net; lucaiUpdateBanner(); }
+    const sig = await _lucaiFetchSig();
+    if(!sig) return;
+    if(_lucaiVerSig===null){ _lucaiVerSig=sig; return; }      // 1ª vez: guardo la versión que tengo
+    if(sig!==_lucaiVerSig){ _lucaiNewVer=sig; lucaiUpdateBanner(); }   // ha cambiado el archivo subido -> aviso
   }catch(_){}
 }
 function lucaiUpdateBanner(){
@@ -6127,9 +6133,8 @@ function lucaiUpdateBanner(){
   requestAnimationFrame(()=>requestAnimationFrame(()=>{ d.style.opacity='1'; d.style.transform='translate(-50%,0)'; }));
 }
 function lucaiUpdateNow(){
-  const ver=_lucaiNewVer||('t'+Date.now());
   const sp=new URLSearchParams(location.search);
-  sp.set('v',ver);
+  sp.set('v', String(Date.now()));
   location.replace(location.pathname+'?'+sp.toString());
 }
 function lucaiSaludoShow(){
