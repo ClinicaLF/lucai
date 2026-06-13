@@ -5014,6 +5014,9 @@ function iaContexto(pregunta){
   const pregLow = (pregunta||'').toLowerCase();
   const enMaterial = (S.module==='material');
   const quiereMaterial = enMaterial || /(material|almac|stock|inventar|pedir|pedido|provee|caduc|unidad|art[ií]culo|reponer|existencias|comprar|caja|valor almac)/i.test(pregLow);
+  /* ¿La pregunta va de tareas HECHAS / cerradas o de una fecha pasada? Si sí, soltamos el
+     historial completo (sin tope de 7 días); si no, solo un resumen reciente, para no inflar el prompt. */
+  const quiereHistorial = /(hech|termin|complet|cerr|finaliz|acab|entreg|hist[oó]ri|el mes|mes pasado|semana pasada|ayer|anteayer|a[ñn]o pasado|desde el|entre el|\d{4})/i.test(pregLow);
   const hoy = (typeof todayStr==='function') ? todayStr() : new Date().toISOString().slice(0,10);
   const activa = t => (typeof tarActiva==='function' ? tarActiva(t) : t.estado!=='Hecha');
   const temp = f => !f ? 'sin fecha' : (f<hoy?'VENCIDA':(f===hoy?'VENCE HOY':'futura'));
@@ -5078,13 +5081,92 @@ function iaContexto(pregunta){
 
   const d7=new Date(hoy+'T00:00:00'); d7.setDate(d7.getDate()-7); const hace7=d7.toISOString().slice(0,10);
   const hechasRec = recib.filter(t=> t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=hace7);
-  out.push('\n[TERMINADAS EN LOS ÚLTIMOS 7 DÍAS]');
-  out.push(hechasRec.length ? hechasRec.map(t=>`- ${t.titulo} (${t.fechaHecha})`).join('\n') : '(ninguna)');
+  if(quiereHistorial){
+    const hechasAll = recib.filter(t=> t.estado==='Hecha' && t.fechaHecha).sort((a,b)=> String(b.fechaHecha).localeCompare(String(a.fechaHecha)));
+    out.push('\n[MIS TAREAS TERMINADAS · historial completo]');
+    out.push('(Me preguntas por tareas hechas: te paso TODAS las que has cerrado, con su fecha. Filtra tú por el periodo que necesites — cualquier día, mes o año.)');
+    if(!hechasAll.length) out.push('(ninguna)');
+    else { hechasAll.slice(0,300).forEach(t=> out.push(`- ${t.titulo} (${t.fechaHecha}) | área: ${t.area||'General'} | la mandó: ${t.deQuien||'—'}`)); if(hechasAll.length>300) out.push(`...y ${hechasAll.length-300} más antiguas no listadas.`); }
+  } else {
+    out.push('\n[TERMINADAS · últimos 7 días]');
+    out.push('(Solo el resumen reciente. Si me preguntas por una fecha, "el mes pasado", etc., te saco todas.)');
+    out.push(hechasRec.length ? hechasRec.map(t=>`- ${t.titulo} (${t.fechaHecha})`).join('\n') : '(ninguna)');
+  }
 
   const emit = (S.tareas||[]).filter(t=> t.deQuien===me && t.paraQuien!==me && activa(t));
   out.push('\n[TAREAS QUE YO HE ENCARGADO A OTROS]');
   if(!emit.length) out.push('(ninguna)');
   else emit.forEach(t=> out.push(`- ${t.titulo} | área: ${t.area||'General'} | para: ${t.paraQuien||'—'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}) | estado: ${t.estado||'Pendiente'}${dsc(t)}`));
+
+  /* Encargadas que YA están hechas: solo cuando preguntan por historial (¿le mandé X y está hecho?, qué cerró tal mes…). */
+  if(quiereHistorial){
+    const emitHechas = (S.tareas||[]).filter(t=> t.deQuien===me && t.paraQuien!==me && t.estado==='Hecha' && t.fechaHecha).sort((a,b)=> String(b.fechaHecha).localeCompare(String(a.fechaHecha)));
+    out.push('\n[ENCARGADAS QUE YA ESTÁN HECHAS] (las que mandaste y se completaron · cualquier fecha)');
+    if(!emitHechas.length) out.push('(ninguna)');
+    else { emitHechas.slice(0,200).forEach(t=> out.push(`- ${t.titulo} | para: ${t.paraQuien||'—'} | hecha: ${t.fechaHecha} | área: ${t.area||'General'}`)); if(emitHechas.length>200) out.push(`...y ${emitHechas.length-200} más.`); }
+  }
+
+  /* ===== CARGA DEL EQUIPO · SOLO DIRECCIÓN =====
+     Mismo criterio de rol que [PRESUPUESTOS RECHAZADOS]: solo admin (Director/Directora).
+     A un usuario normal NO se le añade nada: arriba sigue viendo solo lo suyo y lo que le han encargado.
+     Resumen de contadores por persona siempre (barato); el detalle de tareas por persona solo se
+     despliega cuando la pregunta lo pide (un nombre del equipo, palabras de carga, o historial),
+     igual que el módulo de material. Sin datos de pacientes (las tareas no los llevan). */
+  if(admin){
+    const equipo = [...new Set(
+      (typeof USERS!=='undefined' ? USERS.map(u=>u.nombre) : [])
+        .concat((S.tareas||[]).flatMap(t=>[t.paraQuien, t.deQuien]))
+        .filter(Boolean)
+    )];
+    const porHacerDe = t => (typeof tarPorHacer==='function') ? tarPorHacer(t) : (t.estado!=='Hecha' && t.estado!=='En espera');
+    const vencidaDe  = t => (typeof tarVencida==='function')  ? tarVencida(t)  : (t.estado!=='Hecha' && t.fechaLimite && t.fechaLimite<hoy);
+    const nombreEnPreg = equipo.some(p=>{
+      if(!p) return false;
+      if(pregLow.includes(p.toLowerCase())) return true;
+      const n=(p.split(' ')[0]||'').toLowerCase();
+      return n.length>=3 && new RegExp('\\b'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).test(pregLow);
+    });
+    const quiereEquipo = /(equipo|carga|cargas|saturad|sobrecarg|reparto|cada persona|cada uno|por persona|qui[eé]n tiene|qui[eé]n lleva|qui[eé]n est[aá]|vencidas por|nadie|alguien|todos|m[aá]s ocupad|menos ocupad)/i.test(pregLow);
+    const detallar = nombreEnPreg || quiereEquipo || quiereHistorial;
+
+    const filas = equipo.map(p=>{
+      const suyas = (S.tareas||[]).filter(t=> t.paraQuien===p);
+      return {
+        p,
+        ph: suyas.filter(porHacerDe).length,
+        ve: suyas.filter(vencidaDe).length,
+        es: suyas.filter(t=> t.estado==='En espera').length,
+        he7: suyas.filter(t=> t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=hace7).length
+      };
+    }).sort((a,b)=> (b.ph-a.ph) || (b.ve-a.ve));
+
+    out.push('\n[CARGA DEL EQUIPO · solo Dirección] (todas las tareas del equipo · sin datos de pacientes)');
+    out.push('Resumen por persona, ordenado de más a menos cargado. "por hacer" = pendientes que dependen de esa persona · "vencidas" = ya pasadas de fecha · "en espera" = esperando a otro · "hechas7d" = cerradas en los últimos 7 días.');
+    if(!filas.length) out.push('(no hay personas ni tareas registradas)');
+    else filas.forEach(f=> out.push(`- ${f.p}: ${f.ph} por hacer · ${f.ve} vencidas · ${f.es} en espera · ${f.he7} hechas (7d)`));
+
+    if(detallar){
+      const TOPE_P = 25;
+      out.push('\n[DETALLE POR PERSONA · solo Dirección]');
+      out.push('(Tareas activas de cada persona — y las hechas si preguntas por ellas — para poder responder qué lleva cada uno, qué tiene vencido o qué cerró. Filtra tú por la persona o la fecha que te pidan.)');
+      equipo.forEach(p=>{
+        const suyas = (S.tareas||[]).filter(t=> t.paraQuien===p);
+        const activasP = suyas.filter(t=> porHacerDe(t) || t.estado==='En espera').sort((a,b)=> String(a.fechaLimite||'9999').localeCompare(String(b.fechaLimite||'9999')));
+        const hechasP = quiereHistorial ? suyas.filter(t=> t.estado==='Hecha' && t.fechaHecha).sort((a,b)=> String(b.fechaHecha).localeCompare(String(a.fechaHecha))) : [];
+        if(!activasP.length && !hechasP.length){ out.push(`\n• ${p}: (sin tareas)`); return; }
+        out.push(`\n• ${p}:`);
+        activasP.slice(0,TOPE_P).forEach(t=>{ const d=dias(t.fechaLimite); const det = d!=null ? (d<0?`, hace ${-d} d`:(d===0?', hoy':`, en ${d} d`)) : ''; out.push(`  - ${t.titulo} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}${det}) | estado: ${t.estado||'Pendiente'} | se la mandó: ${t.deQuien||'—'}`); });
+        if(activasP.length>TOPE_P) out.push(`  ...y ${activasP.length-TOPE_P} activas más.`);
+        if(hechasP.length){
+          out.push('  · Hechas:');
+          hechasP.slice(0,TOPE_P).forEach(t=> out.push(`    - ${t.titulo} (${t.fechaHecha}) | se la mandó: ${t.deQuien||'—'}`));
+          if(hechasP.length>TOPE_P) out.push(`    ...y ${hechasP.length-TOPE_P} hechas más.`);
+        }
+      });
+    } else {
+      out.push('(Para ver el detalle de una persona —qué lleva, qué tiene vencido, qué cerró— nómbrala o pregunta por la carga del equipo.)');
+    }
+  }
 
   const incsAll = (S.incidencias||[]);
   const incsPend = incsAll.filter(i=> !i.revisada);
