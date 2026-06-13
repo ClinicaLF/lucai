@@ -5088,9 +5088,12 @@ function iaContexto(pregunta){
 
   const incsAll = (S.incidencias||[]);
   const incsPend = incsAll.filter(i=> !i.revisada);
+  const incFecha = i => (i.fecha||i.ts||'').slice(0,10);
+  const incsHoy = incsAll.filter(i=> incFecha(i)===hoy);
   const sobreInc = pregLow.includes('incidencia');
   const TOPE_INC = sobreInc ? 500 : 40;
-  out.push(`\n[INCIDENCIAS] ${incsAll.length} en total · ${incsPend.length} sin revisar. El texto es interno del equipo; no incluye el código ni el nombre del paciente.`);
+  out.push(`\n[INCIDENCIAS] ${incsAll.length} en total · ${incsPend.length} sin revisar · ${incsHoy.length} registrada${incsHoy.length===1?'':'s'} HOY (${hoy}). El texto es interno del equipo; no incluye el código ni el nombre del paciente.`);
+  out.push('IMPORTANTE sobre fechas de incidencias: cada incidencia lleva su propia fecha. NO asumas que una incidencia es de hoy: solo son "de hoy" las que aparecen contadas en el campo "registradas HOY". "Sin revisar" NO significa "de hoy" (una incidencia antigua puede seguir sin revisar). Si no hay ninguna registrada hoy, dilo claramente y, si procede, menciona la fecha real de las que comentes.');
   if(sobreInc) out.push('(El usuario pregunta por incidencias: te paso el detalle de TODAS las disponibles, no solo las recientes. Responde con confianza sobre cualquiera de ellas.)');
   if(!incsAll.length) out.push('(no hay incidencias registradas)');
   else {
