@@ -5126,7 +5126,7 @@ function iaContexto(pregunta){
       const n=(p.split(' ')[0]||'').toLowerCase();
       return n.length>=3 && new RegExp('\\b'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).test(pregLow);
     });
-    const quiereEquipo = /(equipo|carga|cargas|saturad|sobrecarg|reparto|cada persona|cada uno|por persona|qui[eé]n tiene|qui[eé]n lleva|qui[eé]n est[aá]|vencidas por|nadie|alguien|todos|m[aá]s ocupad|menos ocupad)/i.test(pregLow);
+    const quiereEquipo = /(equipo|carga|cargas|saturad|sobrecarg|reparto|cada persona|cada uno|por persona|qui[eé]n tiene|qui[eé]n lleva|qui[eé]n est[aá]|vencidas por|nadie|alguien|todos|m[aá]s ocupad|menos ocupad|cumpl|rinde|rendimiento|al d[ií]a|c[oó]mo va|c[oó]mo est|marcha|balance|van bien|van mal|se est[aá] cumpliendo)/i.test(pregLow);
     const detallar = nombreEnPreg || quiereEquipo || quiereHistorial;
 
     const filas = equipo.map(p=>{
@@ -5140,6 +5140,7 @@ function iaContexto(pregunta){
       };
     }).sort((a,b)=> (b.ph-a.ph) || (b.ve-a.ve));
 
+    out.push('\n[CÓMO RESPONDER A DIRECCIÓN] Cuando te pregunten en general cómo va la carga del equipo, si la gente cumple, quién va bien o mal, o un balance, responde con CONCLUSIONES y valoración (3-6 frases), NO con un listado de tareas: di si el reparto está equilibrado o hay cuellos de botella, quién está sobrecargado, quién acumula vencidas (señal de que no llega a tiempo), quién va al día, y cierra con una recomendación accionable si procede. Para juzgar el cumplimiento fíjate en las vencidas (retraso) y en la proporción de hechas frente a lo pendiente. Solo enumera tareas concretas si te las piden de forma explícita o si nombran a una persona.');
     out.push('\n[CARGA DEL EQUIPO · solo Dirección] (todas las tareas del equipo · sin datos de pacientes)');
     out.push('Resumen por persona, ordenado de más a menos cargado. "por hacer" = pendientes que dependen de esa persona · "vencidas" = ya pasadas de fecha · "en espera" = esperando a otro · "hechas7d" = cerradas en los últimos 7 días.');
     if(!filas.length) out.push('(no hay personas ni tareas registradas)');
