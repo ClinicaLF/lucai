@@ -3935,9 +3935,9 @@ function tarTopUpSeries(){
 function tareasView(){
   if(!window._tarToppedUp){ window._tarToppedUp=true; setTimeout(tarTopUpSeries, 50); }
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_todas_mias','tar_recibidas','tar_emitidas','tar_semana','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_recibidas','tar_emitidas','tar_semana','tar_resumen'];
+  const subs = admin ? ['tar_todas_mias','tar_recibidas','tar_emitidas','tar_mias','tar_semana','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_recibidas','tar_emitidas','tar_mias','tar_semana','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
-  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_semana:'Semana',tar_todas:'Equipo',tar_resumen:'Resumen'};
+  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_semana:'Semana',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
@@ -3945,6 +3945,7 @@ function tareasView(){
   else if(sub==='tar_resumen') body=tarResumenView();
   else if(sub==='tar_emitidas') body=tarBuzonView('emitidas');
   else if(sub==='tar_recibidas') body=tarBuzonView('recibidas');
+  else if(sub==='tar_mias') body=tarBuzonView('mias');
   else body=tarBuzonView('todas');
   const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
@@ -4025,8 +4026,15 @@ function tarDescPrevHtml(t){
 function tarBuzonView(modo){
   const me=S.user.nombre;
   const esTodas = modo==='todas';
-  const all=(S.tareas||[]).filter(t=> esTodas ? (t.deQuien===me||t.paraQuien===me) : (modo==='emitidas' ? t.deQuien===me : t.paraQuien===me));
-  const otroDe = t => esTodas ? (t.deQuien===me ? t.paraQuien : t.deQuien) : (modo==='emitidas'?t.paraQuien:t.deQuien);
+  const esMias  = modo==='mias';
+  const all=(S.tareas||[]).filter(t=>{
+    const de = t.deQuien===me, para = t.paraQuien===me;
+    if(esTodas) return de || para;            // todo lo que me involucra (incluidas las mías)
+    if(esMias)  return de && para;            // me la mando a mí mismo
+    if(modo==='emitidas') return de && !para; // la mando a otra persona
+    return para && !de;                       // recibidas: me la manda otra persona
+  });
+  const otroDe = t => esMias ? '' : (esTodas ? (t.deQuien===me ? t.paraQuien : t.deQuien) : (modo==='emitidas'?t.paraQuien:t.deQuien));
   const bf = S.tarBuzF = S.tarBuzF || {prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''};
   const toggle=`<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px">
     <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#6C757D;cursor:pointer;margin:0">
@@ -4039,19 +4047,19 @@ function tarBuzonView(modo){
       tarKpiMatch(t, bf.kpi) &&
       (!bf.prio || t.prioridad===bf.prio) &&
       (!bf.cat || (t.area||'General')===bf.cat) &&
-      (!bf.persona || otroDe(t)===bf.persona) &&
+      (esMias || !bf.persona || otroDe(t)===bf.persona) &&
       (!bf.estado || t.estado===bf.estado) &&
       enRango(t) &&
       (!q || (t.titulo||'').toLowerCase().includes(q)))
     .sort((a,b)=>{ const rk=t=>(!tarActiva(t)?2:(t.estado==='En espera'?1:0)); const ra=rk(a),rb=rk(b); if(ra!==rb) return ra-rb; return (bf.sortDir==='desc'?-1:1)*String(a.fechaLimite||'9999').localeCompare(String(b.fechaLimite||'9999')); });
-  if(!all.length){ const msg = esTodas ? 'No tienes ninguna tarea (ni recibida ni emitida). Usa “Nueva tarea”.' : (modo==='emitidas'?'No has mandado ninguna tarea todavía. Usa “Nueva tarea”.':'No tienes tareas en tu buzón. ¡Buen trabajo!'); return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${msg}</div>`; }
-  const otro = esTodas ? 'Con' : (modo==='emitidas' ? 'Para' : 'De');
+  if(!all.length){ const msg = esTodas ? 'No tienes ninguna tarea (ni recibida ni emitida). Usa “Nueva tarea”.' : esMias ? 'No tienes tareas personales. Crea una con “Nueva tarea” y asígnatela a ti mismo.' : (modo==='emitidas'?'No has mandado ninguna tarea todavía. Usa “Nueva tarea”.':'No tienes tareas en tu buzón. ¡Buen trabajo!'); return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${msg}</div>`; }
+  const otro = esTodas ? 'Con' : esMias ? '' : (modo==='emitidas' ? 'Para' : 'De');
   const personas=[...new Set(all.map(otroDe).filter(Boolean))].sort();
   const ss=`class="inp" style="margin:4px 0 0;padding:3px 6px;font-size:12px;max-width:150px"`;
   const ds=`class="inp" style="margin:2px 0 0;padding:3px 6px;font-size:12px;width:124px"`;
   const selPrio=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('prio',this.value)"><option value="">Todas</option>${TAR_PRIOS.map(p=>`<option ${bf.prio===p?'selected':''}>${p}</option>`).join('')}</select>`;
   const selCat=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('cat',this.value)"><option value="">Todas</option>${tarAreas().map(a=>`<option ${bf.cat===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>`;
-  const selPersona=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('persona',this.value)"><option value="">Todos</option>${personas.map(n=>`<option ${bf.persona===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>`;
+  const selPersona= esMias ? '' : `<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('persona',this.value)"><option value="">Todos</option>${personas.map(n=>`<option ${bf.persona===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>`;
   const selEstado=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('estado',this.value)"><option value="">Todos</option>${TAR_ESTADOS.map(s=>`<option ${bf.estado===s?'selected':''}>${s}</option>`).join('')}</select>`;
   const search=`<input ${ss} placeholder="Buscar…" value="${incEsc(bf.q||'')}" onchange="setTarBuzF('q',this.value)">`;
   const arrow = bf.sortDir==='desc'?'▼':'▲';
@@ -4079,7 +4087,7 @@ function tarBuzonView(modo){
     const persona = otroDe(t);
     const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:#8A949B">↗ </span>':'<span title="Te la mandaron" style="color:#6E8E00">↙ </span>') : '';
     const recibida = t.paraQuien===me;
-    const quick = ((modo==='recibidas' || (esTodas && recibida) || isAdmin()) && tarActiva(t))
+    const quick = ((modo==='recibidas' || esMias || (esTodas && recibida) || isAdmin()) && tarActiva(t))
       ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 9px;white-space:nowrap" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
       : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
