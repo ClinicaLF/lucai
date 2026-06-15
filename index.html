@@ -3955,7 +3955,7 @@ function tareasView(){
   else if(sub==='tar_recibidas') body=tarBuzonView('recibidas');
   else if(sub==='tar_mias') body=tarBuzonView('mias');
   else body=tarBuzonView('todas');
-  const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
+  const acts=`<div class="actions">${canAccess('comunicaciones')?`<button class="btn btn-ghost" onclick="setModule('comunicaciones')">Comunicaciones</button>`:''}${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
   <main><div class="wrap">
     <div class="toolbar" style="margin-bottom:14px">
@@ -5523,7 +5523,7 @@ function comunicacionesView(){
   const lbl={com_recibidas:'Recibidas',com_emitidas:'Enviadas',com_todas:'Todas'};
   const seg=`<div class="seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setComSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   const admin=isAdmin();
-  const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openComCats()">Categorías</button><button class="btn btn-ghost" onclick="openGrupos()">Grupos</button>`:''}<button class="btn btn-primary" onclick="openComNuevo()">Nueva comunicación</button></div>`;
+  const acts=`<div class="actions">${canAccess('tareas')?`<button class="btn btn-ghost" onclick="setModule('tareas')">Tareas</button>`:''}${admin?`<button class="btn btn-ghost" onclick="openComCats()">Categorías</button><button class="btn btn-ghost" onclick="openGrupos()">Grupos</button>`:''}<button class="btn btn-primary" onclick="openComNuevo()">Nueva comunicación</button></div>`;
   const body = sub==='com_emitidas' ? comEmitidasView() : (sub==='com_todas' ? comTodasView() : comRecibidasView());
   return `${moduleHeader('Comunicaciones', false)}
   <main><div class="wrap">
