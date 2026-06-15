@@ -3740,9 +3740,17 @@ const _loadFromDB_tar = loadFromDB;
 loadFromDB = async function(){
   const _prev = _loadFromDB_tar();
   try{
-    const r = await sbc.from('tar_tareas').select('*').order('created_at',{ascending:false});
-    if(r.data){
-      S.tareas = r.data.map(x=>({
+    const PAGE=1000; let _from=0; let _rows=[];
+    while(true){
+      const _r = await sbc.from('tar_tareas').select('*').order('created_at',{ascending:false}).range(_from, _from+PAGE-1);
+      if(_r.error) throw _r.error;
+      const _batch=_r.data||[];
+      _rows=_rows.concat(_batch);
+      if(_batch.length<PAGE) break;   // último bloque: ya están todas
+      _from+=PAGE;
+    }
+    if(_rows){
+      S.tareas = _rows.map(x=>({
         id:x.id, titulo:x.titulo, descripcion:x.descripcion, prioridad:x.prioridad||'Media',
         area:x.area||'General',
         fechaLimite:x.fecha_limite, deQuien:x.de_quien, paraQuien:x.para_quien,
