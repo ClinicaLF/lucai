@@ -662,15 +662,24 @@ async function loadEstado(){
     LOADED = true;
   } catch(e){ console.error(e); toast('No se pudieron cargar los datos: ' + (e.message||e)); }
 }
+/* Campos que viven en la tabla lucai_estado (no en una tabla propia por filas).
+   Estos son los que se persisten cuando se llama a _persistSoon / persistNow. */
+const ESTADO_FIELDS = ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins'];
 function _persistSoon(){
   if (!(DEVICE && LOADED && S.user)) return;
   clearTimeout(_persistT); _persistT = setTimeout(persistNow, 400);
 }
 async function persistNow(){
   if (!DEVICE) return;
-  const payload = {}; PERSIST_FIELDS.forEach(f=> payload[f] = S[f]);
-  try { await sbc.from('lucai_estado').upsert({ clinica: CLINICA, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'clinica' }); }
-  catch(e){ console.error('persist', e); }
+  // mezclo lo que ya hay en BD con los campos que sí gestionamos desde aquí,
+  // para no sobreescribir nada que viva en lucai_estado y no esté en ESTADO_FIELDS.
+  try {
+    const { data: prev } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
+    const base = (prev && prev.data) ? prev.data : {};
+    const payload = Object.assign({}, base);
+    ESTADO_FIELDS.forEach(f=>{ if(S[f]!==undefined) payload[f] = S[f]; });
+    await sbc.from('lucai_estado').upsert({ clinica: CLINICA, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'clinica' });
+  } catch(e){ console.error('persist', e); }
 }
 function deviceLoginView(){
   return `
@@ -1759,8 +1768,10 @@ async function loadFromDB(){
 }
 /* loadEstado se redefine para usar las tablas (lo llama boot() y el login del dispositivo) */
 async function loadEstado(){ await loadFromDB(); }
-/* el guardado en bloque queda desactivado: ahora se guarda por filas en cada accion */
-function _persistSoon(){ /* no-op */ }
+/* el guardado por filas de tareas/incidencias/etc. va por su lado;
+   _persistSoon (definido arriba) sigue activo para el resto de campos
+   (tarAreas, usuarios, doctores, grupos, comCategorias, tarPins) que
+   viven en la tabla lucai_estado. */
 
 async function syncAll(){ await loadFromDB(); render(); }
 
@@ -3764,7 +3775,12 @@ function tarTogglePin(id){
 }
 S.tarBuzonArea = S.tarBuzonArea || '';
 function tarAreas(){ return (Array.isArray(S.tarAreas)&&S.tarAreas.length) ? S.tarAreas : TAR_AREAS; }
-function _tarPersistAreas(){ try{ if(typeof _persistSoon==='function') _persistSoon(); else if(typeof persistNow==='function') persistNow(); }catch(_){ } }
+function _tarPersistAreas(){
+  try{
+    if(typeof persistNow==='function') persistNow();
+    else if(typeof _persistSoon==='function') _persistSoon();
+  }catch(_){ }
+}
 
 /* activar módulo en el hub */
 (function(){ const m=MODULES.find(x=>x.id==='tareas');
@@ -4193,7 +4209,7 @@ function tarTodasView(){
 
 function tarSemanaView(){
   const me=S.user.nombre, admin=isAdmin();
-  const mias=(S.tareas||[]).filter(t=> admin ? true : (t.paraQuien===me || t.deQuien===me));
+  const mias=(S.tareas||[]).filter(t=> t.paraQuien===me || t.deQuien===me);
   const mon=tarMonday(S.tarWeek);
   const dom=new Date(mon); dom.setDate(mon.getDate()+6);
   const rango=`${mon.getDate()}/${mon.getMonth()+1} – ${dom.getDate()}/${dom.getMonth()+1}`;
@@ -4202,12 +4218,11 @@ function tarSemanaView(){
     <div style="font-weight:700">${S.tarWeek===0?'Esta semana':rango} <span class="muted" style="font-weight:400;font-size:13px">(${rango})</span></div>
     <button class="btn btn-ghost btn-sm" onclick="tarWeekNav(1)">Semana siguiente ›</button>
     ${S.tarWeek!==0?`<button class="btn btn-ghost btn-sm" onclick="tarWeekNav(0,true)">Hoy</button>`:''}
-    <span class="muted" style="font-size:12px">${admin?'Vista de todo el equipo':'Tus tareas (recibidas y emitidas)'}</span>
   </div>`;
   const tarjeta=(t)=>{
     const col = t.estado==='Hecha' ? '#6E8E00' : t.prioridad==='Alta' ? '#C0392B' : t.prioridad==='Media' ? '#B8860B' : '#8A949B';
     const tach = t.estado==='Hecha' ? 'text-decoration:line-through;opacity:.55' : '';
-    const quien = admin ? (t.paraQuien||'') : (t.paraQuien===me?'para mí':('para '+t.paraQuien));
+    const quien = t.paraQuien===me?'para mí':('para '+t.paraQuien);
     const activa = tarActiva(t), recibida = t.paraQuien===me;
     let btns='';
     if(activa) btns += `<button class="btn btn-ghost btn-sm" title="Posponer un día" onclick="event.stopPropagation();tarPosponer('${t.id}',1)">+1d</button>`;
