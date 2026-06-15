@@ -1741,7 +1741,7 @@ async function loadFromDB(){
       try{
         const { data: estRow } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
         const d = estRow && estRow.data;
-        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
+        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
       }catch(_){}
       window._estadoLoaded=true;
     }
@@ -3750,7 +3750,7 @@ function tarTogglePin(id){
     arr = vivas; arr.push(id);
   }
   S.tarPins[me]=arr;
-  if(typeof _persistSoon==='function') _persistSoon();
+  if(typeof persistNow==='function') persistNow();
   render();
 }
 S.tarBuzonArea = S.tarBuzonArea || '';
@@ -4377,7 +4377,7 @@ function tarMarcar(id,estado){
   if(estado==='Hecha' && S.tarPins && typeof S.tarPins==='object'){
     let cambio=false;
     Object.keys(S.tarPins).forEach(u=>{ if(Array.isArray(S.tarPins[u])){ const k=S.tarPins[u].indexOf(id); if(k>=0){ S.tarPins[u].splice(k,1); cambio=true; } } });
-    if(cambio && typeof _persistSoon==='function') _persistSoon();
+    if(cambio && typeof persistNow==='function') persistNow();
   }
   render();
   srvTarUpdate(id, t, estado==='Hecha'?'Tarea terminada y archivada':'Tarea actualizada');
