@@ -3783,6 +3783,23 @@ async function srvTarInsertMany(arr, okMsg){
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
 }
 async function srvTarUpdate(id, t, okMsg){
+  // Fusión anti-pisado: releer mensajes/vistos frescos de la DB y unirlos con los locales,
+  // para no machacar lo que otra persona haya escrito mientras teníamos una copia vieja.
+  let _msgs = Array.isArray(t.mensajes) ? t.mensajes.slice() : [];
+  let _vistos = Object.assign({}, t.vistos||{});
+  try{
+    const cur = await sbc.from('tar_tareas').select('mensajes,vistos').eq('id', id).maybeSingle();
+    if(cur && cur.data){
+      const remMsg = Array.isArray(cur.data.mensajes) ? cur.data.mensajes : (function(){ try{ return cur.data.mensajes?JSON.parse(cur.data.mensajes):[]; }catch(_){ return []; } })();
+      const k = m => ((m&&m.de)||'')+'|'+((m&&m.ts)||'')+'|'+((m&&m.texto)||'')+'|'+((m&&m.adj&&m.adj.path)||'');
+      const seen = new Set(_msgs.map(k));
+      remMsg.forEach(m=>{ if(!seen.has(k(m))){ _msgs.push(m); seen.add(k(m)); } });
+      _msgs.sort((a,b)=> String((a&&a.ts)||'').localeCompare(String((b&&b.ts)||'')));
+      const remVis = (cur.data.vistos && typeof cur.data.vistos==='object' && !Array.isArray(cur.data.vistos)) ? cur.data.vistos : (function(){ try{ return cur.data.vistos?JSON.parse(cur.data.vistos):{}; }catch(_){ return {}; } })();
+      Object.keys(remVis||{}).forEach(p=>{ if(!_vistos[p] || String(remVis[p])>String(_vistos[p])) _vistos[p]=remVis[p]; });
+    }
+  }catch(_){}
+  t.mensajes = _msgs; t.vistos = _vistos;
   try{
     const { error } = await sbc.from('tar_tareas').update({
       titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
@@ -3790,7 +3807,7 @@ async function srvTarUpdate(id, t, okMsg){
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
       hora_inicio:t.horaInicio||null, hora_fin:t.horaFin||null,
       serie_id:t.serieId||null, recurrencia:t.recurrencia||null,
-      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]) }).eq('id', id);
+      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:_msgs, vistos:_vistos, tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]) }).eq('id', id);
     if(error) throw error;
   }catch(e){ console.error('srvTarUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
@@ -6202,6 +6219,20 @@ appView = function(){
 /* ===== IMÁGENES EN TAREAS (Supabase Storage) ===== */
 const TAR_BUCKET = 'tareas';
 window._tarImgUrls = window._tarImgUrls || {};
+/* Devuelve una signed URL fresca; re-firma cuando ha caducado (evita InvalidJWT / "exp" claim). */
+const TAR_URL_TTL = 3600; // segundos que se pide a Supabase
+function tarSignedUrl(path){
+  return new Promise((resolve,reject)=>{
+    const c=window._tarImgUrls[path];
+    if(c && c.url && c.until>Date.now()){ resolve(c.url); return; }
+    sbc.storage.from(TAR_BUCKET).createSignedUrl(path, TAR_URL_TTL).then(res=>{
+      if(res && res.data && res.data.signedUrl){
+        window._tarImgUrls[path]={ url:res.data.signedUrl, until: Date.now()+(TAR_URL_TTL-300)*1000 };
+        resolve(res.data.signedUrl);
+      } else reject((res&&res.error)||new Error('No se pudo firmar'));
+    }).catch(reject);
+  });
+}
 
 function tarComprimirImagen(file){
   return new Promise((resolve,reject)=>{
@@ -6284,12 +6315,9 @@ function tarFileIcon(adj){
   return '📄';
 }
 function tarAbrirArchivo(path){
-  if(window._tarImgUrls[path]){ window.open(window._tarImgUrls[path],'_blank'); return; }
   toast('Abriendo archivo…');
-  sbc.storage.from(TAR_BUCKET).createSignedUrl(path, 3600).then(res=>{
-    if(res && res.data && res.data.signedUrl){ window._tarImgUrls[path]=res.data.signedUrl; window.open(res.data.signedUrl,'_blank'); }
-    else toast('No se pudo abrir el archivo');
-  }).catch(()=>toast('No se pudo abrir el archivo'));
+  tarSignedUrl(path).then(url=>{ window.open(url,'_blank'); })
+    .catch(()=>toast('No se pudo abrir el archivo'));
 }
 /* Render unificado de un adjunto: imagen -> miniatura/visor ; archivo -> ficha clicable.
    mode: 'thumb' (cuadrado en listados) | 'msg' (dentro de un mensaje) */
@@ -6423,26 +6451,19 @@ function tarVerImg(p){
     img.onclick=(e)=>e.stopPropagation();
     d.appendChild(img); d.appendChild(x); document.body.appendChild(d);
   };
-  if(window._tarImgUrls[p]){ open(window._tarImgUrls[p]); return; }
-  sbc.storage.from(TAR_BUCKET).createSignedUrl(p, 3600).then(res=>{
-    if(res && res.data && res.data.signedUrl){ window._tarImgUrls[p]=res.data.signedUrl; open(res.data.signedUrl); }
-    else toast('No se pudo abrir la imagen');
-  }).catch(()=>toast('No se pudo abrir la imagen'));
+  tarSignedUrl(p).then(url=>open(url)).catch(()=>toast('No se pudo abrir la imagen'));
 }
 
 function tarHidratarImgs(){
   const imgs=document.querySelectorAll('img[data-tarpath]');
   imgs.forEach(im=>{
     const p=im.getAttribute('data-tarpath'); if(!p) return;
-    const cached=window._tarImgUrls[p];
-    if(cached){ if(im.src!==cached) im.src=cached; return; }
+    const c=window._tarImgUrls[p];
+    if(c && c.url && c.until>Date.now()){ if(im.src!==c.url) im.src=c.url; return; }
     if(im.getAttribute('data-loading')) return;
     im.setAttribute('data-loading','1');
-    sbc.storage.from(TAR_BUCKET).createSignedUrl(p, 3600).then(res=>{
-      if(res && res.data && res.data.signedUrl){
-        window._tarImgUrls[p]=res.data.signedUrl;
-        document.querySelectorAll('img[data-tarpath="'+p+'"]').forEach(x=>{ x.src=res.data.signedUrl; x.removeAttribute('data-loading'); });
-      } else { im.removeAttribute('data-loading'); }
+    tarSignedUrl(p).then(url=>{
+      document.querySelectorAll('img[data-tarpath="'+p+'"]').forEach(x=>{ x.src=url; x.removeAttribute('data-loading'); });
     }).catch(()=>im.removeAttribute('data-loading'));
   });
 }
