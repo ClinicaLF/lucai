@@ -4051,10 +4051,11 @@ function tarBuzonView(modo){
   const arrow = bf.sortDir==='desc'?'▼':'▲';
   const dlab=`style="font-size:10px;color:#8A949B;letter-spacing:.2px;margin-bottom:1px"`;
   const dinp=`class="inp" style="margin:0;padding:3px 6px;font-size:12px;width:118px"`;
-  const rangoEntrega=`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:row;align-items:center;gap:6px;margin-top:4px">
-      <input type="date" title="Desde" ${dinp} value="${incEsc(bf.desde||'')}" onchange="setTarBuzF('desde',this.value)">
-      <span style="color:#8A949B">–</span>
-      <input type="date" title="Hasta" ${dinp} value="${incEsc(bf.hasta||'')}" onchange="setTarBuzF('hasta',this.value)">
+  const rangoEntrega=`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:row;align-items:center;gap:5px;margin-top:4px">
+      <span style="font-size:10px;color:#8A949B;text-transform:uppercase;letter-spacing:.04em">Desde</span>
+      <input type="date" ${dinp} value="${incEsc(bf.desde||'')}" onchange="setTarBuzF('desde',this.value)">
+      <span style="font-size:10px;color:#8A949B;text-transform:uppercase;letter-spacing:.04em;margin-left:4px">Hasta</span>
+      <input type="date" ${dinp} value="${incEsc(bf.hasta||'')}" onchange="setTarBuzF('hasta',this.value)">
     </div>`;
   const hayFiltro = bf.prio||bf.cat||bf.persona||bf.estado||bf.q||bf.desde||bf.hasta||bf.kpi;
   const clear = hayFiltro?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()">Limpiar</button>`:'';
@@ -4079,7 +4080,7 @@ function tarBuzonView(modo){
       <td>${tarPrioChip(t.prioridad)}</td>
       <td style="font-weight:600">${incEsc(tarCap(t.titulo))}${tarRecurMark(t)}${tarNvBadge(t)}${tarDescPrevHtml(t)}</td>
       <td class="col-hide-m" style="color:#5A6770;font-size:13px">${incEsc(t.area||'General')}</td>
-      <td class="col-hide-m">${dir}${incEsc(persona||'—')}</td>
+      <td class="col-hide-m" style="white-space:nowrap">${dir}${incEsc(persona||'—')}</td>
       <td>${tarFechaEdit(t)}</td>
       <td class="col-hide-m" style="white-space:nowrap">${tarEstadoSelect(t)}</td>
       <td style="text-align:right;white-space:nowrap">${quick}</td>
