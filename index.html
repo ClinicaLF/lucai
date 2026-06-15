@@ -3693,6 +3693,7 @@ function tarPartList(t){ return Array.isArray(t&&t.participantes) ? t.participan
 function tarInvolucra(t, who){ return !!t && (t.deQuien===who || t.paraQuien===who || tarPartList(t).includes(who)); }
 function tarPersonas(t){ return [...new Set([t&&t.deQuien, t&&t.paraQuien, ...tarPartList(t)].filter(Boolean))]; }
 function tarToggleParticipante(nombre){ if(!Array.isArray(F.participantes)) F.participantes=[]; const k=F.participantes.indexOf(nombre); if(k>=0) F.participantes.splice(k,1); else F.participantes.push(nombre); render(); }
+function tarAddParticipante(nombre){ if(!nombre) return; if(!Array.isArray(F.participantes)) F.participantes=[]; if(nombre!==F.paraQuien && !F.participantes.includes(nombre)) F.participantes.push(nombre); render(); }
 
 /* estado del módulo */
 if(!Array.isArray(S.tareas)) S.tareas = [
@@ -4502,9 +4503,12 @@ function tarFormBody(){
   const paraSel=`<select class="inp" onchange="setSel('paraQuien',this.value)"><option value="">Elige a quién…</option>${u.map(n=>`<option ${F.paraQuien===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>`;
   const partSel=(function(){
     const sel=Array.isArray(F.participantes)?F.participantes:[];
-    const cand=u.filter(n=> n!==F.paraQuien);
-    if(!cand.length) return '<div class="muted" style="font-size:12px;padding-top:4px">Elige antes el responsable.</div>';
-    return `<div style="display:flex;gap:6px;flex-wrap:wrap">${cand.map(n=>{const on=sel.includes(n);const nm=n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");return `<button type="button" onclick="tarToggleParticipante('${nm}')" style="cursor:pointer;border:1px solid ${on?'#6E8E00':'var(--line)'};background:${on?'#6E8E00':'#fff'};color:${on?'#fff':'#5A6770'};border-radius:7px;padding:5px 10px;font-size:12px;font-weight:600">${incEsc(n)}</button>`;}).join('')}</div>`;
+    const cand=u.filter(n=> n!==F.paraQuien && !sel.includes(n));
+    const add=`<select class="inp" onchange="tarAddParticipante(this.value)"><option value="">Añadir participante…</option>${cand.map(n=>`<option value="${incEsc(n)}">${incEsc(n)}</option>`).join('')}</select>`;
+    const tags = sel.length
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${sel.map(n=>{const nm=n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");return `<span style="display:inline-flex;align-items:center;gap:7px;border:1px solid #6E8E00;background:#E8F1CC;color:#333F48;border-radius:7px;padding:4px 6px 4px 10px;font-size:12px;font-weight:600">${incEsc(n)}<button type="button" onclick="tarToggleParticipante('${nm}')" title="Quitar" style="border:none;background:none;color:#6E8E00;cursor:pointer;font-size:15px;line-height:1;padding:0 2px">×</button></span>`;}).join('')}</div>`
+      : '';
+    return add+tags;
   })();
   const prioSel=`<select class="inp" onchange="setSel('prioridad',this.value)">${TAR_PRIOS.map(p=>`<option ${(F.prioridad||'Media')===p?'selected':''}>${p}</option>`).join('')}</select>`;
   const fechaInp=`<input class="inp" type="date" value="${incEsc(F.fechaLimite||'')}" oninput="setInp('fechaLimite',this.value)" ${puedeFecha?'':'disabled style="background:#F4F0E9;color:#8A949B"'}>`;
