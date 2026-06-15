@@ -4067,7 +4067,7 @@ function tarBuzonView(modo){
   const clear = hayFiltro?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()">Limpiar</button>`:'';
   const thead=`<thead><tr>
       <th style="vertical-align:top">Prior.<div>${selPrio}</div></th>
-      <th style="vertical-align:top;width:42%;min-width:300px">Tarea<div>${search}</div></th>
+      <th style="vertical-align:top;width:42%">Tarea<div>${search}</div></th>
       <th class="col-hide-m" style="vertical-align:top">Categoría<div>${selCat}</div></th>
       <th class="col-hide-m" style="vertical-align:top">${otro}<div>${selPersona}</div></th>
       <th style="vertical-align:top"><span style="cursor:pointer" title="Ordenar por fecha" onclick="tarBuzSort()">Entrega ${arrow}</span>${rangoEntrega}</th>
@@ -4080,7 +4080,7 @@ function tarBuzonView(modo){
     const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:#8A949B">↗ </span>':'<span title="Te la mandaron" style="color:#6E8E00">↙ </span>') : '';
     const recibida = t.paraQuien===me;
     const quick = ((modo==='recibidas' || (esTodas && recibida) || isAdmin()) && tarActiva(t))
-      ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
+      ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 9px;white-space:nowrap" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
       : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
       <td>${tarPrioChip(t.prioridad)}</td>
