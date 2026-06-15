@@ -4004,6 +4004,12 @@ function tarRecurMark(t){ return (t&&(t.serieId||t.recurrencia)) ? ` <span title
 function tarHoraChip(t){ if(!t||!t.horaInicio) return ''; const fin=t.horaFin?('–'+t.horaFin):''; return `<span style="display:inline-block;font-size:11px;font-weight:500;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:middle">${incEsc(t.horaInicio)}${incEsc(fin)}</span>`; }
 /* Muestra título/descripción con 1ª letra en mayúscula y el resto en minúscula (NO toca el dato guardado). */
 function tarCap(s){ s=String(s||'').trim(); return s ? (s.charAt(0).toUpperCase()+s.slice(1).toLowerCase()) : ''; }
+/* Nombre + inicial del primer apellido: "Encarna Garcia" -> "Encarna G." */
+function tarPersonaCorto(n){
+  n=String(n||'').trim(); if(!n) return '—';
+  const p=n.split(/\s+/).filter(Boolean);
+  return p.length<2 ? p[0] : (p[0]+' '+p[1].charAt(0).toUpperCase()+'.');
+}
 function tarToggleVerMas(id){ if(!S.tarVerMas) S.tarVerMas={}; S.tarVerMas[id]=!S.tarVerMas[id]; render(); }
 /* Preview de la descripción bajo el título, con "leer más / menos" en línea. */
 function tarDescPrevHtml(t){
@@ -4061,7 +4067,7 @@ function tarBuzonView(modo){
   const clear = hayFiltro?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()">Limpiar</button>`:'';
   const thead=`<thead><tr>
       <th style="vertical-align:top">Prior.<div>${selPrio}</div></th>
-      <th style="vertical-align:top">Tarea<div>${search}</div></th>
+      <th style="vertical-align:top;width:42%;min-width:300px">Tarea<div>${search}</div></th>
       <th class="col-hide-m" style="vertical-align:top">Categoría<div>${selCat}</div></th>
       <th class="col-hide-m" style="vertical-align:top">${otro}<div>${selPersona}</div></th>
       <th style="vertical-align:top"><span style="cursor:pointer" title="Ordenar por fecha" onclick="tarBuzSort()">Entrega ${arrow}</span>${rangoEntrega}</th>
@@ -4080,7 +4086,7 @@ function tarBuzonView(modo){
       <td>${tarPrioChip(t.prioridad)}</td>
       <td style="font-weight:600">${incEsc(tarCap(t.titulo))}${tarRecurMark(t)}${tarNvBadge(t)}${tarDescPrevHtml(t)}</td>
       <td class="col-hide-m" style="color:#5A6770;font-size:13px">${incEsc(t.area||'General')}</td>
-      <td class="col-hide-m" style="white-space:nowrap">${dir}${incEsc(persona||'—')}</td>
+      <td class="col-hide-m" style="white-space:nowrap" title="${incEsc(persona||'')}">${dir}${incEsc(tarPersonaCorto(persona))}</td>
       <td>${tarFechaEdit(t)}</td>
       <td class="col-hide-m" style="white-space:nowrap">${tarEstadoSelect(t)}</td>
       <td style="text-align:right;white-space:nowrap">${quick}</td>
@@ -6134,6 +6140,7 @@ function iaFloatHtml(){
 }
 /* ---- comprobador de versión en vivo (mientras la app está abierta) ---- */
 var _lucaiNewVer = null;
+var _lucaiAvisadaSig = null;   // firma de la versión nueva que YA se avisó (para no repetir el cartel)
 var _lucaiVerSig = null;   // firma de la versión que tengo cargada (se fija en la 1ª comprobación)
 /* Firma del archivo realmente desplegado. Usa ETag/Last-Modified (cambian en CADA subida,
    sin tener que tocar ningún número a mano). Si el host no los diera, cae al meta o al tamaño. */
@@ -6172,7 +6179,9 @@ async function lucaiCheckUpdate(){
     const sig = await _lucaiFetchSig();
     if(!sig) return;
     if(_lucaiVerSig===null){ _lucaiVerSig=sig; return; }      // 1ª vez: guardo la versión que tengo
-    if(sig!==_lucaiVerSig){ _lucaiNewVer=sig; lucaiUpdateBanner(); }   // ha cambiado el archivo subido -> aviso
+    if(sig!==_lucaiVerSig && sig!==_lucaiAvisadaSig){          // versión nueva y aún no avisada
+      _lucaiAvisadaSig=sig; _lucaiNewVer=sig; lucaiUpdateBanner();
+    }
   }catch(_){}
 }
 function lucaiUpdateBanner(){
