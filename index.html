@@ -4002,6 +4002,20 @@ function tarKpiMatch(t, kpi){
 function tarAreaChip(a){ if(!a) a='General'; return `<span style="display:inline-block;font-size:11px;font-weight:500;background:#EAE3D7;color:#5A6770;border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:middle">${incEsc(a)}</span>`; }
 function tarRecurMark(t){ return (t&&(t.serieId||t.recurrencia)) ? ` <span title="${incEsc(tarRecurLabel(t.recurrencia)||'Tarea recurrente')}" style="color:#5A6770;font-size:12px;vertical-align:middle">⟳</span>` : ''; }
 function tarHoraChip(t){ if(!t||!t.horaInicio) return ''; const fin=t.horaFin?('–'+t.horaFin):''; return `<span style="display:inline-block;font-size:11px;font-weight:500;background:#E8EAED;color:#5A6770;border-radius:10px;padding:1px 8px;margin-left:6px;vertical-align:middle">${incEsc(t.horaInicio)}${incEsc(fin)}</span>`; }
+/* Muestra título/descripción con 1ª letra en mayúscula y el resto en minúscula (NO toca el dato guardado). */
+function tarCap(s){ s=String(s||'').trim(); return s ? (s.charAt(0).toUpperCase()+s.slice(1).toLowerCase()) : ''; }
+function tarToggleVerMas(id){ if(!S.tarVerMas) S.tarVerMas={}; S.tarVerMas[id]=!S.tarVerMas[id]; render(); }
+/* Preview de la descripción bajo el título, con "leer más / menos" en línea. */
+function tarDescPrevHtml(t){
+  const d = tarCap((t&&t.descripcion)||'');
+  if(!d) return '';
+  const LIM=140;
+  const exp = !!(S.tarVerMas && S.tarVerMas[t.id]);
+  const larga = d.length>LIM;
+  const txt = (!larga||exp) ? d : (d.slice(0,LIM).replace(/\s+\S*$/,'')+'…');
+  const link = larga ? ` <span onclick="event.stopPropagation();tarToggleVerMas('${t.id}')" style="color:#6E8E00;font-weight:600;cursor:pointer;white-space:nowrap">${exp?'· menos':'· leer más'}</span>` : '';
+  return `<div style="font-weight:400;font-size:12.5px;color:#6C757D;margin-top:3px;white-space:pre-wrap;line-height:1.4">${incEsc(txt)}${link}</div>`;
+}
 function tarBuzonView(modo){
   const me=S.user.nombre;
   const esTodas = modo==='todas';
@@ -4062,7 +4076,7 @@ function tarBuzonView(modo){
       : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
       <td>${tarPrioChip(t.prioridad)}</td>
-      <td style="font-weight:600">${incEsc(t.titulo)}${tarRecurMark(t)}${tarNvBadge(t)}</td>
+      <td style="font-weight:600">${incEsc(tarCap(t.titulo))}${tarRecurMark(t)}${tarNvBadge(t)}${tarDescPrevHtml(t)}</td>
       <td class="col-hide-m" style="color:#5A6770;font-size:13px">${incEsc(t.area||'General')}</td>
       <td class="col-hide-m">${dir}${incEsc(persona||'—')}</td>
       <td>${tarFechaEdit(t)}</td>
