@@ -5032,7 +5032,7 @@ function tarDedupeSerie(arr){
   return out;
 }
 function tarRecibidasNuevas(me){ return tarDedupeSerie((S.tareas||[]).filter(t=> (t.paraQuien===me || tarPartList(t).includes(me)) && tarActiva(t) && !(t.vistos && t.vistos[me]))); }
-function tarPorVencer(me){ return tarDedupeSerie((S.tareas||[]).filter(t=> (t.paraQuien===me || tarPartList(t).includes(me)) && tarActiva(t) && tarDiasRest(t)!=null && tarDiasRest(t)<=2))
+function tarPorVencer(me){ return tarDedupeSerie((S.tareas||[]).filter(t=> (t.paraQuien===me || tarPartList(t).includes(me)) && tarActiva(t) && tarDiasRest(t)!=null && tarDiasRest(t)<=0))
   .sort((a,b)=>String(a.fechaLimite||'').localeCompare(String(b.fechaLimite||''))); }
 
 const TAR_IC_MSG  = `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
@@ -5046,7 +5046,7 @@ function tarWhoBlock(){
   return `<div class="who">
     ${nMsg?`<button class="bell" onclick="openTarAlert('msg')" title="Mensajes nuevos">${TAR_IC_MSG}<span class="badge">${nMsg}</span></button>`:''}
     ${nNuevas?`<button class="bell" onclick="openTarAlert('nuevas')" title="Tareas nuevas recibidas">${TAR_IC_BELL}<span class="badge">${nNuevas}</span></button>`:''}
-    ${nVence?`<button class="bell" onclick="openTarAlert('vence')" title="Tareas que vencen">${TAR_IC_CLOCK}<span class="badge">${nVence}</span></button>`:''}
+    ${nVence?`<button class="bell" onclick="openTarAlert('vence')" title="Vencidas y de hoy · ponte al día">${TAR_IC_CLOCK}<span class="badge">${nVence}</span></button>`:''}
     <div class="chip"><span class="avatar">${initials(me)}</span><span class="nm">${me}</span></div>
     <button class="logout" onclick="logout()">Cerrar sesión</button>
   </div>`;
@@ -5075,7 +5075,7 @@ function tarAlertModal(){
   let titulo, items, extraFn, vacio;
   if(k==='msg'){ titulo='Mensajes nuevos'; items=tarTareasConNuevos(me); extraFn=t=>`<span style="background:#6E8E00;color:#fff;font-weight:800;border-radius:20px;padding:1px 8px">● ${tarNuevosPara(t,me)}</span>`; vacio='No tienes mensajes nuevos. Cuando alguien te escriba en una tarea, aparecerá aquí.'; }
   else if(k==='nuevas'){ titulo='Tareas nuevas recibidas'; items=tarRecibidasNuevas(me); extraFn=t=>tarLimiteCell(t); vacio='No tienes tareas nuevas sin abrir.'; }
-  else { titulo='Tareas que vencen'; items=tarPorVencer(me); extraFn=t=>tarLimiteCell(t); vacio='No tienes tareas que venzan en los próximos días.'; }
+  else { titulo='Para ponerte al día'; items=tarPorVencer(me); extraFn=t=>tarLimiteCell(t); vacio='¡Estás al día! No tienes tareas vencidas ni para hoy.'; }
   const body = items.length ? `<div class="muted" style="font-size:13px;margin-bottom:10px">Toca una tarea para ir directo a ella.</div>`+items.map(t=>tarAlertRow(t, extraFn(t))).join('') : `<div class="muted">${vacio}</div>`;
   return `<div class="overlay" onclick="if(event.target===this)closeTarAlert()"><div class="modal">
     <div class="modal-head"><h2>${titulo} (${items.length})</h2><button class="x" onclick="closeTarAlert()">×</button></div>
