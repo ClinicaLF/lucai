@@ -4040,7 +4040,7 @@ function tarBuzonView(modo){
     const persona = otroDe(t);
     const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:#8A949B">↗ </span>':'<span title="Te la mandaron" style="color:#6E8E00">↙ </span>') : '';
     const recibida = t.paraQuien===me;
-    const quick = ((modo==='recibidas' || (esTodas && recibida)) && tarActiva(t))
+    const quick = ((modo==='recibidas' || (esTodas && recibida) || isAdmin()) && tarActiva(t))
       ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
       : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
