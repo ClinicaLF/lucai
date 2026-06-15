@@ -4114,7 +4114,7 @@ function tarBuzonView(modo){
   if(!all.length){ const msg = esTodas ? 'No tienes ninguna tarea (ni recibida ni emitida). Usa “Nueva tarea”.' : esMias ? 'No tienes tareas personales. Crea una con “Nueva tarea” y asígnatela a ti mismo.' : (modo==='emitidas'?'No has mandado ninguna tarea todavía. Usa “Nueva tarea”.':'No tienes tareas en tu buzón. ¡Buen trabajo!'); return tarKpis(all)+toggle+`<div class="muted" style="padding:20px;text-align:center">${msg}</div>`; }
   const otro = esTodas ? 'Con' : esMias ? '' : (modo==='emitidas' ? 'Para' : 'De');
   const personas=[...new Set(all.map(otroDe).filter(Boolean))].sort();
-  const ss=`class="inp" style="margin:4px 0 0;padding:3px 6px;font-size:12px;max-width:150px"`;
+  const ss=`class="inp" style="margin:4px 0 0;padding:3px 22px 3px 6px;font-size:12px;max-width:150px;background-position:right 6px center"`;
   const ds=`class="inp" style="margin:2px 0 0;padding:3px 6px;font-size:12px;width:124px"`;
   const selPrio=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('prio',this.value)"><option value="">Todas</option>${TAR_PRIOS.map(p=>`<option ${bf.prio===p?'selected':''}>${p}</option>`).join('')}</select>`;
   const selCat=`<select ${ss} onclick="event.stopPropagation()" onchange="setTarBuzF('cat',this.value)"><option value="">Todas</option>${tarAreas().map(a=>`<option ${bf.cat===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>`;
@@ -4140,12 +4140,12 @@ function tarBuzonView(modo){
       <th class="tar-c-prio" style="vertical-align:top">Prior.<div>${selPrio}</div></th>
       <th class="tar-c-tarea" style="vertical-align:top">Tarea<div>${search}</div></th>
       <th class="tar-c-cat col-hide-m" style="vertical-align:top">Categoría<div>${selCat}</div></th>
-      <th class="tar-c-con col-hide-m" style="vertical-align:top">${otro}<div>${selPersona}</div></th>
+      ${esMias ? '' : `<th class="tar-c-con col-hide-m" style="vertical-align:top">${otro}<div>${selPersona}</div></th>`}
       <th class="tar-c-entrega" style="vertical-align:top"><span style="cursor:pointer" title="Ordenar por fecha" onclick="tarBuzSort()">Entrega ${arrow}</span>${rangoEntrega}</th>
       <th class="tar-c-estado col-hide-m" style="vertical-align:top">Estado<div>${selEstado}</div></th>
       <th class="tar-c-act" style="vertical-align:top">${clear}</th>
     </tr></thead>`;
-  if(!list.length) return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable inctable-tar">${thead}<tbody><tr><td colspan="7" class="muted" style="padding:20px;text-align:center">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</td></tr></tbody></table></div>`;
+  if(!list.length) return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable inctable-tar">${thead}<tbody><tr><td colspan="${esMias?6:7}" class="muted" style="padding:20px;text-align:center">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</td></tr></tbody></table></div>`;
   const rows=list.map(t=>{
     const persona = otroDe(t);
     const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:#8A949B">↗ </span>':'<span title="Te la mandaron" style="color:#6E8E00">↙ </span>') : '';
@@ -4159,7 +4159,7 @@ function tarBuzonView(modo){
       <td class="tar-c-prio">${tarPrioChip(t.prioridad)}</td>
       <td class="tar-c-tarea" style="font-weight:600">${pinBtn}${incEsc(tarCap(t.titulo))}${tarRecurMark(t)}${tarNvBadge(t)}${tarDescPrevHtml(t)}</td>
       <td class="tar-c-cat col-hide-m" style="color:#5A6770;font-size:13px">${incEsc(t.area||'General')}</td>
-      <td class="tar-c-con col-hide-m" title="${incEsc(persona||'')}">${dir}${incEsc(tarPersonaCorto(persona))}</td>
+      ${esMias ? '' : `<td class="tar-c-con col-hide-m" title="${incEsc(persona||'')}">${dir}${incEsc(tarPersonaCorto(persona))}</td>`}
       <td class="tar-c-entrega">${tarFechaEdit(t)}</td>
       <td class="tar-c-estado col-hide-m">${tarEstadoSelect(t)}</td>
       <td class="tar-c-act">${quick}</td>
