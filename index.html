@@ -626,9 +626,8 @@ const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','segui
 let _persistT = null;
 
 async function boot(){
-  try { const { data:{ session } } = await sbc.auth.getSession(); DEVICE = !!session; }
-  catch(e){ DEVICE = false; }
-  if (DEVICE) await loadEstado();
+  DEVICE = true;                 // sin login de correo: la barrera es el PIN de cada usuario
+  await loadEstado();
   try{ if(typeof lucaiMigrarUsuarios==='function') await lucaiMigrarUsuarios(); }catch(_){}
   render();
   try{
@@ -789,9 +788,9 @@ document.addEventListener('keydown', pinKey);
 function logout(){ if(typeof lucaiSaludoHide==='function') lucaiSaludoHide(true); clearTimeout(window._iaSaludoShow); S.user=null; S.pin=""; S.module=null; S.sub="stock"; clearTimeout(window._idle); window._idle=null; render(); }
 const SESION_MIN = 5; // minutos de inactividad antes de cerrar sesión
 function resetIdle(){
-  if(!S.user) return;
+  // desconexión por inactividad desactivada: la sesión no se cierra sola
   clearTimeout(window._idle);
-  window._idle=setTimeout(()=>{ if(S.user){ logout(); toast('Sesión cerrada por inactividad'); } }, SESION_MIN*60000);
+  window._idle=null;
 }
 
 /* ---- APP SHELL ---- */
