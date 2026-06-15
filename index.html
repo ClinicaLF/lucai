@@ -5213,9 +5213,46 @@ function iaContexto(pregunta){
   const hoyT = porHacer.filter(t=> t.fechaLimite===hoy);
   out.push(`\n[RESUMEN] ${porHacer.length} por hacer · ${espera.length} en espera de otros · ${venc.length} vencidas · ${hoyT.length} para hoy.`);
 
+  /* Helpers de tiempo para esta sesión: minutos de UNA tarea por fecha y de UNA persona en una fecha */
+  const minTareaEnFecha = (t, f, quien) => (Array.isArray(t.tiempos)?t.tiempos:[]).reduce((s,e)=> ((!quien||e.quien===quien) && e.fecha===f) ? s+(Number(e.min)||0) : s, 0);
+  const minTareaRango = (t, desde, hasta, quien) => (Array.isArray(t.tiempos)?t.tiempos:[]).reduce((s,e)=> ((!quien||e.quien===quien) && (!desde||e.fecha>=desde) && (!hasta||e.fecha<=hasta)) ? s+(Number(e.min)||0) : s, 0);
+  /* fechas auxiliares */
+  const _hoyD = new Date(hoy+'T00:00:00');
+  const _ayerD = new Date(_hoyD); _ayerD.setDate(_hoyD.getDate()-1); const ayer = _ayerD.toISOString().slice(0,10);
+  const _lun = new Date(_hoyD); _lun.setDate(_hoyD.getDate() - ((_hoyD.getDay()+6)%7));   // lunes de esta semana
+  const lunesSem = _lun.toISOString().slice(0,10);
+  const _7d = new Date(_hoyD); _7d.setDate(_hoyD.getDate()-7); const hace7d = _7d.toISOString().slice(0,10);
+
+  /* ===== [TIEMPO TRABAJADO POR MÍ] ===== */
+  const todasMisTareas = (S.tareas||[]).filter(t=> t.paraQuien===me || t.deQuien===me || tarPartList(t).includes(me));
+  const minHoyMe = todasMisTareas.reduce((s,t)=> s + minTareaEnFecha(t, hoy, me), 0);
+  const minAyerMe = todasMisTareas.reduce((s,t)=> s + minTareaEnFecha(t, ayer, me), 0);
+  const minSemMe = todasMisTareas.reduce((s,t)=> s + minTareaRango(t, lunesSem, hoy, me), 0);
+  const min7dMe = todasMisTareas.reduce((s,t)=> s + minTareaRango(t, hace7d, hoy, me), 0);
+  const minTotalMe = todasMisTareas.reduce((s,t)=> s + minTareaRango(t, null, null, me), 0);
+  out.push(`\n[TIEMPO TRABAJADO POR MÍ] (calculado del registro de tiempo de mis tareas, solo apuntes hechos por mí)`);
+  out.push(`- HOY (${hoy}): ${tarFmtMin(minHoyMe)}`);
+  out.push(`- Ayer (${ayer}): ${tarFmtMin(minAyerMe)}`);
+  out.push(`- Esta semana (desde el lunes ${lunesSem}): ${tarFmtMin(minSemMe)}`);
+  out.push(`- Últimos 7 días: ${tarFmtMin(min7dMe)}`);
+  out.push(`- Total acumulado en todas mis tareas: ${tarFmtMin(minTotalMe)}`);
+  const misConHoy = todasMisTareas.map(t=> ({t, m:minTareaEnFecha(t, hoy, me)})).filter(x=> x.m>0).sort((a,b)=> b.m-a.m);
+  if(misConHoy.length){
+    out.push('Desglose de HOY por tarea (solo las que tienen tiempo apuntado hoy):');
+    misConHoy.forEach(x=> out.push(`  · ${x.t.titulo}: ${tarFmtMin(x.m)}`));
+  }
+
   out.push('\n[MIS TAREAS POR HACER] (dependen de mí ahora)');
   if(!porHacer.length) out.push('(ninguna)');
-  else porHacer.forEach(t=>{ const d=dias(t.fechaLimite); const det = d!=null ? (d<0?`, hace ${-d} d`:(d===0?', hoy':`, en ${d} d`)) : ''; out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}${det}) | estado: ${t.estado||'Pendiente'} | la mandó: ${t.deQuien||'—'} | tiempo ya dedicado: ${tarFmtMin(tarTotalMin(t))}${dsc(t)}`); });
+  else porHacer.forEach(t=>{
+    const d=dias(t.fechaLimite);
+    const det = d!=null ? (d<0?`, hace ${-d} d`:(d===0?', hoy':`, en ${d} d`)) : '';
+    const total = tarTotalMin(t);
+    const mHoy = minTareaEnFecha(t, hoy, me);
+    const m7d  = minTareaRango(t, hace7d, hoy, me);
+    const tInfo = `tiempo: total ${tarFmtMin(total)}${mHoy>0?` · hoy ${tarFmtMin(mHoy)}`:''}${(m7d>mHoy && m7d>0)?` · 7d ${tarFmtMin(m7d)}`:''}`;
+    out.push(`- ${t.titulo} | área: ${t.area||'General'} | prioridad: ${t.prioridad||'Media'} | vence: ${t.fechaLimite||'sin fecha'} (${temp(t.fechaLimite)}${det}) | estado: ${t.estado||'Pendiente'} | la mandó: ${t.deQuien||'—'} | ${tInfo}${dsc(t)}`);
+  });
 
   out.push('\n[EN ESPERA DE OTROS] (ya hice mi parte, espero respuesta)');
   if(!espera.length) out.push('(ninguna)');
@@ -5273,20 +5310,40 @@ function iaContexto(pregunta){
 
     const filas = equipo.map(p=>{
       const suyas = (S.tareas||[]).filter(t=> t.paraQuien===p || tarPartList(t).includes(p));
+      const minHoy = suyas.reduce((s,t)=> s + minTareaEnFecha(t, hoy, p), 0);
+      const min7  = suyas.reduce((s,t)=> s + minTareaRango(t, hace7d, hoy, p), 0);
       return {
         p,
         ph: suyas.filter(porHacerDe).length,
         ve: suyas.filter(vencidaDe).length,
         es: suyas.filter(t=> t.estado==='En espera').length,
-        he7: suyas.filter(t=> t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=hace7).length
+        he7: suyas.filter(t=> t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=hace7).length,
+        minHoy, min7
       };
     }).sort((a,b)=> (b.ph-a.ph) || (b.ve-a.ve));
 
-    out.push('\n[CÓMO RESPONDER A DIRECCIÓN] Cuando te pregunten en general cómo va la carga del equipo, si la gente cumple, quién va bien o mal, o un balance, responde con CONCLUSIONES y valoración (3-6 frases), NO con un listado de tareas: di si el reparto está equilibrado o hay cuellos de botella, quién está sobrecargado, quién acumula vencidas (señal de que no llega a tiempo), quién va al día, y cierra con una recomendación accionable si procede. Para juzgar el cumplimiento fíjate en las vencidas (retraso) y en la proporción de hechas frente a lo pendiente. Solo enumera tareas concretas si te las piden de forma explícita o si nombran a una persona.');
+    out.push('\n[CÓMO RESPONDER A DIRECCIÓN] Cuando te pregunten en general cómo va la carga del equipo, si la gente cumple, quién va bien o mal, o un balance, responde con CONCLUSIONES y valoración (3-6 frases), NO con un listado de tareas: di si el reparto está equilibrado o hay cuellos de botella, quién está sobrecargado, quién acumula vencidas (señal de que no llega a tiempo), quién va al día, y cierra con una recomendación accionable si procede. Para juzgar el cumplimiento fíjate en las vencidas (retraso) y en la proporción de hechas frente a lo pendiente. Solo enumera tareas concretas si te las piden de forma explícita o si nombran a una persona. Si te preguntan por tiempo trabajado (de una persona, del equipo, de hoy, de la semana), usa los datos del bloque [TIEMPO TRABAJADO POR EL EQUIPO].');
     out.push('\n[CARGA DEL EQUIPO · solo Dirección] (todas las tareas del equipo · sin datos de pacientes)');
-    out.push('Resumen por persona, ordenado de más a menos cargado. "por hacer" = pendientes que dependen de esa persona · "vencidas" = ya pasadas de fecha · "en espera" = esperando a otro · "hechas7d" = cerradas en los últimos 7 días.');
+    out.push('Resumen por persona, ordenado de más a menos cargado. "por hacer" = pendientes que dependen de esa persona · "vencidas" = ya pasadas de fecha · "en espera" = esperando a otro · "hechas7d" = cerradas en los últimos 7 días · "tiempo hoy/7d" = lo que esa persona apuntó en el registro de tiempo (no son horas de jornada, son apuntes voluntarios sobre tareas).');
     if(!filas.length) out.push('(no hay personas ni tareas registradas)');
-    else filas.forEach(f=> out.push(`- ${f.p}: ${f.ph} por hacer · ${f.ve} vencidas · ${f.es} en espera · ${f.he7} hechas (7d)`));
+    else filas.forEach(f=> out.push(`- ${f.p}: ${f.ph} por hacer · ${f.ve} vencidas · ${f.es} en espera · ${f.he7} hechas (7d) · tiempo hoy ${tarFmtMin(f.minHoy)} · 7d ${tarFmtMin(f.min7)}`));
+
+    /* ===== [TIEMPO TRABAJADO POR EL EQUIPO] · solo Dirección ===== */
+    out.push('\n[TIEMPO TRABAJADO POR EL EQUIPO · solo Dirección] (apuntes de tiempo en tareas, por persona)');
+    out.push('Para responder "¿cuánto ha trabajado X hoy/esta semana?" usa estas cifras. Son apuntes voluntarios sobre tareas: no incluyen jornada laboral, no son fichaje. Si una persona no apunta, aparecerá en cero.');
+    equipo.forEach(p=>{
+      const suyas = (S.tareas||[]).filter(t=> t.paraQuien===p || tarPartList(t).includes(p));
+      const mHoy = suyas.reduce((s,t)=> s + minTareaEnFecha(t, hoy, p), 0);
+      const mAyer = suyas.reduce((s,t)=> s + minTareaEnFecha(t, ayer, p), 0);
+      const mSem  = suyas.reduce((s,t)=> s + minTareaRango(t, lunesSem, hoy, p), 0);
+      const m7   = suyas.reduce((s,t)=> s + minTareaRango(t, hace7d, hoy, p), 0);
+      const mTot = suyas.reduce((s,t)=> s + minTareaRango(t, null, null, p), 0);
+      out.push(`- ${p}: hoy ${tarFmtMin(mHoy)} · ayer ${tarFmtMin(mAyer)} · esta semana ${tarFmtMin(mSem)} · últimos 7 días ${tarFmtMin(m7)} · total ${tarFmtMin(mTot)}`);
+      const conHoy = suyas.map(t=> ({t, m:minTareaEnFecha(t, hoy, p)})).filter(x=> x.m>0).sort((a,b)=> b.m-a.m);
+      if(conHoy.length){
+        conHoy.forEach(x=> out.push(`    · hoy en "${x.t.titulo}": ${tarFmtMin(x.m)}`));
+      }
+    });
 
     if(detallar){
       const TOPE_P = 25;
