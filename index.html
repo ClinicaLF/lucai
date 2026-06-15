@@ -4123,7 +4123,7 @@ function tarBuzonView(modo){
     const recibida = t.paraQuien===me;
     const fijada = tarEstaFijada(t.id, me);
     const pinBtn = `<button onclick="event.stopPropagation();tarTogglePin('${t.id}')" title="${fijada?'Quitar de fijadas':'Fijar arriba'}" style="border:none;background:none;cursor:pointer;padding:0 7px 0 0;line-height:0;vertical-align:middle;color:${fijada?'#6E8E00':'#C7CDD1'}">${TAR_IC_PIN}</button>`;
-    const quick = ((modo==='recibidas' || esMias || (esTodas && recibida) || isAdmin()) && tarActiva(t))
+    const quick = tarActiva(t)
       ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 9px;white-space:nowrap" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
       : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
