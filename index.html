@@ -4833,8 +4833,7 @@ function tarAddMsg(id){
   tarAutoEnCurso(t);
   F.msgDraft=''; render();
   srvTarUpdate(id, t);
-  const otros=[...new Set(tarPersonas(t).filter(n=>n && n!==me))];
-  otros.forEach(n=>tgNotify(n, `💬 ${me} en "${t.titulo}": ${txt}`));
+  // (Sin aviso por Telegram al escribir mensajes internos. La notificación in-app sigue activa.)
 }
 function tarFmtMin(m){ m=Math.max(0,Math.round(Number(m)||0)); const h=Math.floor(m/60), mm=m%60; return h ? (mm?`${h}h ${mm}m`:`${h}h`) : `${mm}m`; }
 function tarTotalMin(t){ return (Array.isArray(t.tiempos)?t.tiempos:[]).reduce((s,e)=>s+(Number(e.min)||0),0); }
@@ -6578,8 +6577,7 @@ function tarAddMsgImg(id){
       tarAutoEnCurso(t);
       F.msgDraft=''; render();
       srvTarUpdate(id, t);
-      const otros=[...new Set(tarPersonas(t).filter(n=>n && n!==me))];
-      otros.forEach(n=>tgNotify(n, `📷 ${me} ha enviado una imagen en "${t.titulo}"`));
+      // (Sin aviso por Telegram al adjuntar imagen. La notificación in-app sigue activa.)
     }catch(e){ toast('No se pudo subir: '+(e.message||e)); }
   });
 }
@@ -6598,8 +6596,7 @@ function tarAddMsgArchivo(id){
       tarAutoEnCurso(t);
       F.msgDraft=''; render();
       srvTarUpdate(id, t);
-      const otros=[...new Set(tarPersonas(t).filter(n=>n && n!==me))];
-      otros.forEach(n=>tgNotify(n, `📎 ${me} ha enviado un archivo en "${t.titulo}"`));
+      // (Sin aviso por Telegram al adjuntar archivo. La notificación in-app sigue activa.)
     }catch(e){ toast('No se pudo subir: '+(e.message||e)); }
   });
 }
@@ -6690,8 +6687,7 @@ function tarOnPaste(e){
     tarAutoEnCurso(t);
     F.msgDraft=''; render();
     srvTarUpdate(id, t);
-    const otros=[...new Set(tarPersonas(t).filter(n=>n && n!==me))];
-    otros.forEach(n=>tgNotify(n, `📷 ${me} ha enviado una imagen en "${t.titulo}"`));
+    // (Sin aviso por Telegram al pegar imagen. La notificación in-app sigue activa.)
   }).catch(err=>toast('No se pudo subir: '+(err.message||err)));
 }
 document.addEventListener('paste', tarOnPaste);
