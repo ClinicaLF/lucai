@@ -715,7 +715,22 @@ function toast(msg){ const m=el("toast-msg"); if(m)m.textContent=msg; const u=el
 function toastUndo(msg){ const m=el("toast-msg"); if(m)m.textContent=msg; const u=el("toast-undo"); if(u)u.style.display='inline'; const t=el("toast"); t.classList.add("show"); clearTimeout(window._tt); window._tt=setTimeout(()=>{ t.classList.remove("show"); window._lastQuick=null; },6000); _persistSoon(); }
 
 /* ---------------- RENDER ---------------- */
-function render(){ el("app").innerHTML = !DEVICE ? deviceLoginView() : (S.user ? appView() : loginView()); }
+function render(){
+  el("app").innerHTML = !DEVICE ? deviceLoginView() : (S.user ? appView() : loginView());
+  // post-paso: auto-scroll al final en cualquier hilo de conversación visible
+  try{
+    document.querySelectorAll('[data-tar-scroll]').forEach(function(s){
+      if(s.scrollHeight>s.clientHeight){ s.scrollTop = s.scrollHeight; return; }
+      // si el propio nodo no tiene scroll, buscar ancestro con overflow auto/scroll
+      var p=s.parentElement;
+      while(p && p!==document.body){
+        var st=window.getComputedStyle(p);
+        if((st.overflowY==='auto'||st.overflowY==='scroll') && p.scrollHeight>p.clientHeight){ p.scrollTop=p.scrollHeight; break; }
+        p=p.parentElement;
+      }
+    });
+  }catch(_){}
+}
 
 function loginView(){
   return `
@@ -1242,7 +1257,7 @@ function openModal(type){
   else if(type==='merma') F={type, cod:"", cant:1, motivo:"Roto / defectuoso", ref:""};
   S.modal=type; render();
 }
-function closeModal(){ S.modal=null; const o=document.querySelector(".overlay"); if(o)o.remove(); }
+function closeModal(){ S.modal=null; F.msgReplyTo=null; F.emojiOpen=null; const o=document.querySelector(".overlay"); if(o)o.remove(); }
 function setSel(field,v){ F[field]=v; render(); }
 function setInp(field,v){ F[field]=v; }
 function setProv(v){ F.proveedor=v; if(v!=='__nuevo__') F.proveedorNuevo=''; render(); }
@@ -4807,26 +4822,97 @@ function tarThreadHtml(t, bare){
   const me=S.user.nombre, admin=isAdmin();
   const puede = admin || tarInvolucra(t,me);
   const msgs=Array.isArray(t.mensajes)?t.mensajes:[];
+  // mapa rápido por ts → mensaje (para resolver respuestas citadas)
+  const byTs = {}; msgs.forEach(m=>{ if(m && m.ts) byTs[String(m.ts)] = m; });
   const list = msgs.length ? msgs.map(mm=>{
     const mine=mm.de===me;
+    const tsId = String(mm.ts||'');
+    // si este mensaje responde a otro, pinto una mini-cita arriba del cuerpo
+    let citaHtml = '';
+    if(mm.replyTo){
+      const orig = mm.replyTo.ts ? byTs[String(mm.replyTo.ts)] : null;
+      const deCita = (mm.replyTo.de) || (orig && orig.de) || '—';
+      const txCita = (mm.replyTo.texto || (orig && orig.texto) || '').slice(0,140);
+      citaHtml = `<div style="border-left:3px solid #A8B400;background:rgba(0,0,0,.04);padding:4px 8px;border-radius:6px;margin-bottom:6px;font-size:12px;color:#5A6770"><b style="color:#3C3F44">${incEsc(deCita)}</b><div style="opacity:.85;white-space:pre-wrap">${incEsc(txCita)}</div></div>`;
+    }
     return `<div style="margin-bottom:8px;display:flex;${mine?'justify-content:flex-end':''}">
-      <div style="max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px">
-        <div style="font-size:11px;color:#8A949B;margin-bottom:2px">${incEsc(mm.de||'—')} · ${incEsc(tarMsgTime(mm.ts))}</div>
+      <div style="position:relative;max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px" onmouseenter="this.querySelector('.msg-actions')&&(this.querySelector('.msg-actions').style.opacity=1)" onmouseleave="this.querySelector('.msg-actions')&&(this.querySelector('.msg-actions').style.opacity=0)">
+        <div style="font-size:11px;color:#8A949B;margin-bottom:2px;display:flex;align-items:center;gap:6px">
+          <span>${incEsc(mm.de||'—')} · ${incEsc(tarMsgTime(mm.ts))}</span>
+          ${puede?`<span class="msg-actions" style="opacity:0;transition:opacity .15s ease;margin-left:auto"><button title="Responder a este mensaje" onclick="tarReplyTo('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#6E8E00;font-size:12px;padding:0 2px">↩ responder</button></span>`:''}
+        </div>
+        ${citaHtml}
         <div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div>
         ${tarAdjView(mm.adj,'msg')}
       </div></div>`;
   }).join('') : `<div class="muted" style="font-size:13px">Aún no hay mensajes. Escribe el primero para aclarar o comentar la tarea.</div>`;
-  const compose = puede ? `<div style="display:flex;gap:8px;margin-top:10px">
+
+  // banner de reply (si hay un mensaje seleccionado para responder)
+  let replyBar = '';
+  const rep = F.msgReplyTo;
+  if(puede && rep && rep.tarId===t.id){
+    replyBar = `<div style="display:flex;align-items:center;gap:8px;background:#F4F0E9;border-left:3px solid #A8B400;padding:6px 10px;margin-top:8px;border-radius:6px;font-size:12px">
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="color:#5A6770">Respondiendo a <b style="color:#3C3F44">${incEsc(rep.de||'—')}</b></div>
+        <div style="color:#5A6770;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc((rep.texto||'').slice(0,140))}</div>
+      </div>
+      <button onclick="tarReplyCancel()" title="Cancelar respuesta" style="border:none;background:none;cursor:pointer;font-size:16px;color:#8A949B;padding:0 4px">×</button>
+    </div>`;
+  }
+
+  // panel de emojis
+  const emojiOpen = F.emojiOpen===t.id;
+  const EMOJIS = ['😀','😄','😁','😅','😂','🤣','😊','😍','🤩','😘','😜','🤔','😏','😐','😑','😶','🙄','😬','🤐','😴','😪','😮','😯','😲','😢','😭','😤','😠','😡','🤯','😱','🥺','🤗','🤝','👍','👎','👏','🙌','🙏','👋','💪','✌️','👌','✅','❌','⭐','🔥','💡','📌','📎','📋','💬','📅','⏰','🚨','✨','❤️','💚','🎉','🚀'];
+  const emojiPanel = emojiOpen ? `<div style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;background:#FFF;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px;max-height:160px;overflow-y:auto">
+      ${EMOJIS.map(e=>`<button onclick="tarInsertEmoji('${e}')" style="border:none;background:none;cursor:pointer;font-size:20px;padding:4px;border-radius:6px" onmouseover="this.style.background='#F4F0E9'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
+    </div>` : '';
+
+  const compose = puede ? `${replyBar}<div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <button class="btn btn-ghost" onclick="tarToggleEmoji('${t.id}')" title="Emojis (también puedes usar el teclado del sistema: Win+. en Windows, Ctrl+Cmd+Espacio en Mac)" style="flex:0 0 auto;padding:8px 11px">😀</button>
       <button class="btn btn-ghost" onclick="tarAddMsgImg('${t.id}')" title="Adjuntar imagen (o pega una con Ctrl+V)" style="flex:0 0 auto;padding:8px 11px">📷</button>
       <button class="btn btn-ghost" onclick="tarAddMsgArchivo('${t.id}')" title="Adjuntar archivo (PDF, Word, Excel…)" style="flex:0 0 auto;padding:8px 11px">📎</button>
-      <input class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}">
+      <input id="tarMsgInput-${t.id}" class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}else if(event.key==='Escape'){tarReplyCancel()}">
       <button class="btn btn-primary" onclick="tarAddMsg('${t.id}')">Enviar</button>
-    </div>` : '';
-  if(bare) return `<div>${list}</div>${compose}`;
+    </div>${emojiPanel}` : '';
+
+  // contenedor con id para auto-scroll al final tras cada render (lo aplica render() post-paso)
+  const scrollerId = `tarMsgsScroll-${t.id}`;
+
+  if(bare) return `<div id="${scrollerId}" data-tar-scroll="1">${list}</div>${compose}`;
   return `<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
     <div style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A949B;margin-bottom:8px">Conversación</div>
-    <div style="max-height:240px;overflow-y:auto">${list}</div>
+    <div id="${scrollerId}" data-tar-scroll="1" style="max-height:240px;overflow-y:auto">${list}</div>
     ${compose}</div>`;
+}
+
+/* Marca un mensaje como "respondido" para que el siguiente envío lo cite */
+function tarReplyTo(tarId, ts){
+  const t=(S.tareas||[]).find(x=>x.id===tarId); if(!t) return;
+  const m=(t.mensajes||[]).find(x=>String(x.ts)===String(ts)); if(!m) return;
+  F.msgReplyTo = { tarId, ts: m.ts, de: m.de, texto: (m.texto||'').slice(0,200) };
+  render();
+  setTimeout(()=>{ const i=document.getElementById('tarMsgInput-'+tarId); if(i) try{ i.focus(); }catch(_){ } }, 50);
+}
+function tarReplyCancel(){ if(F.msgReplyTo){ F.msgReplyTo=null; render(); } }
+function tarToggleEmoji(tarId){ F.emojiOpen = (F.emojiOpen===tarId) ? null : tarId; render(); }
+function tarInsertEmoji(e){
+  // insertar en la posición del cursor si es posible, si no, al final
+  const tarId = F.emojiOpen;
+  const i = tarId ? document.getElementById('tarMsgInput-'+tarId) : null;
+  const cur = F.msgDraft || '';
+  if(i && typeof i.selectionStart==='number'){
+    const a = cur.slice(0, i.selectionStart);
+    const b = cur.slice(i.selectionEnd);
+    F.msgDraft = a + e + b;
+    render();
+    setTimeout(()=>{
+      const i2 = tarId ? document.getElementById('tarMsgInput-'+tarId) : null;
+      if(i2){ try{ i2.focus(); const pos = (a+e).length; i2.setSelectionRange(pos,pos); }catch(_){ } }
+    }, 30);
+  } else {
+    F.msgDraft = cur + e;
+    render();
+  }
 }
 function tarMsgTime(ts){ ts=String(ts||''); const d=ts.slice(0,10).split('-'); const hm=ts.slice(11,16); return (d.length===3?`${d[2]}/${d[1]}`:ts)+(hm?` ${hm}`:''); }
 function tarAutoEnCurso(t){ if(t && t.estado==='Pendiente'){ t.estado='En curso'; return true; } return false; }
@@ -4836,9 +4922,14 @@ function tarAddMsg(id){
   const me=S.user.nombre;
   if(!(isAdmin()||tarInvolucra(t,me))){ toast('No puedes escribir en esta tarea'); return; }
   if(!Array.isArray(t.mensajes)) t.mensajes=[];
-  t.mensajes.push({de:me, texto:txt, ts:now()});
+  const nuevo = {de:me, texto:txt, ts:now()};
+  // si estoy respondiendo a un mensaje, lo cito (compactado para no inflar)
+  if(F.msgReplyTo && F.msgReplyTo.tarId===id){
+    nuevo.replyTo = { ts: F.msgReplyTo.ts, de: F.msgReplyTo.de, texto: (F.msgReplyTo.texto||'').slice(0,200) };
+  }
+  t.mensajes.push(nuevo);
   tarAutoEnCurso(t);
-  F.msgDraft=''; render();
+  F.msgDraft=''; F.msgReplyTo=null; F.emojiOpen=null; render();
   srvTarUpdate(id, t);
   // (Sin aviso por Telegram al escribir mensajes internos. La notificación in-app sigue activa.)
 }
