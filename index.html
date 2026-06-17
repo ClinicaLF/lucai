@@ -838,7 +838,7 @@ function whoBlock(showBell){
     <div class="chip"><span class="avatar">${initials(S.user.nombre)}</span><span class="nm">${S.user.nombre}</span></div>
     ${isAdmin()?`<button class="logout" onclick="openUsuarios()">Usuarios</button>`:''}
     ${isAdmin()?`<button class="logout" onclick="openDoctores()">Doctores</button>`:''}
-    ${nnSupported()?`<button class="logout" onclick="nnToggle()" title="${nnEnabled()?'Pausar avisos del navegador':'Activar avisos del navegador (ventana en escritorio cuando llega una tarea o mensaje, incluso si Lucai está minimizado)'}">🔔 ${nnEnabled()?'Avisos: ON':(nnPerm()==='denied'?'Avisos: bloqueados':'Activar avisos')}</button>`:''}
+    ${nnSupported()?`<button class="logout" onclick="nnToggle()" title="${nnEnabled()?'Pausar avisos del navegador':'Activar avisos del navegador (ventana en escritorio cuando llega una tarea o mensaje, incluso si Lucai está minimizado)'}">🔔 ${nnEnabled()?'Avisos: ON':(nnPerm()==='denied'?'Avisos: bloqueados':'Activar avisos')}</button>${nnEnabled()?`<button class="logout" onclick="nnTest()" title="Lanzar una notificación de prueba para comprobar que se ve en la esquina del escritorio">Probar</button>`:''}`:''}
     <button class="logout" onclick="openCambiarPin()">Mi contraseña</button>
     <button class="logout" onclick="logout()">Cerrar sesión</button>
   </div>`;
@@ -5167,9 +5167,21 @@ function _nnSeenAdd(id){
 /* Lanza una notificación si: el permiso está concedido, el usuario no la ha desactivado,
    y la pestaña actual NO es la visible. Si la pestaña es la visible se omite porque ya está
    viendo Lucai y sería ruido. */
-function appNotify(titulo, texto, dataAccion){
+/* ¿Tengo a Lucai delante de los ojos AHORA mismo?
+   Esto pretende ser "true" SOLO cuando estoy mirando la pestaña activamente, no cuando
+   la pestaña está abierta pero el navegador está minimizado o detrás de otra app. */
+function _nnEstoyMirando(){
+  if(typeof document==='undefined') return false;
+  if(document.visibilityState!=='visible') return false;   // otra pestaña / minimizado / pantalla apagada
+  if(typeof document.hasFocus==='function' && !document.hasFocus()) return false;  // ventana en segundo plano
+  return true;
+}
+function appNotify(titulo, texto, dataAccion, force){
   if(!nnEnabled()) return;
-  if(typeof document!=='undefined' && document.visibilityState==='visible') return;
+  if(!force && _nnEstoyMirando()){
+    try{ if(window.console && console.debug) console.debug('[Lucai] notif suprimida (pestaña visible y con foco):', titulo); }catch(_){}
+    return;
+  }
   try{
     const n = new Notification(titulo, {
       body: texto,
@@ -5184,7 +5196,19 @@ function appNotify(titulo, texto, dataAccion){
       }catch(_){}
       try{ n.close(); }catch(_){}
     };
-  }catch(_){}
+  }catch(e){ try{ console.warn('[Lucai] appNotify error', e); }catch(_){} }
+}
+
+/* Lanza un aviso de prueba con 3s de margen para que el usuario cambie de pestaña/minimice
+   y compruebe que sí salta una notificación del SO. */
+function nnTest(){
+  if(!nnSupported()){ toast('Este navegador no admite notificaciones'); return; }
+  if(Notification.permission!=='granted'){ return nnPedirPermiso(); }
+  if(nnPref()==='off'){ toast('Tienes los avisos pausados. Pulsa "🔔 Activar avisos" primero.'); return; }
+  toast('Cambia a otra pestaña o minimiza el navegador. En 4 s recibirás el aviso de prueba.');
+  setTimeout(()=>{
+    appNotify('Lucai · prueba', 'Si ves esto en una esquina, los avisos están funcionando.', {tag:'test-'+Date.now()}, false);
+  }, 4000);
 }
 
 /* Pide permiso al navegador. La primera respuesta se guarda en localStorage también */
@@ -5229,9 +5253,11 @@ function nnDetectar(){
         (t.mensajes||[]).forEach(m=>_nnSeenAdd('msg:'+t.id+':'+(m.ts||'')+':'+(m.de||'')));
       });
       _nnPrimeraPasada = false;
+      try{ if(window.console) console.log('[Lucai notif] Detector listo. Sólo se avisará de novedades a partir de ahora.'); }catch(_){}
       return;
     }
 
+    let nuevos = 0;
     (S.tareas||[]).forEach(t=>{
       const involucrado = (t.paraQuien===me) || (Array.isArray(t.participantes) && t.participantes.includes(me));
       if(!involucrado) return;
@@ -5245,6 +5271,7 @@ function nnDetectar(){
           const titulo = esMia ? `📋 Nueva tarea: ${t.titulo}` : `👥 Te han incluido en: ${t.titulo}`;
           const cuerpo = `${esMia?'Asignada por':'Creada por'} ${t.deQuien}${t.fechaLimite?` · entrega ${fmtFecha(t.fechaLimite)}`:''}`;
           appNotify(titulo, cuerpo, {tag:tk, tarId:t.id});
+          nuevos++;
         }
       }
 
@@ -5256,9 +5283,11 @@ function nnDetectar(){
         if(!m.de || m.de===me) return;
         const cuerpo = (m.texto||'').slice(0,140) || '(adjunto)';
         appNotify(`💬 ${m.de} en "${t.titulo}"`, cuerpo, {tag:'msg:'+t.id, tarId:t.id});
+        nuevos++;
       });
     });
-  }catch(_){}
+    if(nuevos>0){ try{ console.log('[Lucai notif] Detectados', nuevos, 'evento(s) nuevo(s).'); }catch(_){} }
+  }catch(e){ try{ console.warn('[Lucai notif] nnDetectar', e); }catch(_){} }
 }
 
 /* Engancho el detector al ciclo de sincronización que ya existe (_autoSync cada 8s).
