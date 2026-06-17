@@ -838,6 +838,7 @@ function whoBlock(showBell){
     <div class="chip"><span class="avatar">${initials(S.user.nombre)}</span><span class="nm">${S.user.nombre}</span></div>
     ${isAdmin()?`<button class="logout" onclick="openUsuarios()">Usuarios</button>`:''}
     ${isAdmin()?`<button class="logout" onclick="openDoctores()">Doctores</button>`:''}
+    ${nnSupported()?`<button class="logout" onclick="nnToggle()" title="${nnEnabled()?'Pausar avisos del navegador':'Activar avisos del navegador (ventana en escritorio cuando llega una tarea o mensaje, incluso si Lucai está minimizado)'}">🔔 ${nnEnabled()?'Avisos: ON':(nnPerm()==='denied'?'Avisos: bloqueados':'Activar avisos')}</button>`:''}
     <button class="logout" onclick="openCambiarPin()">Mi contraseña</button>
     <button class="logout" onclick="logout()">Cerrar sesión</button>
   </div>`;
@@ -5129,6 +5130,151 @@ function tgNotify(para, texto){
   try{ fetch(TG_FN, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'notify', para, texto})}).catch(function(){}); }catch(_){}
 }
 /* ===== FIN TELEGRAM ===== */
+
+
+/* ===== AVISOS DEL NAVEGADOR (Web Notifications) =====
+   Notificaciones del sistema operativo cuando la pestaña de Lucai NO es la visible
+   (otra pestaña, navegador minimizado, pantalla apagada del portátil). Funcionan SOLO
+   mientras Lucai esté abierto en alguna pestaña del navegador. NO requieren backend ni
+   permisos especiales más allá del permiso "Notifications" que pide el navegador.
+
+   El permiso se guarda por dominio en el navegador. La preferencia del usuario
+   (activadas/no) se guarda en localStorage para poder respetarla aunque el navegador
+   tenga "permitido" globalmente.
+*/
+const NN_PREF_KEY = 'lucai_notif_pref';     // 'on' | 'off' | null (no decidido)
+const NN_SEEN_KEY = 'lucai_notif_seen';     // ids de tarea/mensaje ya notificados en esta máquina, para no spamear
+
+function nnPref(){ try{ return localStorage.getItem(NN_PREF_KEY); }catch(_){ return null; } }
+function nnSetPref(v){ try{ localStorage.setItem(NN_PREF_KEY, v); }catch(_){} }
+function nnSupported(){ return typeof window!=='undefined' && 'Notification' in window; }
+function nnPerm(){ return nnSupported() ? Notification.permission : 'unsupported'; }
+function nnEnabled(){ return nnSupported() && Notification.permission==='granted' && nnPref()!=='off'; }
+
+/* Carga/guarda set de ids ya notificados en esta sesión + máquina */
+function _nnSeen(){
+  try{ const s=localStorage.getItem(NN_SEEN_KEY); return new Set(s?JSON.parse(s):[]); }catch(_){ return new Set(); }
+}
+function _nnSeenAdd(id){
+  try{
+    const set=_nnSeen(); set.add(id);
+    // limito a últimos 500 ids para no inflar el storage
+    const arr=[...set]; const tail = arr.slice(-500);
+    localStorage.setItem(NN_SEEN_KEY, JSON.stringify(tail));
+  }catch(_){}
+}
+
+/* Lanza una notificación si: el permiso está concedido, el usuario no la ha desactivado,
+   y la pestaña actual NO es la visible. Si la pestaña es la visible se omite porque ya está
+   viendo Lucai y sería ruido. */
+function appNotify(titulo, texto, dataAccion){
+  if(!nnEnabled()) return;
+  if(typeof document!=='undefined' && document.visibilityState==='visible') return;
+  try{
+    const n = new Notification(titulo, {
+      body: texto,
+      icon: 'https://clinicalf.github.io/lucai/icon-192.png',  // si no existe, el browser usará el favicon
+      tag: (dataAccion && dataAccion.tag) || ('lucai-'+Date.now()),
+      renotify: false
+    });
+    n.onclick = function(){
+      try{ window.focus(); }catch(_){}
+      try{
+        if(dataAccion && dataAccion.tarId && typeof openTarDet==='function') openTarDet(dataAccion.tarId);
+      }catch(_){}
+      try{ n.close(); }catch(_){}
+    };
+  }catch(_){}
+}
+
+/* Pide permiso al navegador. La primera respuesta se guarda en localStorage también */
+async function nnPedirPermiso(){
+  if(!nnSupported()){ toast('Este navegador no admite notificaciones'); return; }
+  if(Notification.permission==='granted'){ nnSetPref('on'); toast('Avisos activados'); render(); return; }
+  if(Notification.permission==='denied'){
+    toast('Has bloqueado las notificaciones. Cámbialo en los ajustes del navegador para esta web.');
+    return;
+  }
+  try{
+    const r = await Notification.requestPermission();
+    if(r==='granted'){ nnSetPref('on'); toast('Avisos activados'); try{ new Notification('Lucai',{body:'Avisos activados en este navegador'}); }catch(_){} }
+    else { nnSetPref('off'); toast('No se activaron los avisos'); }
+    render();
+  }catch(_){}
+}
+function nnToggle(){
+  if(!nnSupported()){ toast('Este navegador no admite notificaciones'); return; }
+  if(Notification.permission!=='granted'){ return nnPedirPermiso(); }
+  const next = nnPref()==='off' ? 'on' : 'off';
+  nnSetPref(next);
+  toast(next==='on' ? 'Avisos activados en este navegador' : 'Avisos pausados en este navegador');
+  render();
+}
+
+/* Detector de novedades: compara el estado actual de tareas con el conocido y dispara avisos.
+   Se llama desde _autoSync (cada 8s). */
+let _nnPrimeraPasada = true;
+function nnDetectar(){
+  try{
+    if(!nnEnabled()) return;
+    if(!S.user || !S.user.nombre) return;
+    const me = S.user.nombre;
+    const seen = _nnSeen();
+
+    // Primera pasada tras cargar: marcar TODO lo existente como ya visto, sin notificar.
+    // Así sólo notificas lo que llegue de aquí en adelante, no lo que ya estaba en BD al abrir.
+    if(_nnPrimeraPasada){
+      (S.tareas||[]).forEach(t=>{
+        _nnSeenAdd('tar:'+t.id);
+        (t.mensajes||[]).forEach(m=>_nnSeenAdd('msg:'+t.id+':'+(m.ts||'')+':'+(m.de||'')));
+      });
+      _nnPrimeraPasada = false;
+      return;
+    }
+
+    (S.tareas||[]).forEach(t=>{
+      const involucrado = (t.paraQuien===me) || (Array.isArray(t.participantes) && t.participantes.includes(me));
+      if(!involucrado) return;
+
+      // Tarea nueva donde participo (y no la creé yo)
+      const tk = 'tar:'+t.id;
+      if(!seen.has(tk)){
+        _nnSeenAdd(tk);
+        if(t.deQuien && t.deQuien!==me){
+          const esMia = (t.paraQuien===me);
+          const titulo = esMia ? `📋 Nueva tarea: ${t.titulo}` : `👥 Te han incluido en: ${t.titulo}`;
+          const cuerpo = `${esMia?'Asignada por':'Creada por'} ${t.deQuien}${t.fechaLimite?` · entrega ${fmtFecha(t.fechaLimite)}`:''}`;
+          appNotify(titulo, cuerpo, {tag:tk, tarId:t.id});
+        }
+      }
+
+      // Mensajes nuevos en tareas donde participo (escritos por otros)
+      (t.mensajes||[]).forEach(m=>{
+        const mk = 'msg:'+t.id+':'+(m.ts||'')+':'+(m.de||'');
+        if(seen.has(mk)) return;
+        _nnSeenAdd(mk);
+        if(!m.de || m.de===me) return;
+        const cuerpo = (m.texto||'').slice(0,140) || '(adjunto)';
+        appNotify(`💬 ${m.de} en "${t.titulo}"`, cuerpo, {tag:'msg:'+t.id, tarId:t.id});
+      });
+    });
+  }catch(_){}
+}
+
+/* Engancho el detector al ciclo de sincronización que ya existe (_autoSync cada 8s).
+   Lo hago envolviendo la función actual para no romper nada de su lógica. */
+(function(){
+  try{
+    if(typeof _autoSync==='function'){
+      const _autoSyncBase = _autoSync;
+      _autoSync = async function(){
+        await _autoSyncBase.apply(this, arguments);
+        nnDetectar();
+      };
+    }
+  }catch(_){}
+})();
+/* ===== FIN AVISOS DEL NAVEGADOR ===== */
 
 
 
