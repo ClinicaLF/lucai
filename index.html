@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-102">
+<meta name="lucai-version" content="2026-06-19-103">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -816,19 +816,28 @@ function toast(msg){ const m=el("toast-msg"); if(m)m.textContent=msg; const u=el
 function toastUndo(msg){ const m=el("toast-msg"); if(m)m.textContent=msg; const u=el("toast-undo"); if(u)u.style.display='inline'; const t=el("toast"); t.classList.add("show"); clearTimeout(window._tt); window._tt=setTimeout(()=>{ t.classList.remove("show"); window._lastQuick=null; },6000); _persistSoon(); }
 
 /* ---------------- RENDER ---------------- */
+function _scrollableFor(s){
+  if(s.scrollHeight > s.clientHeight+2) return s;
+  var p=s.parentElement;
+  while(p && p!==document.body){
+    var st=window.getComputedStyle(p);
+    if((st.overflowY==='auto'||st.overflowY==='scroll') && p.scrollHeight>p.clientHeight+2) return p;
+    p=p.parentElement;
+  }
+  return null;
+}
 function render(){
+  // antes de redibujar, recuerdo dónde estaba el scroll de cada hilo de conversación
+  var _mem={};
+  try{ document.querySelectorAll('[data-tar-scroll]').forEach(function(s){ if(!s.id) return; var sc=_scrollableFor(s); if(sc) _mem[s.id]={top:sc.scrollTop, near:(sc.scrollHeight - sc.scrollTop - sc.clientHeight) < 80}; }); }catch(_){}
   el("app").innerHTML = !DEVICE ? deviceLoginView() : (S.user ? appView() : loginView());
-  // post-paso: auto-scroll al final en cualquier hilo de conversación visible
+  // post-paso: si el hilo es nuevo o estabas abajo del todo, bajo al final; si no, mantengo tu posición
   try{
     document.querySelectorAll('[data-tar-scroll]').forEach(function(s){
-      if(s.scrollHeight>s.clientHeight){ s.scrollTop = s.scrollHeight; return; }
-      // si el propio nodo no tiene scroll, buscar ancestro con overflow auto/scroll
-      var p=s.parentElement;
-      while(p && p!==document.body){
-        var st=window.getComputedStyle(p);
-        if((st.overflowY==='auto'||st.overflowY==='scroll') && p.scrollHeight>p.clientHeight){ p.scrollTop=p.scrollHeight; break; }
-        p=p.parentElement;
-      }
+      var sc=_scrollableFor(s); if(!sc) return;
+      var saved = s.id ? _mem[s.id] : null;
+      if(!saved || saved.near){ sc.scrollTop = sc.scrollHeight; }
+      else { sc.scrollTop = saved.top; }
     });
   }catch(_){}
 }
