@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="es">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#333F48">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-11-87">
+<meta name="lucai-version" content="2026-06-19-88">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -492,6 +492,68 @@
 .cadpop b{display:block;margin-bottom:4px;font-size:14px}
 .cadpop .cp-x{position:absolute;top:8px;right:11px;cursor:pointer;color:#aaa;font-size:18px;line-height:1;border:none;background:none}
 .cadpop .cp-link{color:#C0392B;font-weight:700;cursor:pointer;margin-top:8px;display:inline-block}
+</style>
+
+<style>
+/* ============================================================
+   Lucai · mejoras MÓVIL (login + hub + gestor de tareas)
+   Acotado a estas 3 pantallas. Carga después del CSS principal
+   para que los ajustes ganen por orden de cascada.
+   ============================================================ */
+
+/* --- Altura real en móvil: evita el "salto" por la barra del navegador --- */
+@supports(height:100dvh){ .login2{min-height:100dvh} }
+
+/* --- Zonas seguras (notch / isla / barra inferior del iPhone) ---
+   env(...) vale 0 en escritorio y móviles sin notch, así que no cambia nada ahí. */
+@media(max-width:720px){
+  header{
+    padding-top:env(safe-area-inset-top);
+    height:calc(58px + env(safe-area-inset-top));
+    padding-left:max(12px, env(safe-area-inset-left));
+    padding-right:max(12px, env(safe-area-inset-right));
+  }
+  main{ padding-bottom:max(56px, calc(40px + env(safe-area-inset-bottom))) }
+  .login2-form{ padding-bottom:max(40px, calc(30px + env(safe-area-inset-bottom))) }
+}
+
+/* --- Cabecera: chip de usuario y "Salir" más cómodos al dedo en móvil --- */
+@media(max-width:720px){
+  .who .chip{ min-height:38px }
+  .logout{ min-height:40px; display:inline-flex; align-items:center; padding:9px 10px }
+}
+
+/* --- TAREAS · selector de vistas: se desliza de lado en vez de apretujarse --- */
+@media(max-width:720px){
+  .seg.tar-seg{ overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap; scrollbar-width:none }
+  .seg.tar-seg::-webkit-scrollbar{ display:none }
+  .seg.tar-seg button{ flex:0 0 auto; white-space:nowrap }
+}
+
+/* --- TAREAS · KPIs (Por hacer / En espera / Vencidas / Para hoy) --- */
+.tar-kpis{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:18px }
+@media(max-width:560px){
+  .tar-kpis{ display:grid; grid-template-columns:1fr 1fr; gap:10px }
+  .tar-kpis>button{ min-width:0 }
+}
+
+/* --- TAREAS · filtros: en móvil salen de la cabecera y van a un panel "Filtros" --- */
+.tar-mfilt{ display:none }
+@media(max-width:720px){
+  .tar-hf{ display:none }                 /* oculta los filtros metidos en la cabecera de la tabla */
+  .tar-mfilt{ display:block; margin:0 0 12px }
+  .tar-mfilt-panel{ display:flex; flex-direction:column; gap:10px;
+    background:#FAF8F3; border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:8px }
+  .tar-mfilt-panel select.inp, .tar-mfilt-panel input.inp{ width:100%; font-size:16px; padding:11px 12px; margin:0 }
+  .tar-mfilt-lbl{ font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:#8A949B; font-weight:700; margin-bottom:4px; display:block }
+  .tar-mfilt-rango{ display:flex; gap:10px }
+  .tar-mfilt-rango>label{ flex:1 }
+}
+
+/* --- TAREAS · botones pequeños de cada fila: zona de toque mayor en móvil --- */
+@media(max-width:720px){
+  .inctable-tar td .btn-sm{ min-height:38px; padding:8px 12px }
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -4013,7 +4075,7 @@ function tareasView(){
   const subs = admin ? ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
   const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_semana:'Semana',tar_todas:'Equipo',tar_resumen:'Resumen'};
-  const seg = `<div class="seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
+  const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
   else if(sub==='tar_todas') body=tarTodasView();
@@ -4058,7 +4120,7 @@ function tarKpis(arr){
       <div style="font-size:28px;font-weight:700;${dark?'':`color:${color}`}">${val}</div>
     </button>`;
   };
-  return `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+  return `<div class="tar-kpis">
     ${card('porhacer','Por hacer', porHacer, '#333F48', true)}
     ${card('espera','En espera', espera, '#8A5A00', false)}
     ${card('vencidas','Vencidas', venc, '#C0392B', false)}
@@ -4153,15 +4215,27 @@ function tarBuzonView(modo){
   const hayFiltro = bf.prio||bf.cat||bf.persona||bf.estado||bf.q||bf.desde||bf.hasta||bf.kpi;
   const clear = hayFiltro?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()">Limpiar</button>`:'';
   const thead=`<thead><tr>
-      <th class="tar-c-prio" style="vertical-align:top">Prior.<div>${selPrio}</div></th>
-      <th class="tar-c-tarea" style="vertical-align:top">Tarea<div>${search}</div></th>
+      <th class="tar-c-prio" style="vertical-align:top">Prior.<div class="tar-hf">${selPrio}</div></th>
+      <th class="tar-c-tarea" style="vertical-align:top">Tarea<div class="tar-hf">${search}</div></th>
       <th class="tar-c-cat col-hide-m" style="vertical-align:top">Categoría<div>${selCat}</div></th>
       ${esMias ? '' : `<th class="tar-c-con col-hide-m" style="vertical-align:top">${otro}<div>${selPersona}</div></th>`}
-      <th class="tar-c-entrega" style="vertical-align:top"><span style="cursor:pointer" title="Ordenar por fecha" onclick="tarBuzSort()">Entrega ${arrow}</span>${rangoEntrega}</th>
+      <th class="tar-c-entrega" style="vertical-align:top"><span style="cursor:pointer" title="Ordenar por fecha" onclick="tarBuzSort()">Entrega ${arrow}</span><div class="tar-hf">${rangoEntrega}</div></th>
       <th class="tar-c-estado col-hide-m" style="vertical-align:top">Estado<div>${selEstado}</div></th>
-      <th class="tar-c-act" style="vertical-align:top">${clear}</th>
+      <th class="tar-c-act" style="vertical-align:top"><span class="tar-hf">${clear}</span></th>
     </tr></thead>`;
-  if(!list.length) return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable inctable-tar">${thead}<tbody><tr><td colspan="${esMias?6:7}" class="muted" style="padding:20px;text-align:center">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</td></tr></tbody></table></div>`;
+  // Panel de filtros para MÓVIL (Opción A): botón "Filtros" que despliega los controles a tamaño cómodo.
+  const mPrio=`<select class="inp" onchange="setTarBuzF('prio',this.value)"><option value="">Prioridad: todas</option>${TAR_PRIOS.map(p=>`<option ${bf.prio===p?'selected':''}>${p}</option>`).join('')}</select>`;
+  const mCat=`<select class="inp" onchange="setTarBuzF('cat',this.value)"><option value="">Categoría: todas</option>${tarAreas().map(a=>`<option ${bf.cat===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select>`;
+  const mPersona= esMias ? '' : `<select class="inp" onchange="setTarBuzF('persona',this.value)"><option value="">${otro}: todos</option>${personas.map(n=>`<option ${bf.persona===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>`;
+  const mEstado=`<select class="inp" onchange="setTarBuzF('estado',this.value)"><option value="">Estado: todos</option>${TAR_ESTADOS.map(s=>`<option ${bf.estado===s?'selected':''}>${s}</option>`).join('')}</select>`;
+  const mSearch=`<input class="inp" placeholder="Buscar tarea…" value="${incEsc(bf.q||'')}" onchange="setTarBuzF('q',this.value)">`;
+  const mRango=`<div><span class="tar-mfilt-lbl">Entrega entre</span><div class="tar-mfilt-rango"><label><input type="date" class="inp" value="${incEsc(bf.desde||'')}" onchange="setTarBuzF('desde',this.value)"></label><label><input type="date" class="inp" value="${incEsc(bf.hasta||'')}" onchange="setTarBuzF('hasta',this.value)"></label></div></div>`;
+  const nFilt=[bf.prio,bf.cat,(esMias?'':bf.persona),bf.estado,bf.q,bf.desde,bf.hasta].filter(Boolean).length;
+  const mfilt=`<div class="tar-mfilt">
+      <button class="btn btn-ghost btn-sm" onclick="tarToggleFilt()" style="width:100%;justify-content:center">${S.tarFiltOpen?'Ocultar filtros':'Filtros'}${nFilt?` · ${nFilt}`:''}</button>
+      ${S.tarFiltOpen?`<div class="tar-mfilt-panel">${mPrio}${mCat}${mPersona}${mEstado}${mSearch}${mRango}${nFilt?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()" style="width:100%;justify-content:center">Limpiar filtros</button>`:''}</div>`:''}
+    </div>`;
+  if(!list.length) return tarKpis(all)+toggle+mfilt+`<div class="inctable-wrap"><table class="inctable inctable-tar">${thead}<tbody><tr><td colspan="${esMias?6:7}" class="muted" style="padding:20px;text-align:center">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</td></tr></tbody></table></div>`;
   const rows=list.map(t=>{
     const persona = otroDe(t);
     const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:#8A949B">↗ </span>':'<span title="Te la mandaron" style="color:#6E8E00">↙ </span>') : '';
@@ -4181,9 +4255,10 @@ function tarBuzonView(modo){
       <td class="tar-c-act">${quick}</td>
     </tr>`;
   }).join('');
-  return tarKpis(all)+toggle+`<div class="inctable-wrap"><table class="inctable inctable-tar">${thead}<tbody>${rows}</tbody></table></div>`;
+  return tarKpis(all)+toggle+mfilt+`<div class="inctable-wrap"><table class="inctable inctable-tar">${thead}<tbody>${rows}</tbody></table></div>`;
 }
 function setTarBuzF(field,v){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''}; S.tarBuzF[field]=v; render(); }
+function tarToggleFilt(){ S.tarFiltOpen=!S.tarFiltOpen; render(); }
 function clearTarBuzF(){ S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:(S.tarBuzF&&S.tarBuzF.sortDir)||'asc',desde:'',hasta:'',kpi:''}; render(); }
 function tarBuzSort(){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''}; S.tarBuzF.sortDir = S.tarBuzF.sortDir==='desc'?'asc':'desc'; render(); }
 
