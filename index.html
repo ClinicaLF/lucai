@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-93">
+<meta name="lucai-version" content="2026-06-19-94">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -1363,7 +1363,7 @@ function pedirModal(){
       ${rows}</div>`;
   };
   const body=items.length? cats.map(grupo).join("") : '<div class="muted">Nada por debajo del mínimo. Todo en orden.</div>';
-  return `<div class="overlay" onclick="if(event.target===this)closeAlert()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Pendiente de pedir (${items.length})</h2><button class="x" onclick="closeAlert()">×</button></div>
     <div class="modal-body">${body}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeAlert()">Entendido</button><button class="btn btn-primary" onclick="closeAlert();setSub('pedidos')">Ir a pedidos</button></div>
@@ -1383,7 +1383,7 @@ function cadModal(){
         <span>${titulo}</span><span class="muted" style="font-weight:600">${arr.length}</span></div>
       ${arr.map(fila).join("")}</div>`:'';
   const body=cad.length? bloque('Caducado', venc)+bloque('Próximo a caducar', prox) : '<div class="muted">Nada caducado ni próximo a caducar.</div>';
-  return `<div class="overlay" onclick="if(event.target===this)closeAlert()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Caducidad (${cad.length})</h2><button class="x" onclick="closeAlert()">×</button></div>
     <div class="modal-body">${body}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeAlert()">Entendido</button><button class="btn btn-primary" onclick="closeAlert();setSub('stock')">Ver en stock</button></div>
@@ -1482,7 +1482,7 @@ function pedidoModalContent(){
   const provOk=F.proveedor && (F.proveedor!=='__nuevo__' || (F.proveedorNuevo||'').trim());
   const valid=F.lineas.length>0;
   const hint=!valid?'! Añade al menos una línea.':(!provOk?'! Elige el proveedor.':'✓ Listo para crear el pedido.');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px">
+  return `<div class="overlay"><div class="modal" style="max-width:600px">
     <div class="modal-head"><h2>${F.editId?'Editar pedido':'Nuevo pedido'}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Añade los artículos que vas a pedir. Si conoces el precio acordado, mételo aquí; lo confirmarás con el albarán al recibir.</div>
@@ -1532,7 +1532,7 @@ function recepcionModalContent(){
         <input id="recP${i}" class="inp" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" value="${F.recPrecios[i]}" oninput="setRecPrecio(${i},this.value)"></div>
     </div>`;}).join("");
   const hint=allPriced?'✓ Listo: al confirmar sube el stock y se actualiza el valor almacenado.':'! El precio es obligatorio. Indícalo en todas las líneas.';
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Recibir pedido #${String(p.id).slice(-4)}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">El precio de compra es obligatorio. Viene precargado con el precio acordado; corrígelo con el real del albarán. Al confirmar, el stock sube y se recalcula el coste medio.</div>
@@ -1559,7 +1559,7 @@ function commitArticulo(){
 }
 function articleModalContent(){
   const valid=(F.acod||'').trim() && (F.anombre||'').trim() && F.acat;
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Nuevo artículo</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Una sola ficha para cualquier tipo de material. El stock se cuenta en unidades (si una caja la tratas como 1, la registras como 1).</div>
@@ -1608,7 +1608,7 @@ function commitEdit(){
 }
 function editArticleModalContent(){
   const a=art(F.cod);
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Editar · ${a.cod}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${F.enombre}" oninput="setInp('enombre',this.value)"></div>
@@ -1646,7 +1646,7 @@ function commitSegui(){
 }
 function seguiModalContent(){
   const valid = F.estado==='ok' || (F.estado==='incidencia' && (F.comentario||'').trim());
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Nuevo seguimiento</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>Categorías (puedes elegir varias)</label>
@@ -1755,7 +1755,7 @@ function stockMoveModal(){
       ${a?`<div class="note" style="margin-top:0">Esta baja se contabiliza como <strong>pérdida</strong> por valor de <strong>${eur(perd)}</strong> (${cant} ud. × ${eur(a.cost||0)} coste medio).</div>`:''}`;
   }
   const valid = !!F.cod && (parseInt(F.cant)||0)>=1 && (F.type!=='salida'||F.doctor);
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>${head}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:8px;background:var(--azul-claro,#E8EAED);border-radius:9px;padding:6px 10px;margin-bottom:10px;font-size:12.5px">
@@ -2351,7 +2351,7 @@ function incAnalisisView(){
 /* ---- formularios (modales) ---- */
 function incidenciaModalContent(){
   const ready=F.categoria && (F.detalle||'').trim();
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Nueva incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Reporta algo que ha ido mal o se puede mejorar. <strong>Una cosa por ticket.</strong> Si es algo urgente que alguien tiene que resolver ya, avísalo por el canal de siempre.</div>
@@ -2377,7 +2377,7 @@ function incidenciaModalContent(){
 }
 function revisarModalContent(){
   const o=(S.incidencias||[]).find(x=>x.id===F.id)||{};
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Marcar como revisada</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="inc-detalle" style="margin-bottom:12px">${incEsc(o.detalle||'')}</div>
@@ -2479,7 +2479,7 @@ function openIncDetalle(id){
 }
 function incDetalleModalContent(){
   const o=(S.incidencias||[]).find(x=>x.id===F.id)||{};
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="inc-top" style="margin-bottom:10px">
@@ -2546,7 +2546,7 @@ function commitReabrir(){
 
 function incDetalleModalContent(){
   const o=(S.incidencias||[]).find(x=>x.id===F.id)||{};
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="inc-top" style="margin-bottom:10px">
@@ -2629,7 +2629,7 @@ function incDetalleModalContent(){
     : (admin
         ? `<div class="fld"><label>Nota interna (opcional)</label><textarea class="inp" rows="3" oninput="setInp('nota',this.value)" placeholder="Qué has decidido, hablado o hecho.">${incEsc(F.nota||'')}</textarea></div>`
         : `<div class="muted" style="margin-top:12px;font-size:13px">Pendiente de revisar por dirección.</div>`);
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="inc-top" style="margin-bottom:10px">
@@ -2694,7 +2694,7 @@ async function srvIncidenciaDelete(id){
   await loadFromDB(); render();
 }
 function incEditModalContent(){
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Editar incidencia</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>¿De qué trata?</label>
@@ -3040,7 +3040,7 @@ function openParte(){
 function eqParteModalContent(){
   const equipos=(S.equipos||[]).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const nuevo=F.equipoId==='__nuevo__';
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Nuevo parte de reparación</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>Equipo</label>
@@ -3098,7 +3098,7 @@ function openParteDet(id){
 function eqParteEditModalContent(){
   const p=(S.partes||[]).find(x=>x.id===F.id)||{};
   const cerrado=(F.estado==='Resuelto'||F.estado==='No reparable');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Parte de reparación</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="inc-top" style="margin-bottom:8px">${eqEstadoChip(p.estado)} <span class="inc-imp imp-${p.urgencia||'Media'}">${p.urgencia||'Media'}</span></div>
@@ -3134,7 +3134,7 @@ function openEquipo(){
   S.modal='eq_equipo'; render();
 }
 function eqEquipoModalContent(){
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Nuevo equipo</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)" placeholder="Ej: Autoclave esterilización"></div>
@@ -3241,7 +3241,7 @@ function setParteEstado(v){ F.estado=v; F.fechaEstado=todayStr(); render(); }
 function eqParteEditModalContent(){
   const p=(S.partes||[]).find(x=>x.id===F.id)||{};
   const d=parteDias(Object.assign({}, p, {estado:F.estado, fechaEstado:F.fechaEstado}));
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Parte de reparación</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="inc-top" style="margin-bottom:8px">${eqEstadoChip(F.estado)} <span class="inc-imp imp-${p.urgencia||'Media'}">${p.urgencia||'Media'}</span></div>
@@ -3354,7 +3354,7 @@ function openEquipoEdit(id){
   S.modal='eq_equipo_edit'; render();
 }
 function eqEquipoEditModalContent(){
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Editar equipo</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)"></div>
@@ -3441,7 +3441,7 @@ function openEquipoEdit(id){
 function eqEquipoEditModalContent(){
   const baja = F.activo===false;
   const banner = baja ? `<div style="background:#FBEAEA;border:1px solid #E3B7B2;color:#8A2A20;border-radius:8px;padding:8px 10px;font-size:13px;margin:0 0 12px">Este equipo está <strong>dado de baja</strong>. Se conserva su historial y su coste acumulado. Puedes reactivarlo cuando quieras.</div>` : '';
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Editar equipo</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${banner}
@@ -3736,7 +3736,7 @@ function presValid(){
 }
 function presNuevoModalContent(){
   const ready=F.area && F.fechaPresup && F.fechaRechazo && parseFloat(String(F.importe).replace(',','.'))>0 && (F.motivos||[]).length;
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Presupuesto rechazado</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Registra el presupuesto que se ha caído. Cuanto mejor anotemos el <strong>motivo</strong> y el <strong>importe</strong>, mejor entenderemos qué pasa y cuánto perdemos.</div>
@@ -3769,7 +3769,7 @@ function presDetModalContent(){
   const p=(S.presupuestos||[]).find(x=>x.id===F.id)||{};
   const d=presDias(p);
   const mot=(p.motivos||[]).map(m=>`<span class="inc-cat" style="margin:0 6px 6px 0;display:inline-block">${incEsc(m)}</span>`).join('');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Presupuesto rechazado</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="inc-top" style="margin-bottom:10px;align-items:center">
@@ -3798,7 +3798,7 @@ function openPresEdit(id){
   S.modal='pres_edit'; render();
 }
 function presEditModalContent(){
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Editar presupuesto</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${presFormBody()}
@@ -4662,7 +4662,7 @@ function tarEliminar(id){
 }
 function tarDelScopeModal(){
   const t=(S.tareas||[]).find(x=>x.id===S.tarDelId); if(!t) return '';
-  return `<div class="overlay" onclick="if(event.target===this){S.tarDelId=null;render()}"><div class="modal" style="max-width:460px">
+  return `<div class="overlay"><div class="modal" style="max-width:460px">
     <div class="modal-head"><h2>Eliminar tarea recurrente</h2><button class="x" onclick="S.tarDelId=null;render()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">"${incEsc(t.titulo)}" forma parte de una serie (${incEsc(tarRecurLabel(t.recurrencia)||'recurrente')}). ¿Qué quieres eliminar?</div>
@@ -4708,7 +4708,7 @@ function tarAreasModalContent(){
       ${fija?'<span class="muted" style="font-size:12px;width:64px;text-align:center">por defecto</span>':`<button class="btn btn-ghost btn-sm" onclick="tarAreaDelete(${i})">Borrar</button>`}
     </div>`;
   }).join('');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Áreas de tareas</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Crea, renombra o borra las áreas. Las verá todo el equipo al crear tareas. “General” no se puede borrar (es la de por defecto).</div>
@@ -4873,7 +4873,7 @@ function tarValid(){
 function tarNuevoModalContent(){
   const ready=(F.titulo||'').trim() && F.paraQuien && F.fechaLimite;
   const rec=(F.recurTipo&&F.recurTipo!=='no');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:720px">
+  return `<div class="overlay"><div class="modal" style="max-width:720px">
     <div class="modal-head" style="padding-bottom:2px"><h2>Nueva tarea</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body" style="padding-top:4px">
       ${tarFormBody()}
@@ -4996,7 +4996,7 @@ function tarDetModalContent(){
     ? `<div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:10px 12px;max-height:140px;overflow-y:auto;font-size:14px;margin-top:6px">${incEsc(t.descripcion)} <button onclick="tarToggleDescExp('${t.id}')" style="border:none;background:none;color:#6E8E00;font-size:12px;font-weight:600;cursor:pointer;padding:0;margin-left:4px">ocultar</button></div>`
     : `<button onclick="tarToggleDescExp('${t.id}')" style="border:none;background:none;color:#6E8E00;font-size:12px;font-weight:600;cursor:pointer;padding:2px 0;margin-top:2px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/></svg>Ver descripción</button>`
   ) : '';
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:820px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column">
+  return `<div class="overlay"><div class="modal" style="max-width:820px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column">
     <div class="modal-head" style="padding:16px 22px 4px"><h2 style="font-size:19px">Tarea</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1;padding:6px 22px 18px">
       <div style="flex:0 0 auto">
@@ -5207,7 +5207,7 @@ function tarEditModalContent(){
          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
          <button class="btn btn-primary" onclick="commitTarEdit('una')">Guardar cambios</button>
        </div>`;
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:700px">
+  return `<div class="overlay"><div class="modal" style="max-width:700px">
     <div class="modal-head"><h2>Editar tarea</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${tarFormBody()}
@@ -5407,7 +5407,7 @@ function tarAlertModal(){
   else if(k==='nuevas'){ titulo='Tareas nuevas recibidas'; items=tarRecibidasNuevas(me); extraFn=t=>tarLimiteCell(t); vacio='No tienes tareas nuevas sin abrir.'; }
   else { titulo='Para ponerte al día'; items=tarPorVencer(me); extraFn=t=>tarLimiteCell(t); vacio='¡Estás al día! No tienes tareas vencidas ni para hoy.'; }
   const body = items.length ? `<div class="muted" style="font-size:13px;margin-bottom:10px">Toca una tarea para ir directo a ella.</div>`+items.map(t=>tarAlertRow(t, extraFn(t))).join('') : `<div class="muted">${vacio}</div>`;
-  return `<div class="overlay" onclick="if(event.target===this)closeTarAlert()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>${titulo} (${items.length})</h2><button class="x" onclick="closeTarAlert()">×</button></div>
     <div class="modal-body">${body}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeTarAlert()">Entendido</button></div>
@@ -6232,7 +6232,7 @@ function comNuevoModalContent(){
   const gruposHtml = grupos.length?`<div style="margin-bottom:8px"><div class="muted" style="font-size:12px;margin-bottom:4px">Grupos</div>${grupos.map((g,i)=>{const all=g.miembros.length&&g.miembros.every(n=>sel.includes(n)); return `<button type="button" class="btn btn-sm ${all?'btn-primary':'btn-ghost'}" style="margin:0 6px 6px 0" onclick="comToggleGrupo(${i})">${incEsc(g.nombre)} (${g.miembros.length})</button>`;}).join('')}</div>`:'';
   const personasHtml = `<div><div class="muted" style="font-size:12px;margin-bottom:4px">Personas <button type="button" class="btn btn-sm btn-ghost" style="margin-left:6px" onclick="comTodos()">${sel.length===people.length?'Quitar todos':'Todos'}</button></div>${people.map(n=>{const on=sel.includes(n); return `<button type="button" class="btn btn-sm ${on?'btn-primary':'btn-ghost'}" style="margin:0 6px 6px 0" onclick="comTogglePersona('${n.replace(/'/g,"\\'")}')">${incEsc(n)}</button>`;}).join('')}</div>`;
   const ready=(F.titulo||'').trim() && (F.texto||'').trim() && sel.length;
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Nueva comunicación</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Un aviso o mejora para el equipo. Cada destinatario podrá marcarlo como leído y comentar.</div>
@@ -6364,7 +6364,7 @@ function comDetModalContent(){
     acciones+=`<button class="btn btn-ghost" onclick="comMarcarNoLeido('${c.id}')">Marcar como no leído</button>`;
   }
   if(soyDe||admin) acciones+=`<button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="comEliminar('${c.id}')">Eliminar</button>`;
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Comunicación</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div style="margin-bottom:8px">${comPrioChip(c.prioridad||'Normal')}${comCatChip(c.categoria)}</div>
@@ -6401,7 +6401,7 @@ function gruposModalContent(){
     </div>`).join(''):`<div class="muted" style="font-size:13px">No hay grupos todavía.</div>`;
   const sel=Array.isArray(F.gMiembros)?F.gMiembros:[];
   const chips=people.map(n=>{const on=sel.includes(n); return `<button type="button" class="btn btn-sm ${on?'btn-primary':'btn-ghost'}" style="margin:0 6px 6px 0" onclick="grupoToggleMiembro('${n.replace(/'/g,"\\'")}')">${incEsc(n)}</button>`;}).join('');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Grupos</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Crea grupos de personas para mandarles comunicaciones (y pronto tareas) de una vez.</div>
@@ -6450,7 +6450,7 @@ function comCatsModalContent(){
       ${fija?'<span class="muted" style="font-size:12px;width:64px;text-align:center">por defecto</span>':`<button class="btn btn-ghost btn-sm" onclick="comCatDelete(${i})">Borrar</button>`}
     </div>`;
   }).join('');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Categorías de comunicaciones</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Crea, renombra o borra las categorías. “General” no se puede borrar (es la de por defecto).</div>
@@ -6555,7 +6555,7 @@ function doctoresModalContent(){
   const list=appDoctores().map((d,i)=>`<div style="display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:7px 10px;margin-bottom:6px">
       <span style="flex:1;min-width:0">${incEsc(d)}</span>
       <button class="btn btn-ghost btn-sm" style="color:#C0392B" onclick="doctorDel(${i})">Quitar</button></div>`).join('') || '<div class="muted" style="font-size:13px;margin-bottom:6px">Aún no hay doctores en la lista.</div>';
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Doctores</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Esta lista es la que aparece al registrar una <strong>salida de material</strong> y en los <strong>presupuestos</strong>. Añade o quita los que necesites.</div>
@@ -6592,7 +6592,7 @@ function usuariosModalContent(){
       <button class="btn btn-ghost btn-sm" onclick="openUsuarioEdit(${u.id})">Editar</button>
     </div>`;
   }).join('');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Usuarios y permisos</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Crea usuarios, dales un <strong>usuario y una contraseña</strong> y elige a qué módulos accede cada uno. Si alguien olvida su contraseña, edítalo y ponle una nueva.</div>
@@ -6614,7 +6614,7 @@ function usuarioToggleModulo(mid){ if(!Array.isArray(F.permisos)) F.permisos=[];
 function usuarioEditModalContent(){
   const mods = MODULES.filter(m=>m.id!=='usuarios');
   const chips = mods.map(m=>{const on=(F.permisos||[]).includes(m.id); return `<button type="button" class="btn btn-sm ${on?'btn-primary':'btn-ghost'}" style="margin:0 6px 6px 0" onclick="usuarioToggleModulo('${m.id}')">${incEsc(m.nombre)}</button>`;}).join('');
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>${F.id!=null?'Editar usuario':'Nuevo usuario'}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)" placeholder="Nombre y apellidos"></div>
@@ -6667,7 +6667,7 @@ function usuarioDelete(id){
 /* --- cambiar mi contraseña (cualquiera) --- */
 function openCambiarPin(){ F={type:'cambiar_pin', actual:'', nuevo:'', nuevo2:''}; S.modal='cambiar_pin'; render(); }
 function cambiarPinModalContent(){
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Cambiar mi contraseña</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Tu contraseña es personal. Si la olvidas, Dirección puede ponerte una nueva.</div>
@@ -7218,7 +7218,7 @@ function openAccesoEdit(id){
 function accesoEditModalContent(){
   const colores=['#EAE3D7','#E8F1CC','#E8EAED','#D4C4A0','#CBE08A','#F5D9C8'];
   const emojis=['🔗','💾','📊','📁','💬','📷','🗂️','🌐','📅','🧾','🦷','📨'];
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+  return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>${F.id!=null?'Editar acceso':'Nuevo acceso'}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)" placeholder="p. ej. NAS Synology"></div>
@@ -7540,7 +7540,7 @@ function commitTemaPartes(){
 }
 function temaPartesModalContent(){
   const t=temaById(F.editId); const all=temaUsuarios(); const autor=t?t.autor:'';
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
+  return `<div class="overlay"><div class="modal" style="max-width:520px">
     <div class="modal-head"><h2>Participantes del tema</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Añade o quita personas. Quien quede fuera dejará de ver el tema; quien entre verá todo el historial.</div>
@@ -7557,7 +7557,7 @@ function temaPartesModalContent(){
 }
 function temaNuevoModalContent(){
   const me=S.user&&S.user.nombre; const all=temaUsuarios();
-  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
+  return `<div class="overlay"><div class="modal" style="max-width:520px">
     <div class="modal-head"><h2>Nuevo tema</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Un hilo para tratar algo en equipo. Solo lo verán los participantes. Cuando se resuelva, lo cierras.</div>
