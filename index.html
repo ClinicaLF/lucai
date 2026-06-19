@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-101">
+<meta name="lucai-version" content="2026-06-19-102">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -5168,7 +5168,7 @@ function tarThreadHtml(t, bare){
     const editing = F.msgEdit && F.msgEdit.tarId===t.id && String(F.msgEdit.ts)===tsId;
     const acts = puede ? `<span class="msg-actions" style="margin-left:auto;display:inline-flex;gap:9px;align-items:center;flex-wrap:wrap">
           <button title="Responder a este mensaje" onclick="tarReplyTo('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#6E8E00;font-size:11.5px;font-weight:600;padding:0">Responder</button>
-          <button title="Reaccionar a este mensaje" onclick="tarReactToggle('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#5A6770;font-size:11.5px;font-weight:600;padding:0">Reaccionar</button>
+          <button title="Reaccionar a este mensaje" aria-label="Reaccionar" onclick="tarReactToggle('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#5A6770;padding:0;line-height:0;display:inline-flex;align-items:center"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4 4 0 0 0 7 0"/><path d="M9 9.6h.01" stroke-width="2.4"/><path d="M15 9.6h.01" stroke-width="2.4"/></svg></button>
           ${mine?`<button title="Editar este mensaje" onclick="tarMsgEditStart('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#5A6770;font-size:11.5px;font-weight:600;padding:0">Editar</button>`:''}
           ${(mine||admin)?`<button title="Borrar este mensaje" onclick="tarMsgDel('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#C0392B;font-size:11.5px;font-weight:600;padding:0">Borrar</button>`:''}
         </span>` : '';
