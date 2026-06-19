@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-104">
+<meta name="lucai-version" content="2026-06-19-105">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -765,7 +765,7 @@ async function loadEstado(){
 }
 /* Campos que viven en la tabla lucai_estado (no en una tabla propia por filas).
    Estos son los que se persisten cuando se llama a _persistSoon / persistNow. */
-const ESTADO_FIELDS = ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins'];
+const ESTADO_FIELDS = ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones'];
 function _persistSoon(){
   if (!(DEVICE && LOADED && S.user)) return;
   clearTimeout(_persistT); _persistT = setTimeout(persistNow, 400);
@@ -2016,7 +2016,7 @@ async function loadFromDB(){
       try{
         const { data: estRow } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
         const d = estRow && estRow.data;
-        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
+        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
       }catch(_){}
       window._estadoLoaded=true;
     }
@@ -4321,98 +4321,172 @@ function tareasView(){
   ${S.tarDelId?tarDelScopeModal():''}`;
 }
 
-/* ===================== CALENDARIO (día / semana / mes) ===================== */
+/* ===================== CALENDARIO DE REUNIONES (día / semana / mes) ===================== */
 const CAL_DOW=['L','M','X','J','V','S','D'];
-function _calDow(iso){ const g=new Date(iso+'T00:00:00').getDay(); return (g+6)%7; } /* 0=Lunes */
+function _calDow(iso){ const g=new Date(iso+'T00:00:00').getDay(); return (g+6)%7; }
 function _calLunes(iso){ return tarAddDias(iso, -_calDow(iso)); }
 function _calMonNombre(iso){ return new Date(iso+'T00:00:00').toLocaleDateString('es-ES',{month:'long',year:'numeric'}); }
 function _calDiaNombre(iso){ return new Date(iso+'T00:00:00').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}); }
-function _calRangoSemana(ref){ const lun=_calLunes(ref), dom=tarAddDias(lun,6); const a=new Date(lun+'T00:00:00'), b=new Date(dom+'T00:00:00');
-  const mA=a.toLocaleDateString('es-ES',{month:'short'}), mB=b.toLocaleDateString('es-ES',{month:'short'});
-  return mA===mB ? `${a.getDate()}–${b.getDate()} ${mB}` : `${a.getDate()} ${mA} – ${b.getDate()} ${mB}`; }
-function _calVisibles(){ const me=S.user.nombre, admin=isAdmin(); return (S.tareas||[]).filter(t=> tarActiva(t) && (admin||tarInvolucra(t,me))); }
-function _calDe(iso){ return _calVisibles().filter(t=>t.fechaLimite===iso).sort((a,b)=>{ const ha=a.horaInicio||'99:99', hb=b.horaInicio||'99:99'; return ha<hb?-1:(ha>hb?1:0); }); }
-function _calColor(t){ return t.estado==='En espera' ? '#8A5A00' : (t.prioridad==='Alta'?'#C0392B':(t.prioridad==='Baja'?'#6E8E00':'#B8860B')); }
+function _calRangoSemana(ref){ const lun=_calLunes(ref), dom=tarAddDias(lun,6); const a=new Date(lun+'T00:00:00'), b=new Date(dom+'T00:00:00'); const mA=a.toLocaleDateString('es-ES',{month:'short'}), mB=b.toLocaleDateString('es-ES',{month:'short'}); return mA===mB?`${a.getDate()}–${b.getDate()} ${mB}`:`${a.getDate()} ${mA} – ${b.getDate()} ${mB}`; }
+function _hm(s){ if(!s||!/^\d{1,2}:\d{2}$/.test(s)) return null; const p=s.split(':'); return (+p[0])*60+(+p[1]); }
+function _mh(m){ m=Math.max(0,Math.min(1439,Math.round(m))); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+function reuVisibles(){ const me=S.user.nombre, admin=isAdmin(); return (Array.isArray(S.reuniones)?S.reuniones:[]).filter(r=> admin || r.deQuien===me || (Array.isArray(r.participantes)&&r.participantes.includes(me)) ); }
+function reuDe(iso){ return reuVisibles().filter(r=>r.fecha===iso).sort((a,b)=>{ const ha=_hm(a.horaInicio); const hb=_hm(b.horaInicio); return (ha==null?9999:ha)-(hb==null?9999:hb); }); }
+function _reuColor(r){ return r.color || '#5A7D2A'; }
 function setCalMode(m){ S.calMode=m; render(); }
 function calToday(){ S.calRef=todayStr(); render(); }
 function calOpenDia(iso){ S.calRef=iso; S.calMode='dia'; render(); }
-function openReunion(day){ day=day||S.calRef||todayStr(); openTarea({fechaLimite:day, horaInicio:'09:00', horaFin:'09:30'}); }
-function calStep(dir){
-  const mode=S.calMode||'mes', ref=S.calRef||todayStr();
-  if(mode==='dia') S.calRef=tarAddDias(ref, dir);
-  else if(mode==='semana') S.calRef=tarAddDias(ref, dir*7);
-  else { const d=new Date(ref+'T00:00:00'); d.setDate(1); d.setMonth(d.getMonth()+dir); S.calRef=d.toISOString().slice(0,10); }
-  render();
+function calStep(dir){ const mode=S.calMode||'semana', ref=S.calRef||todayStr(); if(mode==='dia') S.calRef=tarAddDias(ref,dir); else if(mode==='semana') S.calRef=tarAddDias(ref,dir*7); else { const d=new Date(ref+'T00:00:00'); d.setDate(1); d.setMonth(d.getMonth()+dir); S.calRef=d.toISOString().slice(0,10); } render(); }
+function _reuRango(reuns){ let lo=8*60, hi=20*60; reuns.forEach(r=>{ const s=_hm(r.horaInicio); let e=_hm(r.horaFin); if(e==null&&s!=null) e=s+30; if(s!=null) lo=Math.min(lo,s); if(e!=null) hi=Math.max(hi,e); }); lo=Math.floor(lo/60)*60; hi=Math.ceil(hi/60)*60; if(hi-lo<120) hi=lo+120; return [lo,hi]; }
+function _colBlocks(reuns, r0, hourH){
+  const arr=reuns.filter(r=>_hm(r.horaInicio)!=null).map(r=>{ const s=_hm(r.horaInicio); let e=_hm(r.horaFin); if(e==null||e<=s) e=s+30; return Object.assign({},r,{_s:s,_e:e}); }).sort((a,b)=>a._s-b._s);
+  const lanes=[]; arr.forEach(r=>{ let i=0; for(;i<lanes.length;i++){ if(lanes[i]<=r._s) break; } r._lane=i; lanes[i]=r._e; });
+  const nL=Math.max(1,lanes.length);
+  return arr.map(r=>{ const top=(r._s-r0)/60*hourH; const h=Math.max((r._e-r._s)/60*hourH,22); const w=100/nL; const left=r._lane*w; const col=_reuColor(r);
+    return `<div onclick="event.stopPropagation();reuOpen('${r.id}')" title="${incEsc(r.titulo||'')}" style="position:absolute;top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);background:${col}1f;border:1px solid ${col};border-left:3px solid ${col};border-radius:6px;padding:2px 5px;font-size:11px;overflow:hidden;cursor:pointer;color:#2C3A1E;box-sizing:border-box">
+      <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(r.horaInicio)}${r.horaFin?'–'+incEsc(r.horaFin):''}</div>
+      <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(r.titulo||'')}${(r.serieId||r.recurrencia)?' ⟳':''}</div>
+    </div>`; }).join('');
 }
-function _calChip(t){
-  const col=_calColor(t); const hora=t.horaInicio?`<b>${incEsc(t.horaInicio)}</b> `:''; const rec=(t.serieId||t.recurrencia)?' ⟳':'';
-  return `<button onclick="openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="display:block;width:100%;text-align:left;border:none;border-left:3px solid ${col};background:#F7F4EE;border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:12.5px;color:#333F48;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hora}${incEsc(t.titulo||'(sin título)')}${rec}</button>`;
+function _grid(dias){
+  const all=[].concat.apply([], dias.map(reuDe)); const rg=_reuRango(all); const r0=rg[0], r1=rg[1]; const hourH=46; const totalH=(r1-r0)/60*hourH; const headerH=dias.length>1?28:0;
+  const hours=[]; for(let m=r0;m<=r1;m+=60) hours.push(m);
+  const gutter=`<div style="flex:0 0 46px;position:relative">${headerH?`<div style="height:${headerH}px"></div>`:''}<div style="position:relative;height:${totalH}px">${hours.map((m,i)=>`<div style="position:absolute;top:${i*hourH-7}px;right:5px;font-size:10.5px;color:#8A949B">${String(Math.floor(m/60)).padStart(2,'0')}:00</div>`).join('')}</div></div>`;
+  const cols=dias.map(d=>{ const reuns=reuDe(d); const hoy=d===todayStr();
+    const lines=hours.map((m,i)=>`<div style="position:absolute;top:${i*hourH}px;left:0;right:0;border-top:1px solid #EFEAE0;height:0;pointer-events:none"></div>`).join('');
+    const head=headerH?`<div style="height:${headerH}px;line-height:${headerH}px;text-align:center;font-size:11px;font-weight:700;color:${hoy?'#5A6E00':'#5A6770'};${hoy?'background:#F0F3DE':''};border-bottom:1px solid var(--line);text-transform:capitalize">${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>`:'';
+    return `<div style="flex:1;min-width:${dias.length>1?'92px':'auto'};border-left:1px solid #EFEAE0">${head}<div style="position:relative;height:${totalH}px" onclick="reuNuevaEnGrid('${d}',event,${r0},${hourH})">${lines}${_colBlocks(reuns,r0,hourH)}</div></div>`;
+  }).join('');
+  return `<div style="border:1px solid var(--line);border-radius:12px;overflow:hidden"><div style="display:flex;overflow-x:auto">${gutter}<div style="flex:1;display:flex;min-width:${dias.length>1?(dias.length*92)+'px':'0'}">${cols}</div></div></div>`;
 }
+function reuNuevaEnGrid(d, ev, r0, hourH){ let mins=r0; try{ const y=(ev&&ev.offsetY!=null)?ev.offsetY:0; mins=r0 + Math.round((y/hourH*60)/15)*15; }catch(_){}; reuNueva(d, _mh(mins)); }
+function _calDia(ref){ return _grid([ref]); }
+function _calSemana(ref){ const lun=_calLunes(ref); const dias=[]; for(let i=0;i<7;i++) dias.push(tarAddDias(lun,i)); return _grid(dias); }
 function _calMes(ref){
   const d=new Date(ref+'T00:00:00'); d.setDate(1); const primero=d.toISOString().slice(0,10);
-  const inicioGrid=tarAddDias(primero, -_calDow(primero)); const mesActual=primero.slice(0,7);
-  let celdas=''; let cur=inicioGrid;
-  for(let i=0;i<42;i++){
-    const enMes=cur.slice(0,7)===mesActual, hoy=cur===todayStr(), items=_calDe(cur), max=3;
-    const chips=items.slice(0,max).map(t=>{ const col=_calColor(t); const h=t.horaInicio?incEsc(t.horaInicio)+' ':''; return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="border-left:3px solid ${col};background:#F7F4EE;border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h}${incEsc(t.titulo||'')}</div>`; }).join('');
+  const inicio=tarAddDias(primero,-_calDow(primero)); const mesActual=primero.slice(0,7); let celdas=''; let cur=inicio;
+  for(let i=0;i<42;i++){ const enMes=cur.slice(0,7)===mesActual, hoy=cur===todayStr(), items=reuDe(cur), max=3;
+    const chips=items.slice(0,max).map(r=>{ const col=_reuColor(r); const h=r.horaInicio?incEsc(r.horaInicio)+' ':''; return `<div onclick="event.stopPropagation();reuOpen('${r.id}')" title="${incEsc(r.titulo||'')}" style="border-left:3px solid ${col};background:${col}14;border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h}${incEsc(r.titulo||'')}</div>`; }).join('');
     const mas=items.length>max?`<div style="font-size:9.5px;color:#8A949B">+${items.length-max} más</div>`:'';
-    celdas+=`<div onclick="calOpenDia('${cur}')" style="min-height:76px;border:1px solid var(--line);border-radius:8px;padding:3px 4px;background:${enMes?'#fff':'#FAF8F3'};opacity:${enMes?1:.55};cursor:pointer;overflow:hidden">
-        <div style="font-size:11px;font-weight:700;color:${hoy?'#fff':'#5A6770'};${hoy?'background:#A8B400;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;margin-left:auto':'text-align:right'}">${cur.slice(8,10)*1}</div>
-        ${chips}${mas}
-      </div>`;
+    celdas+=`<div onclick="calOpenDia('${cur}')" style="min-height:76px;border:1px solid var(--line);border-radius:8px;padding:3px 4px;background:${enMes?'#fff':'#FAF8F3'};opacity:${enMes?1:.55};cursor:pointer;overflow:hidden"><div style="font-size:11px;font-weight:700;color:${hoy?'#fff':'#5A6770'};${hoy?'background:#A8B400;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;margin-left:auto':'text-align:right'}">${cur.slice(8,10)*1}</div>${chips}${mas}</div>`;
     cur=tarAddDias(cur,1);
   }
   const head=CAL_DOW.map(x=>`<div style="text-align:center;font-size:11px;font-weight:700;color:#8A949B;padding:4px 0">${x}</div>`).join('');
   return `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${head}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:3px">${celdas}</div>`;
 }
-function _calSemana(ref){
-  const lun=_calLunes(ref); let out='';
-  for(let i=0;i<7;i++){ const dia=tarAddDias(lun,i), items=_calDe(dia), hoy=dia===todayStr();
-    const dn=new Date(dia+'T00:00:00').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'short'});
-    out+=`<div style="border:1px solid var(--line);border-left:4px solid ${hoy?'#A8B400':'var(--line)'};border-radius:10px;padding:8px 10px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${items.length?6:0}px">
-          <strong style="font-size:13px;text-transform:capitalize;color:${hoy?'#5A6E00':'#333F48'}">${incEsc(dn)}</strong>
-          <button class="btn btn-ghost btn-sm" onclick="openReunion('${dia}')" title="Nueva reunión este día" style="padding:3px 9px">＋</button>
-        </div>
-        ${items.length? items.map(_calChip).join('') : '<div style="font-size:12px;color:#A9B0B6">—</div>'}
-      </div>`;
-  }
-  return out;
-}
-function _calDia(ref){
-  const items=_calDe(ref), conHora=items.filter(t=>t.horaInicio), sinHora=items.filter(t=>!t.horaInicio);
-  let out=`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px">`;
-  if(!items.length){ out+=`<div style="font-size:13px;color:#8A949B">Nada para este día. Pulsa "Nueva reunión" para añadir algo.</div>`; }
-  else{
-    if(conHora.length){ out+=conHora.map(t=>{ const col=_calColor(t); const fin=t.horaFin?('–'+incEsc(t.horaFin)):''; return `<div onclick="openTarDet('${t.id}')" style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #F0EBE1;cursor:pointer">
-        <div style="font-weight:700;font-size:13px;color:#5A6770;min-width:84px">${incEsc(t.horaInicio)}${fin}</div>
-        <div style="flex:1;border-left:3px solid ${col};padding-left:9px"><div style="font-weight:600;font-size:14px">${incEsc(t.titulo||'')}${(t.serieId||t.recurrencia)?' ⟳':''}</div><div style="font-size:12px;color:#8A949B">${incEsc(t.area||'General')} · para ${incEsc(t.paraQuien||'')}</div></div></div>`; }).join(''); }
-    if(sinHora.length){ out+=`<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8A949B;margin:${conHora.length?'12px':'0'} 0 6px">Sin hora concreta</div>`+sinHora.map(_calChip).join(''); }
-  }
-  out+=`</div>`;
-  return out;
-}
 function tarCalendarView(){
-  if(!S.calMode) S.calMode='mes';
+  if(!Array.isArray(S.reuniones)) S.reuniones=[];
+  if(!S.calMode) S.calMode='semana';
   if(!S.calRef) S.calRef=todayStr();
   const mode=S.calMode, ref=S.calRef;
-  let titulo = mode==='mes'?_calMonNombre(ref):(mode==='semana'?('Semana · '+_calRangoSemana(ref)):_calDiaNombre(ref));
-  titulo = titulo.charAt(0).toUpperCase()+titulo.slice(1);
-  const toggle = ['dia','semana','mes'].map(m=>`<button class="${mode===m?'on':''}" onclick="setCalMode('${m}')">${({dia:'Día',semana:'Semana',mes:'Mes'})[m]}</button>`).join('');
+  let titulo=mode==='mes'?_calMonNombre(ref):(mode==='semana'?('Semana · '+_calRangoSemana(ref)):_calDiaNombre(ref));
+  titulo=titulo.charAt(0).toUpperCase()+titulo.slice(1);
+  const toggle=['dia','semana','mes'].map(m=>`<button class="${mode===m?'on':''}" onclick="setCalMode('${m}')">${({dia:'Día',semana:'Semana',mes:'Mes'})[m]}</button>`).join('');
   const bar=`<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:6px">
-        <button class="btn btn-ghost btn-sm" onclick="calStep(-1)" aria-label="Anterior" style="padding:6px 11px;font-size:16px;line-height:1">‹</button>
+        <button class="btn btn-ghost btn-sm" onclick="calStep(-1)" style="padding:6px 11px;font-size:16px;line-height:1">‹</button>
         <button class="btn btn-ghost btn-sm" onclick="calToday()">Hoy</button>
-        <button class="btn btn-ghost btn-sm" onclick="calStep(1)" aria-label="Siguiente" style="padding:6px 11px;font-size:16px;line-height:1">›</button>
+        <button class="btn btn-ghost btn-sm" onclick="calStep(1)" style="padding:6px 11px;font-size:16px;line-height:1">›</button>
         <strong style="font-size:15px;margin-left:4px">${incEsc(titulo)}</strong>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div class="seg">${toggle}</div>
-        <button class="btn btn-primary btn-sm" onclick="openReunion()">Nueva reunión</button>
+        <button class="btn btn-primary btn-sm" onclick="reuNueva()">Nueva reunión</button>
       </div>
     </div>`;
-  const cuerpo = mode==='mes'?_calMes(ref):(mode==='semana'?_calSemana(ref):_calDia(ref));
-  return bar+cuerpo;
+  const cuerpo=mode==='mes'?_calMes(ref):(mode==='semana'?_calSemana(ref):_calDia(ref));
+  const nota=`<div style="font-size:12px;color:#8A949B;margin-top:10px">Aquí solo se ven reuniones y bloques de trabajo (no las tareas). ${mode!=='mes'?'Toca un hueco a una hora para crear uno ahí.':'Toca un día para verlo en detalle.'}</div>`;
+  return bar+cuerpo+nota;
+}
+/* --- crear / editar / borrar reunión --- */
+function reuNueva(day, hora){ day=day||S.calRef||todayStr(); const hi=hora||'09:00'; F={type:'reu_nuevo', id:'R'+Date.now().toString(36)+Math.floor(Math.random()*1000), titulo:'', fecha:day, horaInicio:hi, horaFin:_mh((_hm(hi)||540)+30), area:'General', nota:'', participantes:[], recurTipo:'no', recurDias:[], recurHasta:'', _edit:false }; S.modal='reu_nuevo'; render(); }
+function reuOpen(id){ const r=(S.reuniones||[]).find(x=>x.id===id); if(!r) return; F={type:'reu_nuevo', id:r.id, serieId:r.serieId||null, titulo:r.titulo||'', fecha:r.fecha, horaInicio:r.horaInicio||'', horaFin:r.horaFin||'', area:r.area||'General', nota:r.nota||'', participantes:Array.isArray(r.participantes)?r.participantes.slice():[], recurTipo:'no', recurDias:[], recurHasta:'', _edit:true }; S.modal='reu_nuevo'; render(); }
+function reuTogglePart(n){ if(!Array.isArray(F.participantes)) F.participantes=[]; const i=F.participantes.indexOf(n); if(i>=0) F.participantes.splice(i,1); else F.participantes.push(n); render(); }
+function reuToggleDia(i){ if(!Array.isArray(F.recurDias)) F.recurDias=[]; const j=F.recurDias.indexOf(i); if(j>=0) F.recurDias.splice(j,1); else F.recurDias.push(i); render(); }
+function reuModalContent(){
+  const editar=!!F._edit;
+  const users=appUsers().map(u=>u.nombre).filter(n=>n && n!==S.user.nombre);
+  const areas=(Array.isArray(S.tarAreas)&&S.tarAreas.length)?S.tarAreas:['General'];
+  if(areas.indexOf(F.area)<0 && F.area) areas.unshift(F.area);
+  const valid=(F.titulo||'').trim() && F.fecha && F.horaInicio;
+  const partChips=users.map(n=>`<button type="button" class="chip-sel ${(F.participantes||[]).includes(n)?'on':''}" onclick="reuTogglePart('${n.replace(/'/g,"\\'")}')">${incEsc(n)}</button>`).join('');
+  const recur = !editar ? `
+    <div class="fld"><label>Repetir</label>
+      <select class="inp" onchange="setSel('recurTipo',this.value)" style="max-width:220px">
+        <option value="no" ${F.recurTipo==='no'?'selected':''}>No se repite</option>
+        <option value="semanal" ${F.recurTipo==='semanal'?'selected':''}>Cada semana</option>
+      </select></div>
+    ${F.recurTipo==='semanal'?`<div class="fld" style="margin-top:8px"><label>Días de la semana</label><div style="display:flex;flex-wrap:wrap;gap:6px">${TAR_DOW.map((d,i)=>`<button type="button" class="chip-sel ${(F.recurDias||[]).includes(i)?'on':''}" onclick="reuToggleDia(${i})">${d}</button>`).join('')}</div></div>
+      <div class="fld" style="margin-top:8px"><label>Hasta (opcional)</label><input class="inp" type="date" value="${F.recurHasta||''}" oninput="setInp('recurHasta',this.value)" style="max-width:210px"><div class="hint" style="text-align:left">Vacío = se crean las próximas semanas automáticamente.</div></div>`:''}` : '<div class="hint" style="text-align:left">Al editar se cambia solo esta reunión.</div>';
+  return `<div class="overlay"><div class="modal">
+    <div class="modal-head"><h2>${editar?'Editar reunión':'Nueva reunión / bloque'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>Título</label><input class="inp" placeholder="Ej. Reunión de coordinación" value="${incEsc(F.titulo||'')}" oninput="setInp('titulo',this.value)"></div>
+      <div class="grid2">
+        <div class="fld" style="margin-top:0"><label>Fecha</label><input class="inp" type="date" value="${F.fecha||''}" oninput="setInp('fecha',this.value)"></div>
+        <div class="fld" style="margin-top:0"><label>Área / tema</label><select class="inp" onchange="setSel('area',this.value)">${areas.map(a=>`<option ${F.area===a?'selected':''}>${incEsc(a)}</option>`).join('')}</select></div>
+      </div>
+      <div class="grid2">
+        <div class="fld" style="margin-top:0"><label>Hora inicio</label><input class="inp" type="time" value="${incEsc(F.horaInicio||'')}" oninput="setInp('horaInicio',this.value)"></div>
+        <div class="fld" style="margin-top:0"><label>Hora fin</label><input class="inp" type="time" value="${incEsc(F.horaFin||'')}" oninput="setInp('horaFin',this.value)"></div>
+      </div>
+      <div class="fld"><label>Participantes (les avisa)</label><div style="display:flex;flex-wrap:wrap;gap:6px">${partChips||'<span class="muted" style="font-size:12px">No hay más usuarios.</span>'}</div></div>
+      <div class="fld"><label>Nota (opcional)</label><textarea class="inp" placeholder="Orden del día, sala, etc." oninput="setInp('nota',this.value)">${incEsc(F.nota||'')}</textarea></div>
+      ${recur}
+      <div class="req-note ${valid?'okk':''}">${valid?'✓ Listo.':'! Pon al menos título, fecha y hora de inicio.'}</div>
+    </div>
+    <div class="modal-foot">
+      ${editar?`<button class="btn btn-ghost" style="color:#C0392B;margin-right:auto" onclick="reuDelete('${F.id}')">Eliminar</button>`:''}
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" ${valid?'':'disabled'} onclick="commitReunion()">${editar?'Guardar':'Crear'}</button>
+    </div>
+  </div></div>`;
+}
+function _reuNotify(r, dias){
+  const quien=(r.deQuien||S.user.nombre);
+  const cuando = (dias&&dias.length>1) ? (tarRecurLabel({tipo:'semanal',dias:F.recurDias})+' · '+dias.length+' fechas') : (fmtFecha(r.fecha)+' · '+r.horaInicio+(r.horaFin?'–'+r.horaFin:''));
+  (r.participantes||[]).forEach(n=>{ if(n && n!==quien) tgNotify(n, `📅 Hola ${(n||'').split(' ')[0]}, ${quien} te ha incluido en una reunión:\n\n${r.titulo}\n${cuando}${r.nota?`\n\n${r.nota}`:''}\n\nLa tienes en Lucai, en Tareas › Calendario.`); });
+}
+function commitReunion(){
+  if(!Array.isArray(S.reuniones)) S.reuniones=[];
+  const titulo=(F.titulo||'').trim(); if(!titulo||!F.fecha||!F.horaInicio){ toast('Pon al menos título, fecha y hora de inicio'); return; }
+  if(F.horaFin && _hm(F.horaFin)!=null && _hm(F.horaInicio)!=null && _hm(F.horaFin)<=_hm(F.horaInicio)){ toast('La hora de fin debe ser posterior a la de inicio'); return; }
+  const base={ titulo, area:F.area||'General', horaInicio:F.horaInicio, horaFin:F.horaFin||'', nota:(F.nota||'').trim(), participantes:[...new Set((F.participantes||[]).filter(Boolean))], deQuien:S.user.nombre };
+  if(F._edit){
+    const idx=S.reuniones.findIndex(x=>x.id===F.id); if(idx<0){ closeModal(); return; }
+    S.reuniones[idx]=Object.assign({}, S.reuniones[idx], base, { fecha:F.fecha });
+    closeModal(); render(); if(typeof persistNow==='function') persistNow(); toast('Reunión guardada');
+    return;
+  }
+  if(F.recurTipo==='semanal'){
+    const rule={tipo:'semanal', dias:(F.recurDias&&F.recurDias.length)?F.recurDias.slice():[ _calDow(F.fecha) ], hasta:F.recurHasta||null};
+    const until = rule.hasta || tarAddDias(todayStr(), TAR_RECUR_HORIZON);
+    let fechas=tarSerieFechas(rule, (F.fecha>=todayStr()?F.fecha:todayStr()), until); if(!fechas.length) fechas=[F.fecha];
+    const serieId='RS'+Date.now().toString(36)+Math.floor(Math.random()*1000);
+    const nuevas=fechas.map(f=>Object.assign({}, base, { id:serieId+'_'+f, fecha:f, serieId, recurrencia:rule, ts:now() }));
+    nuevas.forEach(r=>S.reuniones.push(r));
+    closeModal(); render(); if(typeof persistNow==='function') persistNow();
+    toast('Reunión periódica creada · '+nuevas.length+' fechas');
+    _reuNotify(nuevas[0], nuevas);
+    return;
+  }
+  const r=Object.assign({}, base, { id:F.id||('R'+Date.now().toString(36)), fecha:F.fecha, serieId:null, recurrencia:null, ts:now() });
+  S.reuniones.push(r);
+  closeModal(); render(); if(typeof persistNow==='function') persistNow();
+  toast('Reunión creada');
+  _reuNotify(r, null);
+}
+function reuDelete(id){
+  const r=(S.reuniones||[]).find(x=>x.id===id); if(!r) return;
+  if(r.serieId){
+    const cuantas=(S.reuniones||[]).filter(x=>x.serieId===r.serieId).length;
+    const todas=confirm('Esta reunión se repite ('+cuantas+' fechas).\n\nAceptar = borrar TODA la serie.\nCancelar = borrar solo esta.');
+    S.reuniones = todas ? S.reuniones.filter(x=>x.serieId!==r.serieId) : S.reuniones.filter(x=>x.id!==id);
+  } else {
+    if(!confirm('¿Borrar esta reunión?')) return;
+    S.reuniones=S.reuniones.filter(x=>x.id!==id);
+  }
+  closeModal(); render(); if(typeof persistNow==='function') persistNow(); toast('Reunión borrada');
 }
 function tarKpis(arr){
   const act=arr.filter(tarActiva);
@@ -5603,6 +5677,7 @@ modalContent = function(){
   if(F.type==='tar_areas') return tarAreasModalContent();
   if(F.type==='tar_det')   return tarDetModalContent();
   if(F.type==='tar_edit')  return tarEditModalContent();
+  if(F.type==='reu_nuevo') return reuModalContent();
   return _modalContent_tar();
 };
 const _appView_tar = appView;
