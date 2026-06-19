@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-105">
+<meta name="lucai-version" content="2026-06-19-106">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4349,15 +4349,16 @@ function _colBlocks(reuns, r0, hourH){
     </div>`; }).join('');
 }
 function _grid(dias){
-  const all=[].concat.apply([], dias.map(reuDe)); const rg=_reuRango(all); const r0=rg[0], r1=rg[1]; const hourH=46; const totalH=(r1-r0)/60*hourH; const headerH=dias.length>1?28:0;
-  const hours=[]; for(let m=r0;m<=r1;m+=60) hours.push(m);
-  const gutter=`<div style="flex:0 0 46px;position:relative">${headerH?`<div style="height:${headerH}px"></div>`:''}<div style="position:relative;height:${totalH}px">${hours.map((m,i)=>`<div style="position:absolute;top:${i*hourH-7}px;right:5px;font-size:10.5px;color:#8A949B">${String(Math.floor(m/60)).padStart(2,'0')}:00</div>`).join('')}</div></div>`;
+  const HOURH=44, totalH=24*HOURH, headerH=dias.length>1?28:0;
+  const gutterHours=[]; for(let h=0;h<24;h++) gutterHours.push(`<div style="position:absolute;top:${h*HOURH-7}px;right:5px;font-size:10px;color:#8A949B">${String(h).padStart(2,'0')}:00</div>`);
+  const gutter=`<div style="flex:0 0 44px;position:sticky;left:0;z-index:3;background:#fff">${headerH?`<div style="height:${headerH}px;position:sticky;top:0;background:#fff;z-index:4"></div>`:''}<div style="position:relative;height:${totalH}px">${gutterHours.join('')}</div></div>`;
+  const linesArr=[]; for(let h=0;h<=24;h++) linesArr.push(`<div style="position:absolute;top:${h*HOURH}px;left:0;right:0;border-top:1px solid #EFEAE0;height:0;pointer-events:none"></div>`);
+  const linesHtml=linesArr.join('');
   const cols=dias.map(d=>{ const reuns=reuDe(d); const hoy=d===todayStr();
-    const lines=hours.map((m,i)=>`<div style="position:absolute;top:${i*hourH}px;left:0;right:0;border-top:1px solid #EFEAE0;height:0;pointer-events:none"></div>`).join('');
-    const head=headerH?`<div style="height:${headerH}px;line-height:${headerH}px;text-align:center;font-size:11px;font-weight:700;color:${hoy?'#5A6E00':'#5A6770'};${hoy?'background:#F0F3DE':''};border-bottom:1px solid var(--line);text-transform:capitalize">${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>`:'';
-    return `<div style="flex:1;min-width:${dias.length>1?'92px':'auto'};border-left:1px solid #EFEAE0">${head}<div style="position:relative;height:${totalH}px" onclick="reuNuevaEnGrid('${d}',event,${r0},${hourH})">${lines}${_colBlocks(reuns,r0,hourH)}</div></div>`;
+    const head=headerH?`<div style="height:${headerH}px;line-height:${headerH}px;text-align:center;font-size:11px;font-weight:700;color:${hoy?'#5A6E00':'#5A6770'};background:${hoy?'#F0F3DE':'#fff'};border-bottom:1px solid var(--line);text-transform:capitalize;position:sticky;top:0;z-index:2">${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>`:'';
+    return `<div style="flex:1;min-width:${dias.length>1?'90px':'auto'};border-left:1px solid #EFEAE0">${head}<div style="position:relative;height:${totalH}px" onclick="reuNuevaEnGrid('${d}',event,0,${HOURH})">${linesHtml}${_colBlocks(reuns,0,HOURH)}</div></div>`;
   }).join('');
-  return `<div style="border:1px solid var(--line);border-radius:12px;overflow:hidden"><div style="display:flex;overflow-x:auto">${gutter}<div style="flex:1;display:flex;min-width:${dias.length>1?(dias.length*92)+'px':'0'}">${cols}</div></div></div>`;
+  return `<div id="calScroll" onscroll="S.calScrollTop=this.scrollTop" style="border:1px solid var(--line);border-radius:12px;max-height:62vh;overflow:auto"><div style="display:flex;min-width:${dias.length>1?(44+dias.length*90)+'px':'100%'}">${gutter}<div style="flex:1;display:flex">${cols}</div></div></div>`;
 }
 function reuNuevaEnGrid(d, ev, r0, hourH){ let mins=r0; try{ const y=(ev&&ev.offsetY!=null)?ev.offsetY:0; mins=r0 + Math.round((y/hourH*60)/15)*15; }catch(_){}; reuNueva(d, _mh(mins)); }
 function _calDia(ref){ return _grid([ref]); }
@@ -4395,12 +4396,15 @@ function tarCalendarView(){
       </div>
     </div>`;
   const cuerpo=mode==='mes'?_calMes(ref):(mode==='semana'?_calSemana(ref):_calDia(ref));
+  if(mode!=='mes'){ setTimeout(()=>{ const c=document.getElementById('calScroll'); if(c){ if(S.calScrollTop==null) S.calScrollTop=7*44; c.scrollTop=S.calScrollTop; } },0); }
   const nota=`<div style="font-size:12px;color:#8A949B;margin-top:10px">Aquí solo se ven reuniones y bloques de trabajo (no las tareas). ${mode!=='mes'?'Toca un hueco a una hora para crear uno ahí.':'Toca un día para verlo en detalle.'}</div>`;
   return bar+cuerpo+nota;
 }
 /* --- crear / editar / borrar reunión --- */
-function reuNueva(day, hora){ day=day||S.calRef||todayStr(); const hi=hora||'09:00'; F={type:'reu_nuevo', id:'R'+Date.now().toString(36)+Math.floor(Math.random()*1000), titulo:'', fecha:day, horaInicio:hi, horaFin:_mh((_hm(hi)||540)+30), area:'General', nota:'', participantes:[], recurTipo:'no', recurDias:[], recurHasta:'', _edit:false }; S.modal='reu_nuevo'; render(); }
-function reuOpen(id){ const r=(S.reuniones||[]).find(x=>x.id===id); if(!r) return; F={type:'reu_nuevo', id:r.id, serieId:r.serieId||null, titulo:r.titulo||'', fecha:r.fecha, horaInicio:r.horaInicio||'', horaFin:r.horaFin||'', area:r.area||'General', nota:r.nota||'', participantes:Array.isArray(r.participantes)?r.participantes.slice():[], recurTipo:'no', recurDias:[], recurHasta:'', _edit:true }; S.modal='reu_nuevo'; render(); }
+const REU_COLORS=['#5A7D2A','#039BE5','#7986CB','#8E24AA','#E67C73','#D50000','#F4511E','#E4C441','#33B679','#616161'];
+function reuSetColor(c){ F.color=c; render(); }
+function reuNueva(day, hora){ day=day||S.calRef||todayStr(); const hi=hora||'09:00'; F={type:'reu_nuevo', id:'R'+Date.now().toString(36)+Math.floor(Math.random()*1000), titulo:'', fecha:day, horaInicio:hi, horaFin:_mh((_hm(hi)||540)+30), area:'General', nota:'', color:'#5A7D2A', participantes:[], recurTipo:'no', recurDias:[], recurHasta:'', _edit:false }; S.modal='reu_nuevo'; render(); }
+function reuOpen(id){ const r=(S.reuniones||[]).find(x=>x.id===id); if(!r) return; F={type:'reu_nuevo', id:r.id, serieId:r.serieId||null, titulo:r.titulo||'', fecha:r.fecha, horaInicio:r.horaInicio||'', horaFin:r.horaFin||'', area:r.area||'General', nota:r.nota||'', color:r.color||'#5A7D2A', participantes:Array.isArray(r.participantes)?r.participantes.slice():[], recurTipo:'no', recurDias:[], recurHasta:'', _edit:true }; S.modal='reu_nuevo'; render(); }
 function reuTogglePart(n){ if(!Array.isArray(F.participantes)) F.participantes=[]; const i=F.participantes.indexOf(n); if(i>=0) F.participantes.splice(i,1); else F.participantes.push(n); render(); }
 function reuToggleDia(i){ if(!Array.isArray(F.recurDias)) F.recurDias=[]; const j=F.recurDias.indexOf(i); if(j>=0) F.recurDias.splice(j,1); else F.recurDias.push(i); render(); }
 function reuModalContent(){
@@ -4411,13 +4415,15 @@ function reuModalContent(){
   const valid=(F.titulo||'').trim() && F.fecha && F.horaInicio;
   const partChips=users.map(n=>`<button type="button" class="chip-sel ${(F.participantes||[]).includes(n)?'on':''}" onclick="reuTogglePart('${n.replace(/'/g,"\\'")}')">${incEsc(n)}</button>`).join('');
   const recur = !editar ? `
-    <div class="fld"><label>Repetir</label>
+    <div class="fld"><label>Periodicidad</label>
       <select class="inp" onchange="setSel('recurTipo',this.value)" style="max-width:220px">
         <option value="no" ${F.recurTipo==='no'?'selected':''}>No se repite</option>
+        <option value="diaria" ${F.recurTipo==='diaria'?'selected':''}>Cada día</option>
         <option value="semanal" ${F.recurTipo==='semanal'?'selected':''}>Cada semana</option>
+        <option value="mensual" ${F.recurTipo==='mensual'?'selected':''}>Cada mes (mismo día)</option>
       </select></div>
-    ${F.recurTipo==='semanal'?`<div class="fld" style="margin-top:8px"><label>Días de la semana</label><div style="display:flex;flex-wrap:wrap;gap:6px">${TAR_DOW.map((d,i)=>`<button type="button" class="chip-sel ${(F.recurDias||[]).includes(i)?'on':''}" onclick="reuToggleDia(${i})">${d}</button>`).join('')}</div></div>
-      <div class="fld" style="margin-top:8px"><label>Hasta (opcional)</label><input class="inp" type="date" value="${F.recurHasta||''}" oninput="setInp('recurHasta',this.value)" style="max-width:210px"><div class="hint" style="text-align:left">Vacío = se crean las próximas semanas automáticamente.</div></div>`:''}` : '<div class="hint" style="text-align:left">Al editar se cambia solo esta reunión.</div>';
+    ${F.recurTipo==='semanal'?`<div class="fld" style="margin-top:8px"><label>Días de la semana</label><div style="display:flex;flex-wrap:wrap;gap:6px">${TAR_DOW.map((d,i)=>`<button type="button" class="chip-sel ${(F.recurDias||[]).includes(i)?'on':''}" onclick="reuToggleDia(${i})">${d}</button>`).join('')}</div></div>`:''}
+    ${F.recurTipo!=='no'?`<div class="fld" style="margin-top:8px"><label>Hasta (opcional)</label><input class="inp" type="date" value="${F.recurHasta||''}" oninput="setInp('recurHasta',this.value)" style="max-width:210px"><div class="hint" style="text-align:left">Vacío = se crean las próximas fechas automáticamente.</div></div>`:''}` : '<div class="hint" style="text-align:left">Al editar se cambia solo esta reunión.</div>';
   return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>${editar?'Editar reunión':'Nueva reunión / bloque'}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
@@ -4430,8 +4436,9 @@ function reuModalContent(){
         <div class="fld" style="margin-top:0"><label>Hora inicio</label><input class="inp" type="time" value="${incEsc(F.horaInicio||'')}" oninput="setInp('horaInicio',this.value)"></div>
         <div class="fld" style="margin-top:0"><label>Hora fin</label><input class="inp" type="time" value="${incEsc(F.horaFin||'')}" oninput="setInp('horaFin',this.value)"></div>
       </div>
+      <div class="fld"><label>Color</label><div style="display:flex;flex-wrap:wrap;gap:9px">${REU_COLORS.map(c=>`<button type="button" onclick="reuSetColor('${c}')" aria-label="color" style="width:26px;height:26px;border-radius:50%;background:${c};border:${(F.color||'#5A7D2A')===c?'3px solid #333F48':'2px solid #fff'};box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0"></button>`).join('')}</div></div>
       <div class="fld"><label>Participantes (les avisa)</label><div style="display:flex;flex-wrap:wrap;gap:6px">${partChips||'<span class="muted" style="font-size:12px">No hay más usuarios.</span>'}</div></div>
-      <div class="fld"><label>Nota (opcional)</label><textarea class="inp" placeholder="Orden del día, sala, etc." oninput="setInp('nota',this.value)">${incEsc(F.nota||'')}</textarea></div>
+      <div class="fld"><label>Información / nota (opcional)</label><textarea class="inp" placeholder="Orden del día, sala, enlaces, lo que necesites…" oninput="setInp('nota',this.value)">${incEsc(F.nota||'')}</textarea></div>
       ${recur}
       <div class="req-note ${valid?'okk':''}">${valid?'✓ Listo.':'! Pon al menos título, fecha y hora de inicio.'}</div>
     </div>
@@ -4442,24 +4449,29 @@ function reuModalContent(){
     </div>
   </div></div>`;
 }
-function _reuNotify(r, dias){
+function _reuNotify(r, dias, rule){
   const quien=(r.deQuien||S.user.nombre);
-  const cuando = (dias&&dias.length>1) ? (tarRecurLabel({tipo:'semanal',dias:F.recurDias})+' · '+dias.length+' fechas') : (fmtFecha(r.fecha)+' · '+r.horaInicio+(r.horaFin?'–'+r.horaFin:''));
+  let label='';
+  if(rule){ if(rule.tipo==='diaria') label='Cada día'; else if(rule.tipo==='mensual') label='Cada mes'; else label=(typeof tarRecurLabel==='function'?tarRecurLabel(rule):'Cada semana'); }
+  const cuando = (dias&&dias.length>1) ? (label+' · '+dias.length+' fechas') : (fmtFecha(r.fecha)+' · '+r.horaInicio+(r.horaFin?'–'+r.horaFin:''));
   (r.participantes||[]).forEach(n=>{ if(n && n!==quien) tgNotify(n, `📅 Hola ${(n||'').split(' ')[0]}, ${quien} te ha incluido en una reunión:\n\n${r.titulo}\n${cuando}${r.nota?`\n\n${r.nota}`:''}\n\nLa tienes en Lucai, en Tareas › Calendario.`); });
 }
 function commitReunion(){
   if(!Array.isArray(S.reuniones)) S.reuniones=[];
   const titulo=(F.titulo||'').trim(); if(!titulo||!F.fecha||!F.horaInicio){ toast('Pon al menos título, fecha y hora de inicio'); return; }
   if(F.horaFin && _hm(F.horaFin)!=null && _hm(F.horaInicio)!=null && _hm(F.horaFin)<=_hm(F.horaInicio)){ toast('La hora de fin debe ser posterior a la de inicio'); return; }
-  const base={ titulo, area:F.area||'General', horaInicio:F.horaInicio, horaFin:F.horaFin||'', nota:(F.nota||'').trim(), participantes:[...new Set((F.participantes||[]).filter(Boolean))], deQuien:S.user.nombre };
+  const base={ titulo, area:F.area||'General', horaInicio:F.horaInicio, horaFin:F.horaFin||'', nota:(F.nota||'').trim(), color:F.color||'#5A7D2A', participantes:[...new Set((F.participantes||[]).filter(Boolean))], deQuien:S.user.nombre };
   if(F._edit){
     const idx=S.reuniones.findIndex(x=>x.id===F.id); if(idx<0){ closeModal(); return; }
     S.reuniones[idx]=Object.assign({}, S.reuniones[idx], base, { fecha:F.fecha });
     closeModal(); render(); if(typeof persistNow==='function') persistNow(); toast('Reunión guardada');
     return;
   }
-  if(F.recurTipo==='semanal'){
-    const rule={tipo:'semanal', dias:(F.recurDias&&F.recurDias.length)?F.recurDias.slice():[ _calDow(F.fecha) ], hasta:F.recurHasta||null};
+  if(F.recurTipo && F.recurTipo!=='no'){
+    let rule;
+    if(F.recurTipo==='diaria') rule={tipo:'diaria', hasta:F.recurHasta||null};
+    else if(F.recurTipo==='mensual') rule={tipo:'mensual', diaMes:new Date(F.fecha+'T00:00:00').getDate(), hasta:F.recurHasta||null};
+    else rule={tipo:'semanal', dias:(F.recurDias&&F.recurDias.length)?F.recurDias.slice():[ _calDow(F.fecha) ], hasta:F.recurHasta||null};
     const until = rule.hasta || tarAddDias(todayStr(), TAR_RECUR_HORIZON);
     let fechas=tarSerieFechas(rule, (F.fecha>=todayStr()?F.fecha:todayStr()), until); if(!fechas.length) fechas=[F.fecha];
     const serieId='RS'+Date.now().toString(36)+Math.floor(Math.random()*1000);
@@ -4467,7 +4479,7 @@ function commitReunion(){
     nuevas.forEach(r=>S.reuniones.push(r));
     closeModal(); render(); if(typeof persistNow==='function') persistNow();
     toast('Reunión periódica creada · '+nuevas.length+' fechas');
-    _reuNotify(nuevas[0], nuevas);
+    _reuNotify(nuevas[0], nuevas, rule);
     return;
   }
   const r=Object.assign({}, base, { id:F.id||('R'+Date.now().toString(36)), fecha:F.fecha, serieId:null, recurrencia:null, ts:now() });
