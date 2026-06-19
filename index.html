@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-94">
+<meta name="lucai-version" content="2026-06-19-95">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -1402,7 +1402,7 @@ function openModal(type){
   else if(type==='merma') F={type, cod:"", cant:1, motivo:"Roto / defectuoso", ref:""};
   S.modal=type; render();
 }
-function closeModal(){ S.modal=null; F.msgReplyTo=null; F.emojiOpen=null; const o=document.querySelector(".overlay"); if(o)o.remove(); }
+function closeModal(){ S.modal=null; F.msgReplyTo=null; F.emojiOpen=null; F.msgEdit=null; F.msgEditDraft=null; const o=document.querySelector(".overlay"); if(o)o.remove(); }
 function setSel(field,v){ F[field]=v; render(); }
 function setInp(field,v){ F[field]=v; }
 function setProv(v){ F.proveedor=v; if(v!=='__nuevo__') F.proveedorNuevo=''; render(); }
@@ -5034,15 +5034,27 @@ function tarThreadHtml(t, bare){
       const txCita = (mm.replyTo.texto || (orig && orig.texto) || '').slice(0,140);
       citaHtml = `<div style="border-left:3px solid #A8B400;background:rgba(0,0,0,.04);padding:4px 8px;border-radius:6px;margin-bottom:6px;font-size:12px;color:#5A6770"><b style="color:#3C3F44">${incEsc(deCita)}</b><div style="opacity:.85;white-space:pre-wrap">${incEsc(txCita)}</div></div>`;
     }
+    const editing = F.msgEdit && F.msgEdit.tarId===t.id && String(F.msgEdit.ts)===tsId;
+    const acts = puede ? `<span class="msg-actions" style="margin-left:auto;display:inline-flex;gap:9px;align-items:center;flex-wrap:wrap">
+          <button title="Responder a este mensaje" onclick="tarReplyTo('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#6E8E00;font-size:11.5px;font-weight:600;padding:0">Responder</button>
+          ${mine?`<button title="Editar este mensaje" onclick="tarMsgEditStart('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#5A6770;font-size:11.5px;font-weight:600;padding:0">Editar</button>`:''}
+          ${(mine||admin)?`<button title="Borrar este mensaje" onclick="tarMsgDel('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#C0392B;font-size:11.5px;font-weight:600;padding:0">Borrar</button>`:''}
+        </span>` : '';
+    const cuerpo = editing
+      ? `<textarea class="inp msg-edit-ta" oninput="F.msgEditDraft=this.value;tarAutoGrow(this)" onkeydown="if(event.key==='Escape'){tarMsgEditCancel()}" style="font-size:16px;min-height:46px;max-height:200px;line-height:1.45;resize:none;overflow-y:auto">${incEsc(F.msgEditDraft!=null?F.msgEditDraft:(mm.texto||''))}</textarea>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+            <button class="btn btn-ghost btn-sm" onclick="tarMsgEditCancel()">Cancelar</button>
+            <button class="btn btn-primary btn-sm" onclick="tarMsgEditSave('${t.id}','${tsId}')">Guardar</button>
+          </div>`
+      : `<div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div>${tarAdjView(mm.adj,'msg')}`;
     return `<div style="margin-bottom:8px;display:flex;${mine?'justify-content:flex-end':''}">
-      <div style="position:relative;max-width:82%;background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px" onmouseenter="this.querySelector('.msg-actions')&&(this.querySelector('.msg-actions').style.opacity=1)" onmouseleave="this.querySelector('.msg-actions')&&(this.querySelector('.msg-actions').style.opacity=0)">
-        <div style="font-size:11px;color:#8A949B;margin-bottom:2px;display:flex;align-items:center;gap:6px">
-          <span>${incEsc(mm.de||'—')} · ${incEsc(tarMsgTime(mm.ts))}</span>
-          ${puede?`<span class="msg-actions" style="opacity:0;transition:opacity .15s ease;margin-left:auto"><button title="Responder a este mensaje" onclick="tarReplyTo('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#6E8E00;font-size:12px;padding:0 2px">↩ responder</button></span>`:''}
+      <div style="position:relative;${editing?'flex:1;max-width:100%':'max-width:82%'};background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px">
+        <div style="font-size:11px;color:#8A949B;margin-bottom:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>${incEsc(mm.de||'—')} · ${incEsc(tarMsgTime(mm.ts))}${mm.editado?' · editado':''}</span>
+          ${acts}
         </div>
         ${citaHtml}
-        <div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div>
-        ${tarAdjView(mm.adj,'msg')}
+        ${cuerpo}
       </div></div>`;
   }).join('') : `<div class="muted" style="font-size:13px">Aún no hay mensajes. Escribe el primero para aclarar o comentar la tarea.</div>`;
 
@@ -5137,6 +5149,49 @@ function tarAddMsg(id){
   F.msgDraft=''; F.msgReplyTo=null; F.emojiOpen=null; render();
   srvTarUpdate(id, t);
   // (Sin aviso por Telegram al escribir mensajes internos. La notificación in-app sigue activa.)
+}
+// Editar / borrar mensajes. Releen lo ultimo de la BD y aplican el cambio por su ts,
+// para no resucitar lo borrado/editado ni pisar mensajes que otro haya escrito a la vez.
+async function tarMsgMutate(id, fn, okMsg){
+  const t=(S.tareas||[]).find(x=>x.id===id);
+  try{
+    const cur = await sbc.from('tar_tareas').select('mensajes').eq('id', id).maybeSingle();
+    let remote = (cur && cur.data && cur.data.mensajes!=null)
+      ? (Array.isArray(cur.data.mensajes) ? cur.data.mensajes : (function(){ try{ return JSON.parse(cur.data.mensajes)||[]; }catch(_){ return []; } })())
+      : (t && Array.isArray(t.mensajes) ? t.mensajes : []);
+    const nuevos = fn(remote.slice());
+    const { error } = await sbc.from('tar_tareas').update({ mensajes:nuevos }).eq('id', id);
+    if(error) throw error;
+  }catch(e){ console.error('tarMsgMutate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+function tarMsgEditStart(tarId, ts){
+  const t=(S.tareas||[]).find(x=>x.id===tarId); if(!t) return;
+  const m=(t.mensajes||[]).find(x=>String(x.ts)===String(ts)); if(!m) return;
+  if(m.de!==S.user.nombre){ toast('Solo puedes editar tus propios mensajes'); return; }
+  F.msgEdit={tarId, ts:String(ts)}; F.msgEditDraft=(m.texto||''); F.msgReplyTo=null; render();
+  setTimeout(()=>{ const ta=document.querySelector('.msg-edit-ta'); if(ta){ try{ ta.focus(); tarAutoGrow(ta); const n=ta.value.length; ta.setSelectionRange(n,n); }catch(_){ } } }, 50);
+}
+function tarMsgEditCancel(){ F.msgEdit=null; F.msgEditDraft=null; render(); }
+function tarMsgEditSave(tarId, ts){
+  const t=(S.tareas||[]).find(x=>x.id===tarId); if(!t) return;
+  const m=(t.mensajes||[]).find(x=>String(x.ts)===String(ts)); if(!m) return;
+  if(m.de!==S.user.nombre){ toast('Solo puedes editar tus propios mensajes'); return; }
+  const nuevo=(F.msgEditDraft||'').trim();
+  if(!nuevo){ toast('El mensaje no puede quedar vacío. Si quieres quitarlo, usa Borrar.'); return; }
+  m.texto=nuevo; m.editado=true;
+  F.msgEdit=null; F.msgEditDraft=null; render();
+  tarMsgMutate(tarId, arr=>arr.map(x=> String(x.ts)===String(ts) ? Object.assign({}, x, {texto:nuevo, editado:true}) : x), 'Mensaje editado');
+}
+function tarMsgDel(tarId, ts){
+  const t=(S.tareas||[]).find(x=>x.id===tarId); if(!t) return;
+  const m=(t.mensajes||[]).find(x=>String(x.ts)===String(ts)); if(!m) return;
+  if(!(m.de===S.user.nombre || isAdmin())){ toast('Solo puedes borrar tus propios mensajes'); return; }
+  if(!confirm('¿Borrar este mensaje?\n\nNo se puede deshacer.')) return;
+  t.mensajes=(t.mensajes||[]).filter(x=>String(x.ts)!==String(ts));
+  if(F.msgReplyTo && String(F.msgReplyTo.ts)===String(ts)) F.msgReplyTo=null;
+  render();
+  tarMsgMutate(tarId, arr=>arr.filter(x=>String(x.ts)!==String(ts)), 'Mensaje borrado');
 }
 function tarFmtMin(m){ m=Math.max(0,Math.round(Number(m)||0)); const h=Math.floor(m/60), mm=m%60; return h ? (mm?`${h}h ${mm}m`:`${h}h`) : `${mm}m`; }
 function tarTotalMin(t){ return (Array.isArray(t.tiempos)?t.tiempos:[]).reduce((s,e)=>s+(Number(e.min)||0),0); }
