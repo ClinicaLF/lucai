@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-96">
+<meta name="lucai-version" content="2026-06-19-97">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4087,8 +4087,8 @@ function tarFechaEdit(t){
   if(t.estado==='Hecha') return tarLimiteCell(t);
   const d=tarDiasRest(t);
   const hint = t.fechaLimite ? (d<0?`<span style="color:#C0392B;font-weight:700;font-size:11px">vencida</span>`:(d===0?`<span style="color:#B8860B;font-weight:700;font-size:11px">hoy</span>`:(d<=2?`<span style="color:#B8860B;font-size:11px">${d} d</span>`:''))) : '';
-  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap" onclick="event.stopPropagation()">
-    <input type="date" class="inp" style="padding:4px 6px;width:128px;font-size:13px" value="${t.fechaLimite||''}" onchange="tarSetFecha('${t.id}',this.value)">
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap" onclick="event.stopPropagation()">
+    <input type="date" class="inp" style="padding:4px 6px;width:128px;font-size:13px;flex:0 0 auto" value="${t.fechaLimite||''}" onchange="tarSetFecha('${t.id}',this.value)">
     ${hint}
   </div>`;
 }
@@ -4337,7 +4337,7 @@ function tarBuzonView(modo){
     const fijada = tarEstaFijada(t.id, me);
     const pinBtn = `<button onclick="event.stopPropagation();tarTogglePin('${t.id}')" title="${fijada?'Quitar de fijadas':'Fijar arriba'}" style="border:none;background:none;cursor:pointer;padding:0 7px 0 0;line-height:0;vertical-align:middle;color:${fijada?'#6E8E00':'#C7CDD1'}">${TAR_IC_PIN}</button>`;
     const quick = tarActiva(t)
-      ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 9px;white-space:nowrap" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
+      ? `<button class="btn btn-ghost btn-sm" style="padding:6px 8px;line-height:0;color:#6E8E00" title="Marcar como hecha" onclick="event.stopPropagation();tarMarcarHecha('${t.id}')"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></button>`
       : '';
     return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:#FBEEEA"':''}>
       <td class="tar-c-prio">${tarPrioChip(t.prioridad)}</td>
@@ -4355,7 +4355,7 @@ function tarBuzonView(modo){
     const fijada = tarEstaFijada(t.id, me);
     const pinBtn = `<button onclick="event.stopPropagation();tarTogglePin('${t.id}')" title="${fijada?'Quitar de fijadas':'Fijar arriba'}" style="border:none;background:none;cursor:pointer;padding:0 6px 0 0;line-height:0;vertical-align:middle;color:${fijada?'#6E8E00':'#C7CDD1'}">${TAR_IC_PIN}</button>`;
     const quick = tarActiva(t)
-      ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
+      ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcarHecha('${t.id}')">Marcar hecha</button>`
       : '';
     const dRest = tarDiasRest(t);
     let fechaLbl;
@@ -4439,7 +4439,7 @@ function tarSemanaView(){
     const activa = tarActiva(t), recibida = t.paraQuien===me;
     let btns='';
     if(activa) btns += `<button class="btn btn-ghost btn-sm" title="Posponer un día" onclick="event.stopPropagation();tarPosponer('${t.id}',1)">+1d</button>`;
-    if(activa && (recibida||admin)) btns += `<button class="btn btn-ghost btn-sm" title="Marcar hecha" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Hecha</button>`;
+    if(activa && (recibida||admin)) btns += `<button class="btn btn-ghost btn-sm" title="Marcar hecha" onclick="event.stopPropagation();tarMarcarHecha('${t.id}')">Hecha</button>`;
     return `<div onclick="openTarDet('${t.id}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-left:3px solid ${col};border-radius:8px;padding:7px 10px;${tach}">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tarNuevosPara(t,me)?'<span style="color:#6E8E00">● </span>':''}${t.horaInicio?`<span style="color:#5A6770;font-weight:700">${incEsc(t.horaInicio)} </span>`:''}${incEsc(t.titulo)}${(t.serieId||t.recurrencia)?' <span title="Recurrente" style="color:#8A949B">⟳</span>':''}</div>
@@ -4610,6 +4610,11 @@ function tarSetFecha(id, val){
   t.fechaLimite = val||''; render(); srvTarUpdate(id, t, val?`Fecha cambiada a ${fmtFecha(val)}`:'Fecha quitada');
 }
 
+function tarMarcarHecha(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  if(!confirm('¿Seguro que quieres marcar esta tarea como realizada?\n\n"'+(t.titulo||'')+'"')) return;
+  tarMarcar(id,'Hecha');
+}
 function tarMarcar(id,estado){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   t.estado=estado;
@@ -4977,7 +4982,7 @@ function tarDetModalContent(){
     if(t.estado==='Pendiente') tarAccItems+=_accItem('Marcar en curso',`tarMarcar('${t.id}','En curso')`);
     if(t.estado==='En espera') tarAccItems+=_accItem('Reanudar',`tarMarcar('${t.id}','En curso')`);
     else tarAccItems+=_accItem('Poner en espera',`tarMarcar('${t.id}','En espera')`);
-    tarPrimary=`<button class="btn btn-primary" onclick="tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`;
+    tarPrimary=`<button class="btn btn-primary" onclick="tarMarcarHecha('${t.id}')">Marcar hecha</button>`;
   }
   if((soyPara||soyDe||admin) && t.estado==='Hecha') tarAccItems+=_accItem('Reabrir',`tarMarcar('${t.id}','Pendiente')`);
   if(soyDe||admin) tarAccItems+=_accItem('Editar',`openTarEdit('${t.id}')`);
