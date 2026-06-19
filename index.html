@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-95">
+<meta name="lucai-version" content="2026-06-19-96">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -2787,8 +2787,8 @@ function homeView(){
 
   const first=S.user.nombre.split(' ')[0];
   const me=S.user&&S.user.nombre;
-  const taPend = (typeof tarActiva==='function') ? (S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t) && t.estado!=='En espera').length : 0;
-  const taVenc = (typeof tarVencida==='function') ? (S.tareas||[]).filter(t=>t.paraQuien===me && tarVencida(t)).length : 0;
+  const taPend = (typeof tarActiva==='function') ? tarCount((S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t) && t.estado!=='En espera')) : 0;
+  const taVenc = (typeof tarVencida==='function') ? tarCount((S.tareas||[]).filter(t=>t.paraQuien===me && tarVencida(t))) : 0;
   const taNuevos = (typeof tarMisNuevos==='function') ? tarMisNuevos(me) : 0;
   const comNL = (typeof comNoLeidasDe==='function') ? comNoLeidasDe(me) : 0;
   const COUNTS = {
@@ -4046,6 +4046,17 @@ function tarMonday(offset){ const t=tarDParse(todayStr()); const day=(t.getDay()
 function tarActiva(t){ return t.estado!=='Hecha'; }
 function tarPorHacer(t){ return tarActiva(t) && t.estado!=='En espera'; }
 function tarVencida(t){ return tarActiva(t) && t.fechaLimite && t.fechaLimite < todayStr(); }
+// Cuenta cada tarea periódica (misma serie) UNA sola vez. Las no periódicas cuentan individual.
+// Para una serie se queda con la ocurrencia activa más próxima (la de fecha menor) como representante.
+function tarUniqSerie(arr){
+  const map=new Map(); const singles=[];
+  (arr||[]).forEach(t=>{
+    if(t && t.serieId){ const ex=map.get(t.serieId); if(!ex || String(t.fechaLimite||'9999')<String(ex.fechaLimite||'9999')) map.set(t.serieId, t); }
+    else if(t) singles.push(t);
+  });
+  return singles.concat([...map.values()]);
+}
+function tarCount(arr){ return tarUniqSerie(arr).length; }
 function tarDiasRest(t){ if(!t.fechaLimite) return null; const d=Math.round((tarDParse(t.fechaLimite)-tarDParse(todayStr()))/86400000); return d; }
 function tarPrioChip(p){ return `<span class="inc-imp imp-${p||'Media'}">${p||'Media'}</span>`; }
 function tarEstadoLabel(e){ return e==='Hecha' ? 'Cerrada' : (e||'Pendiente'); }
@@ -4482,8 +4493,8 @@ function tarResKpi(label, value, color){ return `<div style="background:#fff;bor
 function tarMiResumen(me, desde, hasta, perLabel){
   const ent=tarTiemposDe(me, desde, hasta);
   const total=ent.reduce((s,e)=>s+e.min,0);
-  const porHacer=(S.tareas||[]).filter(t=>t.paraQuien===me && tarPorHacer(t)).length;
-  const espera=(S.tareas||[]).filter(t=>t.paraQuien===me && t.estado==='En espera').length;
+  const porHacer=tarCount((S.tareas||[]).filter(t=>t.paraQuien===me && tarPorHacer(t)));
+  const espera=tarCount((S.tareas||[]).filter(t=>t.paraQuien===me && t.estado==='En espera'));
   const terminadas=(S.tareas||[]).filter(t=>t.paraQuien===me && t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=desde && t.fechaHecha<=hasta).length;
   const areaMap={}; ent.forEach(e=>{ areaMap[e.area]=(areaMap[e.area]||0)+e.min; });
   const areas=Object.entries(areaMap).sort((a,b)=>b[1]-a[1]);
@@ -4507,9 +4518,9 @@ function tarEquipoPanel(desde, hasta, perLabel){
   const datos=people.map(p=>{
     const ent=tarTiemposDe(p, desde, hasta);
     const tiempo=ent.reduce((s,e)=>s+e.min,0);
-    const porHacer=(S.tareas||[]).filter(t=>(t.paraQuien===p||tarPartList(t).includes(p)) && tarPorHacer(t)).length;
-    const vencidas=(S.tareas||[]).filter(t=>(t.paraQuien===p||tarPartList(t).includes(p)) && tarVencida(t)).length;
-    const espera=(S.tareas||[]).filter(t=>(t.paraQuien===p||tarPartList(t).includes(p)) && t.estado==='En espera').length;
+    const porHacer=tarCount((S.tareas||[]).filter(t=>(t.paraQuien===p||tarPartList(t).includes(p)) && tarPorHacer(t)));
+    const vencidas=tarCount((S.tareas||[]).filter(t=>(t.paraQuien===p||tarPartList(t).includes(p)) && tarVencida(t)));
+    const espera=tarCount((S.tareas||[]).filter(t=>(t.paraQuien===p||tarPartList(t).includes(p)) && t.estado==='En espera'));
     const terminadas=(S.tareas||[]).filter(t=>(t.paraQuien===p||tarPartList(t).includes(p)) && t.estado==='Hecha' && t.fechaHecha && t.fechaHecha>=desde && t.fechaHecha<=hasta).length;
     return {p,tiempo,porHacer,vencidas,espera,terminadas};
   });
@@ -5364,8 +5375,8 @@ function tarNvBadge(t){
 function tarResumenBanner(){
   const me=S.user.nombre, first=me.split(' ')[0];
   const mias=(S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t));
-  const porHacer=mias.filter(t=>t.estado!=='En espera');
-  const espera=mias.filter(t=>t.estado==='En espera').length;
+  const porHacer=tarUniqSerie(mias.filter(t=>t.estado!=='En espera'));
+  const espera=tarCount(mias.filter(t=>t.estado==='En espera'));
   const venc=porHacer.filter(tarVencida).length;
   const hoy=porHacer.filter(t=>t.fechaLimite===todayStr()).length;
   const pend=porHacer.length;
@@ -5389,8 +5400,8 @@ homeView = function(){
   try{
     const me=S.user&&S.user.nombre;
     if(me){
-      const pend=(S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t) && t.estado!=='En espera').length;
-      const venc=(S.tareas||[]).filter(t=>t.paraQuien===me && tarVencida(t)).length;
+      const pend=tarCount((S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t) && t.estado!=='En espera'));
+      const venc=tarCount((S.tareas||[]).filter(t=>t.paraQuien===me && tarVencida(t)));
       const nuevos=tarMisNuevos(me);
       if(pend||nuevos){
         const col=venc?'#C0392B':'#5A6770';
@@ -5738,8 +5749,8 @@ function iaContexto(pregunta){
 
   const recib = (S.tareas||[]).filter(t=> t.paraQuien===me || tarPartList(t).includes(me));
   const act = recib.filter(activa);
-  const porHacer = act.filter(t=>t.estado!=='En espera');
-  const espera = act.filter(t=>t.estado==='En espera');
+  const porHacer = tarUniqSerie(act.filter(t=>t.estado!=='En espera'));
+  const espera = tarUniqSerie(act.filter(t=>t.estado==='En espera'));
   const venc = porHacer.filter(t=> t.fechaLimite && t.fechaLimite<hoy);
   const hoyT = porHacer.filter(t=> t.fechaLimite===hoy);
   out.push(`\n[RESUMEN] ${porHacer.length} por hacer · ${espera.length} en espera de otros · ${venc.length} vencidas · ${hoyT.length} para hoy.`);
