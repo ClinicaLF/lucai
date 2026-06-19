@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-103">
+<meta name="lucai-version" content="2026-06-19-104">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4290,12 +4290,13 @@ function tarTopUpSeries(){
 function tareasView(){
   if(!window._tarToppedUp){ window._tarToppedUp=true; setTimeout(tarTopUpSeries, 50); }
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_resumen'];
+  const subs = admin ? ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
-  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_semana:'Semana',tar_todas:'Equipo',tar_resumen:'Resumen'};
+  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_semana:'Semana',tar_cal:'Calendario',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
+  else if(sub==='tar_cal') body=tarCalendarView();
   else if(sub==='tar_todas') body=tarTodasView();
   else if(sub==='tar_resumen') body=tarResumenView();
   else if(sub==='tar_emitidas') body=tarBuzonView('emitidas');
@@ -4320,6 +4321,99 @@ function tareasView(){
   ${S.tarDelId?tarDelScopeModal():''}`;
 }
 
+/* ===================== CALENDARIO (día / semana / mes) ===================== */
+const CAL_DOW=['L','M','X','J','V','S','D'];
+function _calDow(iso){ const g=new Date(iso+'T00:00:00').getDay(); return (g+6)%7; } /* 0=Lunes */
+function _calLunes(iso){ return tarAddDias(iso, -_calDow(iso)); }
+function _calMonNombre(iso){ return new Date(iso+'T00:00:00').toLocaleDateString('es-ES',{month:'long',year:'numeric'}); }
+function _calDiaNombre(iso){ return new Date(iso+'T00:00:00').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}); }
+function _calRangoSemana(ref){ const lun=_calLunes(ref), dom=tarAddDias(lun,6); const a=new Date(lun+'T00:00:00'), b=new Date(dom+'T00:00:00');
+  const mA=a.toLocaleDateString('es-ES',{month:'short'}), mB=b.toLocaleDateString('es-ES',{month:'short'});
+  return mA===mB ? `${a.getDate()}–${b.getDate()} ${mB}` : `${a.getDate()} ${mA} – ${b.getDate()} ${mB}`; }
+function _calVisibles(){ const me=S.user.nombre, admin=isAdmin(); return (S.tareas||[]).filter(t=> tarActiva(t) && (admin||tarInvolucra(t,me))); }
+function _calDe(iso){ return _calVisibles().filter(t=>t.fechaLimite===iso).sort((a,b)=>{ const ha=a.horaInicio||'99:99', hb=b.horaInicio||'99:99'; return ha<hb?-1:(ha>hb?1:0); }); }
+function _calColor(t){ return t.estado==='En espera' ? '#8A5A00' : (t.prioridad==='Alta'?'#C0392B':(t.prioridad==='Baja'?'#6E8E00':'#B8860B')); }
+function setCalMode(m){ S.calMode=m; render(); }
+function calToday(){ S.calRef=todayStr(); render(); }
+function calOpenDia(iso){ S.calRef=iso; S.calMode='dia'; render(); }
+function openReunion(day){ day=day||S.calRef||todayStr(); openTarea({fechaLimite:day, horaInicio:'09:00', horaFin:'09:30'}); }
+function calStep(dir){
+  const mode=S.calMode||'mes', ref=S.calRef||todayStr();
+  if(mode==='dia') S.calRef=tarAddDias(ref, dir);
+  else if(mode==='semana') S.calRef=tarAddDias(ref, dir*7);
+  else { const d=new Date(ref+'T00:00:00'); d.setDate(1); d.setMonth(d.getMonth()+dir); S.calRef=d.toISOString().slice(0,10); }
+  render();
+}
+function _calChip(t){
+  const col=_calColor(t); const hora=t.horaInicio?`<b>${incEsc(t.horaInicio)}</b> `:''; const rec=(t.serieId||t.recurrencia)?' ⟳':'';
+  return `<button onclick="openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="display:block;width:100%;text-align:left;border:none;border-left:3px solid ${col};background:#F7F4EE;border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:12.5px;color:#333F48;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hora}${incEsc(t.titulo||'(sin título)')}${rec}</button>`;
+}
+function _calMes(ref){
+  const d=new Date(ref+'T00:00:00'); d.setDate(1); const primero=d.toISOString().slice(0,10);
+  const inicioGrid=tarAddDias(primero, -_calDow(primero)); const mesActual=primero.slice(0,7);
+  let celdas=''; let cur=inicioGrid;
+  for(let i=0;i<42;i++){
+    const enMes=cur.slice(0,7)===mesActual, hoy=cur===todayStr(), items=_calDe(cur), max=3;
+    const chips=items.slice(0,max).map(t=>{ const col=_calColor(t); const h=t.horaInicio?incEsc(t.horaInicio)+' ':''; return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="border-left:3px solid ${col};background:#F7F4EE;border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h}${incEsc(t.titulo||'')}</div>`; }).join('');
+    const mas=items.length>max?`<div style="font-size:9.5px;color:#8A949B">+${items.length-max} más</div>`:'';
+    celdas+=`<div onclick="calOpenDia('${cur}')" style="min-height:76px;border:1px solid var(--line);border-radius:8px;padding:3px 4px;background:${enMes?'#fff':'#FAF8F3'};opacity:${enMes?1:.55};cursor:pointer;overflow:hidden">
+        <div style="font-size:11px;font-weight:700;color:${hoy?'#fff':'#5A6770'};${hoy?'background:#A8B400;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;margin-left:auto':'text-align:right'}">${cur.slice(8,10)*1}</div>
+        ${chips}${mas}
+      </div>`;
+    cur=tarAddDias(cur,1);
+  }
+  const head=CAL_DOW.map(x=>`<div style="text-align:center;font-size:11px;font-weight:700;color:#8A949B;padding:4px 0">${x}</div>`).join('');
+  return `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${head}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:3px">${celdas}</div>`;
+}
+function _calSemana(ref){
+  const lun=_calLunes(ref); let out='';
+  for(let i=0;i<7;i++){ const dia=tarAddDias(lun,i), items=_calDe(dia), hoy=dia===todayStr();
+    const dn=new Date(dia+'T00:00:00').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'short'});
+    out+=`<div style="border:1px solid var(--line);border-left:4px solid ${hoy?'#A8B400':'var(--line)'};border-radius:10px;padding:8px 10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${items.length?6:0}px">
+          <strong style="font-size:13px;text-transform:capitalize;color:${hoy?'#5A6E00':'#333F48'}">${incEsc(dn)}</strong>
+          <button class="btn btn-ghost btn-sm" onclick="openReunion('${dia}')" title="Nueva reunión este día" style="padding:3px 9px">＋</button>
+        </div>
+        ${items.length? items.map(_calChip).join('') : '<div style="font-size:12px;color:#A9B0B6">—</div>'}
+      </div>`;
+  }
+  return out;
+}
+function _calDia(ref){
+  const items=_calDe(ref), conHora=items.filter(t=>t.horaInicio), sinHora=items.filter(t=>!t.horaInicio);
+  let out=`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px">`;
+  if(!items.length){ out+=`<div style="font-size:13px;color:#8A949B">Nada para este día. Pulsa "Nueva reunión" para añadir algo.</div>`; }
+  else{
+    if(conHora.length){ out+=conHora.map(t=>{ const col=_calColor(t); const fin=t.horaFin?('–'+incEsc(t.horaFin)):''; return `<div onclick="openTarDet('${t.id}')" style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #F0EBE1;cursor:pointer">
+        <div style="font-weight:700;font-size:13px;color:#5A6770;min-width:84px">${incEsc(t.horaInicio)}${fin}</div>
+        <div style="flex:1;border-left:3px solid ${col};padding-left:9px"><div style="font-weight:600;font-size:14px">${incEsc(t.titulo||'')}${(t.serieId||t.recurrencia)?' ⟳':''}</div><div style="font-size:12px;color:#8A949B">${incEsc(t.area||'General')} · para ${incEsc(t.paraQuien||'')}</div></div></div>`; }).join(''); }
+    if(sinHora.length){ out+=`<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8A949B;margin:${conHora.length?'12px':'0'} 0 6px">Sin hora concreta</div>`+sinHora.map(_calChip).join(''); }
+  }
+  out+=`</div>`;
+  return out;
+}
+function tarCalendarView(){
+  if(!S.calMode) S.calMode='mes';
+  if(!S.calRef) S.calRef=todayStr();
+  const mode=S.calMode, ref=S.calRef;
+  let titulo = mode==='mes'?_calMonNombre(ref):(mode==='semana'?('Semana · '+_calRangoSemana(ref)):_calDiaNombre(ref));
+  titulo = titulo.charAt(0).toUpperCase()+titulo.slice(1);
+  const toggle = ['dia','semana','mes'].map(m=>`<button class="${mode===m?'on':''}" onclick="setCalMode('${m}')">${({dia:'Día',semana:'Semana',mes:'Mes'})[m]}</button>`).join('');
+  const bar=`<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="calStep(-1)" aria-label="Anterior" style="padding:6px 11px;font-size:16px;line-height:1">‹</button>
+        <button class="btn btn-ghost btn-sm" onclick="calToday()">Hoy</button>
+        <button class="btn btn-ghost btn-sm" onclick="calStep(1)" aria-label="Siguiente" style="padding:6px 11px;font-size:16px;line-height:1">›</button>
+        <strong style="font-size:15px;margin-left:4px">${incEsc(titulo)}</strong>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="seg">${toggle}</div>
+        <button class="btn btn-primary btn-sm" onclick="openReunion()">Nueva reunión</button>
+      </div>
+    </div>`;
+  const cuerpo = mode==='mes'?_calMes(ref):(mode==='semana'?_calSemana(ref):_calDia(ref));
+  return bar+cuerpo;
+}
 function tarKpis(arr){
   const act=arr.filter(tarActiva);
   const porHacer=act.filter(t=>t.estado!=='En espera').length;
@@ -4885,8 +4979,9 @@ function tarAreaDelete(i){
   if(areas.length<=1){ toast('Debe quedar al menos un área'); return; }
   areas.splice(i,1); S.tarAreas=areas; _tarPersistAreas(); render(); toast('Área borrada');
 }
-function openTarea(){
+function openTarea(preset){
   F={type:'tar_nuevo', id:uid(), titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre, horaInicio:'', horaFin:'', adjuntos:[], participantes:[], recurTipo:'no', recurDias:[], recurHasta:''};
+  if(preset && typeof preset==='object') Object.assign(F, preset);
   S.modal='tar_nuevo'; render();
 }
 function setTarRecurTipo(v){ F.recurTipo=v; if(v==='semanal' && (!F.recurDias||!F.recurDias.length) && F.fechaLimite){ F.recurDias=[tarDow(F.fechaLimite)]; } render(); }
