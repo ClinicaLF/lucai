@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-97">
+<meta name="lucai-version" content="2026-06-19-98">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -7647,6 +7647,140 @@ function temaNuevoModalContent(){
 }
 /* ===== FIN MÓDULO TEMAS ===== */
 
+
+/* ============================================================
+   CARGAR COMPRA CON FOTO / PDF  (lee con IA y carga al almacén)
+   ============================================================ */
+const LEER_FN = 'https://wnwuvgrpmokwkelqhzuz.supabase.co/functions/v1/leer-pedido';
+
+(function(){ if(!document.getElementById('cargaSpinCss')){ var s=document.createElement('style'); s.id='cargaSpinCss'; s.textContent='@keyframes cargaspin{to{transform:rotate(360deg)}}'; document.head.appendChild(s); } })();
+
+function _cargaNorm(s){ return (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,''); }
+
+function cargaPedidoOpen(){ F = { type:'cargafoto', step:'pick', lineas:[], proveedor:'', fileName:'', error:'' }; S.modal='cargafoto'; render(); }
+
+function cargaPedidoFile(input){
+  const f = input && input.files && input.files[0]; if(!f) return;
+  if(f.size > 8*1024*1024){ toast('El archivo es muy grande (máximo 8 MB). Haz la foto con menos calidad o sube un PDF.'); return; }
+  const reader = new FileReader();
+  reader.onerror = ()=>{ toast('No se pudo leer el archivo'); };
+  reader.onload = async ()=>{
+    try{
+      const b64 = String(reader.result).split(',')[1] || '';
+      F.fileName = f.name || 'documento'; F.error=''; F.step='reading'; render();
+      const arts = (S.articulos||[]).filter(a=>a.activo!==false).map(a=>({cod:a.cod, nombre:a.nombre}));
+      const provs = S.proveedores||[];
+      const r = await fetch(LEER_FN, { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ file:b64, mediaType:(f.type||'application/octet-stream'), articulos:arts, proveedores:provs }) });
+      const data = await r.json().catch(()=>null);
+      if(!r.ok || !data || data.ok===false){ throw new Error((data&&data.error)||('Error '+r.status)); }
+      const lineas = (Array.isArray(data.lineas)?data.lineas:[]).map(l=>{
+        let cod = (l.cod && art(l.cod)) ? l.cod : '';
+        if(!cod && l.nombre){
+          const nl = _cargaNorm(l.nombre);
+          const m = (S.articulos||[]).filter(a=>a.activo!==false).find(a=>{ const na=_cargaNorm(a.nombre); return na && nl && (na===nl || na.indexOf(nl)>=0 || nl.indexOf(na)>=0); });
+          if(m) cod = m.cod;
+        }
+        return { nombre:(l.nombre||'').toString(), cant: Math.max(0, parseFloat(String(l.cantidad).replace(',','.'))||0), precio: Math.max(0, parseFloat(String(l.precio).replace(',','.'))||0), cod, incluir: !!cod };
+      });
+      F.lineas = lineas; F.proveedor = (data.proveedor||'').toString(); F.step='review'; render();
+    }catch(e){ console.error('cargaPedidoFile', e); F.step='pick'; F.error=(e&&e.message)||String(e); render(); }
+  };
+  reader.readAsDataURL(f);
+}
+
+function cargaSetCant(i,v){ if(F.lineas&&F.lineas[i]){ F.lineas[i].cant=Math.max(0, parseFloat(String(v).replace(',','.'))||0); render(); } }
+function cargaSetPrecio(i,v){ if(F.lineas&&F.lineas[i]){ F.lineas[i].precio=Math.max(0, parseFloat(String(v).replace(',','.'))||0); render(); } }
+function cargaSetCod(i,cod){ if(F.lineas&&F.lineas[i]){ F.lineas[i].cod=cod; F.lineas[i].incluir=!!cod; render(); } }
+function cargaToggle(i){ if(F.lineas&&F.lineas[i]){ if(!F.lineas[i].cod){ toast('Primero asigna un artículo del almacén'); return; } F.lineas[i].incluir=!F.lineas[i].incluir; render(); } }
+
+async function cargaPedidoConfirm(){
+  const sel = (F.lineas||[]).filter(l=> l.incluir && l.cod && art(l.cod) && l.cant>0);
+  if(!sel.length){ toast('No hay líneas listas. Asigna artículo y cantidad a lo que quieras cargar.'); return; }
+  const ts = todayStr();
+  F.step='saving'; render();
+  try{
+    for(const l of sel){
+      const a=art(l.cod); if(!a) continue;
+      const mov={ id:uid(), ts:tsFrom(ts), tipo:'entrada', user:S.user.nombre, cod:l.cod, nombre:a.nombre, cant:l.cant, precio:(l.precio>0?l.precio:0), motivo:'Carga desde albarán/factura'+(F.proveedor?(' · '+F.proveedor):''), pac:null };
+      await _rpcMov(mov);
+    }
+    closeModal(); await loadFromDB(); render(); toast('Cargados '+sel.length+' artículo'+(sel.length>1?'s':'')+' · stock actualizado');
+  }catch(e){ console.error('cargaPedidoConfirm', e); await syncAll(); toast('Error al cargar: '+((e&&e.message)||e)); F.step='review'; render(); }
+}
+
+function cargaPedidoModal(){
+  if(F.step==='review' || F.step==='saving'){
+    const opts = (sel)=> '<option value="">— sin asignar —</option>' + (S.articulos||[]).filter(a=>a.activo!==false).map(a=>`<option value="${a.cod}" ${sel===a.cod?'selected':''}>${incEsc(a.nombre)}</option>`).join('');
+    const filas = (F.lineas||[]).map((l,i)=>{
+      const matched = !!l.cod && !!art(l.cod);
+      return `<tr style="${matched?'':'background:#FBEEEA'}">
+        <td style="text-align:center;padding:8px 6px"><input type="checkbox" ${l.incluir?'checked':''} ${matched?'':'disabled'} onchange="cargaToggle(${i})"></td>
+        <td style="padding:8px 6px;min-width:160px">
+          <div style="font-size:12px;color:#8A949B;margin-bottom:3px">${incEsc(l.nombre||'—')}</div>
+          <select class="inp" style="font-size:13px;padding:6px 8px" onchange="cargaSetCod(${i},this.value)">${opts(l.cod)}</select>
+          ${matched?'':`<div style="font-size:11.5px;color:#C0392B;font-weight:600;margin-top:3px">No existe en el almacén · créalo a mano</div>`}
+        </td>
+        <td style="padding:8px 6px"><input class="inp" type="number" min="0" step="1" value="${l.cant}" onchange="cargaSetCant(${i},this.value)" style="width:72px;font-size:13px;padding:6px 8px"></td>
+        <td style="padding:8px 6px"><input class="inp" type="number" min="0" step="0.01" value="${l.precio}" onchange="cargaSetPrecio(${i},this.value)" style="width:86px;font-size:13px;padding:6px 8px"></td>
+      </tr>`;
+    }).join('');
+    const nOk = (F.lineas||[]).filter(l=>l.incluir && l.cod && art(l.cod) && l.cant>0).length;
+    const nNo = (F.lineas||[]).filter(l=>!l.cod).length;
+    const saving = F.step==='saving';
+    const body = `
+      ${F.proveedor?`<div style="font-size:13px;color:#5A6770;margin-bottom:8px">Proveedor detectado: <strong style="color:#333F48">${incEsc(F.proveedor)}</strong></div>`:''}
+      ${(F.lineas&&F.lineas.length)?`
+        <div style="font-size:12.5px;color:#5A6770;margin-bottom:8px">Revisa y corrige lo que haga falta, y marca lo que quieras cargar.${nNo?` <span style="color:#C0392B">Hay ${nNo} que no existe${nNo>1?'n':''} en el almacén: créalo${nNo>1?'s':''} a mano y vuelve a subir el documento.</span>`:''}</div>
+        <div class="inctable-wrap" style="max-height:46vh;overflow:auto">
+          <table class="inctable"><thead><tr><th style="text-align:center">Cargar</th><th>Artículo</th><th>Cant.</th><th>Precio ud.</th></tr></thead>
+          <tbody>${filas}</tbody></table>
+        </div>`
+        : `<div style="padding:18px 0;color:#5A6770;font-size:13.5px">La IA no encontró líneas claras en el documento. Prueba con una foto más nítida o un PDF.</div>`}
+    `;
+    return `<div class="overlay"><div class="modal" style="max-width:680px">
+      <div class="modal-head"><h2>Cargar compra</h2><button class="x" onclick="closeModal()">×</button></div>
+      <div class="modal-body">${body}</div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" ${(!nOk||saving)?'disabled':''} onclick="cargaPedidoConfirm()">${saving?'Cargando…':('Cargar '+nOk+' al almacén')}</button>
+      </div>
+    </div></div>`;
+  }
+  const reading = F.step==='reading';
+  const body = `
+    <p style="font-size:13.5px;color:#5A6770;line-height:1.5;margin-bottom:14px">Sube una foto o un PDF del albarán o la factura. La IA leerá los artículos, las cantidades y los precios, y te dejará revisarlo todo antes de cargarlo al almacén.</p>
+    ${reading
+      ? `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:26px 0"><div style="width:34px;height:34px;border:3px solid #E4DDD0;border-top-color:#6E8E00;border-radius:50%;animation:cargaspin .8s linear infinite"></div><div style="font-size:13.5px;color:#5A6770">Leyendo <strong>${incEsc(F.fileName||'documento')}</strong>…</div><div style="font-size:12px;color:#8A949B">Puede tardar unos segundos.</div></div>`
+      : `<label class="btn btn-primary" style="display:inline-flex;cursor:pointer">Elegir foto o PDF<input type="file" accept="image/*,application/pdf" onchange="cargaPedidoFile(this)" style="display:none"></label>
+         ${F.error?`<div style="margin-top:12px;color:#C0392B;font-size:13px">No se pudo leer: ${incEsc(F.error)}</div>`:''}`}
+  `;
+  return `<div class="overlay"><div class="modal" style="max-width:520px">
+    <div class="modal-head"><h2>Cargar compra</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">${body}</div>
+  </div></div>`;
+}
+
+/* enganchar el modal nuevo y el botón en el módulo de material (gana la última) */
+(function(){
+  if(typeof modalContent==='function'){
+    const _mc = modalContent;
+    modalContent = function(){ try{ if(typeof F!=='undefined' && F && F.type==='cargafoto') return cargaPedidoModal(); }catch(_){ } return _mc.apply(this, arguments); };
+  }
+  if(typeof materialView==='function'){
+    const _mv = materialView;
+    materialView = function(){
+      let h = _mv.apply(this, arguments);
+      try{
+        const anchor = `<button class="btn btn-ghost" onclick="openModal('entrada')">Entrada directa</button>`;
+        if(h.indexOf(anchor)>=0 && h.indexOf('cargaPedidoOpen()')<0){
+          h = h.replace(anchor, anchor + ` <button class="btn btn-ghost" onclick="cargaPedidoOpen()">Cargar compra (foto/PDF)</button>`);
+        }
+      }catch(_){ }
+      return h;
+    };
+  }
+})();
 
 boot();
 
