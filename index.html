@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-92">
+<meta name="lucai-version" content="2026-06-19-93">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -585,6 +585,14 @@
   .tar-card-actions{ margin-top:11px; display:flex; justify-content:flex-end }
   .tar-card-actions .btn-sm{ font-size:13px; padding:8px 16px }
 }
+
+/* --- MATERIAL · gestión de proveedores --- */
+.prov-add{ display:flex; gap:10px; margin-bottom:16px }
+.prov-add .inp{ flex:1 }
+.prov-list{ border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff }
+.prov-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 14px; border-bottom:1px solid #F1ECE3 }
+.prov-row:last-child{ border-bottom:none }
+.prov-name{ font-weight:600; color:var(--ink) }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -976,6 +984,7 @@ function materialView(){
     <button class="${S.sub==='movs'?'on':''}" onclick="setSub('movs')">Movimientos</button>
     <button class="${S.sub==='segui'?'on':''}" onclick="setSub('segui')">Seguimiento</button>
     <button class="${S.sub==='arts'?'on':''}" onclick="setSub('arts')">Artículos</button>
+    <button class="${S.sub==='provs'?'on':''}" onclick="setSub('provs')">Proveedores</button>
     ${isAdmin()?`<button class="${S.sub==='valor'?'on':''}" onclick="setSub('valor')">Valor almacenado</button>`:''}
     ${isAdmin()?`<button class="${S.sub==='perdidas'?'on':''}" onclick="setSub('perdidas')">Pérdidas</button>`:''}
   </div>`;
@@ -985,9 +994,10 @@ function materialView(){
   else if(S.sub==='movs') body=movsView();
   else if(S.sub==='segui') body=seguiView();
   else if(S.sub==='arts') body=artsView();
+  else if(S.sub==='provs') body=proveedoresView();
   else if(S.sub==='valor') body=isAdmin()?valorView():stockView();
   else if(S.sub==='perdidas') body=isAdmin()?perdidasView():stockView();
-  const acts = (S.sub==='arts'||S.sub==='valor'||S.sub==='perdidas'||S.sub==='segui'||S.sub==='pedidos'||S.sub==='movs') ? '' : `
+  const acts = (S.sub==='arts'||S.sub==='provs'||S.sub==='valor'||S.sub==='perdidas'||S.sub==='segui'||S.sub==='pedidos'||S.sub==='movs') ? '' : `
     <div class="actions">
       <button class="btn btn-primary" onclick="openModal('salida')">Registrar salida</button>
       <button class="btn btn-ghost" onclick="openModal('entrada')">Entrada directa</button>
@@ -1007,6 +1017,48 @@ function materialView(){
   ${S.alert==='pedir'?pedirModal():S.alert==='cad'?cadModal():''}`;
 }
 function setSub(s){ S.sub=s; render(); }
+
+/* ---- PROVEEDORES (gestión directa) ---- */
+function proveedoresView(){
+  const provs = S.proveedores||[];
+  const listHtml = provs.length
+    ? `<div class="prov-list">${provs.map((p,i)=>`<div class="prov-row">
+          <span class="prov-name">${incEsc(p)}</span>
+          <button class="btn btn-ghost btn-sm" title="Borrar proveedor" onclick="provDel(${i})">Borrar</button>
+        </div>`).join('')}</div>`
+    : `<div class="muted" style="padding:18px;text-align:center;border:1px dashed var(--line);border-radius:12px">Aún no hay proveedores. Añade el primero arriba.</div>`;
+  return `
+    <div class="section-sub" style="margin:0 0 14px">Da de alta aquí tus proveedores. Después aparecerán en el desplegable al crear artículos y pedidos.</div>
+    <div class="prov-add">
+      <input class="inp" placeholder="Nombre del proveedor (ej. Ormco Ibérica)" value="${incEsc(F.provNuevo||'')}" oninput="F.provNuevo=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();provAdd()}">
+      <button class="btn btn-primary" onclick="provAdd()">Añadir</button>
+    </div>
+    ${listHtml}`;
+}
+function provAdd(){
+  const nombre = ((F.provNuevo||'').trim());
+  if(!nombre){ toast('Escribe el nombre del proveedor'); return; }
+  if((S.proveedores||[]).some(p=>p.toLowerCase()===nombre.toLowerCase())){ toast('Ese proveedor ya existe'); F.provNuevo=''; render(); return; }
+  if(!S.proveedores) S.proveedores=[];
+  S.proveedores.push(nombre);
+  S.proveedores.sort((a,b)=>a.localeCompare(b,'es'));
+  F.provNuevo='';
+  srvProveedor(nombre);
+  render();
+  toast('Proveedor añadido');
+}
+function provDel(i){
+  const nombre = (S.proveedores||[])[i];
+  if(nombre==null) return;
+  if(!confirm('¿Borrar el proveedor "'+nombre+'"?\n\nNo afecta a los artículos que ya lo tengan asignado.')) return;
+  S.proveedores = (S.proveedores||[]).filter((_,j)=>j!==i);
+  srvProveedorDel(nombre);
+  render();
+  toast('Proveedor borrado');
+}
+async function srvProveedorDel(nombre){
+  try{ await sbc.from('lucai_proveedores').delete().eq('nombre', nombre); }catch(e){ console.error('srvProveedorDel', e); }
+}
 
 /* ---- STOCK (lista compacta) ---- */
 function stockMatch(a){
