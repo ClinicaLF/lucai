@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-98">
+<meta name="lucai-version" content="2026-06-19-99">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -1020,41 +1020,83 @@ function setSub(s){ S.sub=s; render(); }
 
 /* ---- PROVEEDORES (gestión directa) ---- */
 function proveedoresView(){
-  const provs = S.proveedores||[];
-  const listHtml = provs.length
-    ? `<div class="prov-list">${provs.map((p,i)=>`<div class="prov-row">
-          <span class="prov-name">${incEsc(p)}</span>
-          <button class="btn btn-ghost btn-sm" title="Borrar proveedor" onclick="provDel(${i})">Borrar</button>
-        </div>`).join('')}</div>`
-    : `<div class="muted" style="padding:18px;text-align:center;border:1px dashed var(--line);border-radius:12px">Aún no hay proveedores. Añade el primero arriba.</div>`;
+  if(!S.proveedoresInfo) S.proveedoresInfo={};
+  const provs = (S.proveedores||[]);
+  const editing = S.provEdit;
+  let formHtml='';
+  if(editing){
+    const esNuevo = editing==='__new__';
+    formHtml = `<div style="border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;background:#FAF8F3">
+      <div style="font-family:var(--serif);font-size:16px;margin-bottom:10px">${esNuevo?'Nuevo proveedor':('Editar · '+incEsc(editing))}</div>
+      ${esNuevo?`<div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${incEsc(F.pvNombre||'')}" oninput="setInp('pvNombre',this.value)" placeholder="Ej. Ormco Ibérica"></div>`:''}
+      <div class="grid2">
+        <div class="fld" style="margin-top:0"><label>Teléfono</label><input class="inp" value="${incEsc(F.pvTel||'')}" oninput="setInp('pvTel',this.value)" placeholder="Ej. 968 00 00 00"></div>
+        <div class="fld" style="margin-top:0"><label>Contacto</label><input class="inp" value="${incEsc(F.pvContacto||'')}" oninput="setInp('pvContacto',this.value)" placeholder="Persona de contacto"></div>
+      </div>
+      <div class="grid2">
+        <div class="fld" style="margin-top:0"><label>Correo</label><input class="inp" type="email" value="${incEsc(F.pvEmail||'')}" oninput="setInp('pvEmail',this.value)" placeholder="correo@proveedor.com"></div>
+        <div class="fld" style="margin-top:0"><label>Web</label><input class="inp" value="${incEsc(F.pvWeb||'')}" oninput="setInp('pvWeb',this.value)" placeholder="www.proveedor.com"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button class="btn btn-ghost" onclick="provCancel()">Cancelar</button>
+        <button class="btn btn-primary" onclick="provSave()">Guardar</button>
+      </div>
+    </div>`;
+  }
+  const card = (p)=>{
+    const info = S.proveedoresInfo[p]||{};
+    const det=[];
+    if(info.telefono) det.push('Tel: '+incEsc(info.telefono));
+    if(info.contacto) det.push('Contacto: '+incEsc(info.contacto));
+    if(info.email) det.push(`<a href="mailto:${incEsc(info.email)}" style="color:#6E8E00">${incEsc(info.email)}</a>`);
+    if(info.web){ const url=/^https?:/i.test(info.web)?info.web:('https://'+info.web); det.push(`<a href="${incEsc(url)}" target="_blank" rel="noopener" style="color:#6E8E00">${incEsc(info.web)}</a>`); }
+    const pj = (p||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div style="min-width:0"><div style="font-weight:700">${incEsc(p)}</div>${det.length?`<div style="font-size:12.5px;color:#5A6770;margin-top:3px;line-height:1.55">${det.join(' · ')}</div>`:`<div style="font-size:12px;color:#A9B0B6;margin-top:3px">Sin datos de contacto. Dale a Editar para añadirlos.</div>`}</div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-ghost btn-sm" onclick="provEditStart('${pj}')">Editar</button>
+          <button class="btn btn-ghost btn-sm" title="Borrar proveedor" onclick="provDelByName('${pj}')">Borrar</button>
+        </div>
+      </div>
+    </div>`;
+  };
+  const listHtml = provs.length ? provs.map(card).join('') : `<div class="muted" style="padding:18px;text-align:center;border:1px dashed var(--line);border-radius:12px">Aún no hay proveedores. Añade el primero con el botón de arriba.</div>`;
   return `
-    <div class="section-sub" style="margin:0 0 14px">Da de alta aquí tus proveedores. Después aparecerán en el desplegable al crear artículos y pedidos.</div>
-    <div class="prov-add">
-      <input class="inp" placeholder="Nombre del proveedor (ej. Ormco Ibérica)" value="${incEsc(F.provNuevo||'')}" oninput="F.provNuevo=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();provAdd()}">
-      <button class="btn btn-primary" onclick="provAdd()">Añadir</button>
+    <div class="toolbar" style="margin:6px 0 12px">
+      <div><div class="section-sub" style="margin:0">Ficha de cada proveedor: teléfono, contacto, correo y web. Aparecen en el desplegable al crear artículos y pedidos.</div></div>
+      <div class="actions">${editing?'':`<button class="btn btn-primary" onclick="provNew()">＋ Nuevo proveedor</button>`}</div>
     </div>
+    ${formHtml}
     ${listHtml}`;
 }
-function provAdd(){
-  const nombre = ((F.provNuevo||'').trim());
+function provNew(){ S.provEdit='__new__'; F.pvNombre=''; F.pvTel=''; F.pvContacto=''; F.pvEmail=''; F.pvWeb=''; render(); }
+function provEditStart(nombre){ const info=(S.proveedoresInfo||{})[nombre]||{}; S.provEdit=nombre; F.pvNombre=nombre; F.pvTel=info.telefono||''; F.pvContacto=info.contacto||''; F.pvEmail=info.email||''; F.pvWeb=info.web||''; render(); }
+function provCancel(){ S.provEdit=null; render(); }
+function provSave(){
+  if(!S.proveedoresInfo) S.proveedoresInfo={};
+  const esNuevo = S.provEdit==='__new__';
+  const nombre = esNuevo ? (F.pvNombre||'').trim() : S.provEdit;
   if(!nombre){ toast('Escribe el nombre del proveedor'); return; }
-  if((S.proveedores||[]).some(p=>p.toLowerCase()===nombre.toLowerCase())){ toast('Ese proveedor ya existe'); F.provNuevo=''; render(); return; }
-  if(!S.proveedores) S.proveedores=[];
-  S.proveedores.push(nombre);
-  S.proveedores.sort((a,b)=>a.localeCompare(b,'es'));
-  F.provNuevo='';
-  srvProveedor(nombre);
-  render();
-  toast('Proveedor añadido');
+  if(esNuevo && (S.proveedores||[]).some(p=>p.toLowerCase()===nombre.toLowerCase())){ toast('Ese proveedor ya existe'); return; }
+  const info={ telefono:(F.pvTel||'').trim(), contacto:(F.pvContacto||'').trim(), email:(F.pvEmail||'').trim(), web:(F.pvWeb||'').trim() };
+  if(esNuevo){ if(!S.proveedores) S.proveedores=[]; S.proveedores.push(nombre); S.proveedores.sort((a,b)=>a.localeCompare(b,'es')); }
+  S.proveedoresInfo[nombre]=info;
+  S.provEdit=null; render();
+  srvProveedorFull(nombre, info, esNuevo?'Proveedor añadido':'Ficha guardada');
 }
-function provDel(i){
-  const nombre = (S.proveedores||[])[i];
+function provDelByName(nombre){
   if(nombre==null) return;
   if(!confirm('¿Borrar el proveedor "'+nombre+'"?\n\nNo afecta a los artículos que ya lo tengan asignado.')) return;
-  S.proveedores = (S.proveedores||[]).filter((_,j)=>j!==i);
-  srvProveedorDel(nombre);
-  render();
-  toast('Proveedor borrado');
+  S.proveedores=(S.proveedores||[]).filter(p=>p!==nombre);
+  if(S.proveedoresInfo) delete S.proveedoresInfo[nombre];
+  if(S.provEdit===nombre) S.provEdit=null;
+  srvProveedorDel(nombre); render(); toast('Proveedor borrado');
+}
+async function srvProveedorFull(nombre, info, okMsg){
+  try{ const { error } = await sbc.from('lucai_proveedores').upsert({ nombre, telefono:info.telefono||null, contacto:info.contacto||null, email:info.email||null, web:info.web||null }, { onConflict:'nombre' }); if(error) throw error; }
+  catch(e){ console.error('srvProveedorFull', e); toast('Error al guardar proveedor: '+(e.message||e)); return; }
+  if(okMsg) toast(okMsg);
 }
 async function srvProveedorDel(nombre){
   try{ await sbc.from('lucai_proveedores').delete().eq('nombre', nombre); }catch(e){ console.error('srvProveedorDel', e); }
@@ -1310,8 +1352,22 @@ function seguiView(){
 
 /* ---- ARTÍCULOS ---- */
 function artsView(){
-  const list=[...S.articulos].sort((a,b)=>(a.activo===false?1:0)-(b.activo===false?1:0)||a.categoria.localeCompare(b.categoria)||a.nombre.localeCompare(b.nombre));
-  const rows=list.map(a=>`<tr style="${a.activo===false?'opacity:.5':''}">
+  if(!S.artF) S.artF={q:'',cat:'',sort:'cat'};
+  const f=S.artF;
+  const norm=s=>(s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const cats=[...new Set(S.articulos.map(a=>a.categoria))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'es'));
+  let list=S.articulos.filter(a=>{
+    if(f.cat && a.categoria!==f.cat) return false;
+    if(f.q){ const q=norm(f.q); if(!(norm(a.nombre).includes(q)||norm(a.cod).includes(q)||norm(a.proveedor).includes(q))) return false; }
+    return true;
+  });
+  list=[...list].sort((a,b)=>{
+    const ba=(a.activo===false?1:0)-(b.activo===false?1:0); if(ba) return ba;
+    if(f.sort==='nombre') return a.nombre.localeCompare(b.nombre,'es');
+    if(f.sort==='cod') return String(a.cod).localeCompare(String(b.cod),'es',{numeric:true});
+    return a.categoria.localeCompare(b.categoria,'es')||a.nombre.localeCompare(b.nombre,'es');
+  });
+  const rows = list.length ? list.map(a=>`<tr style="${a.activo===false?'opacity:.5':''}">
     <td data-label="Código" class="mono">${a.cod}</td>
     <td data-label="Nombre"><strong>${a.nombre}</strong></td>
     <td data-label="Categoría">${a.categoria}</td>
@@ -1319,17 +1375,34 @@ function artsView(){
     <td data-label="Mínimo" class="mono">${a.min}</td>
     <td data-label="Precio ref." class="mono">${a.precioRef?eur(a.precioRef):'<span class="muted">—</span>'}</td>
     <td data-label="Acción"><button class="btn btn-ghost btn-sm" onclick="openEdit('${a.cod}')">${a.activo===false?'Reactivar':'Editar'}</button></td>
-  </tr>`).join("");
+  </tr>`).join("") : `<tr><td colspan="7" style="text-align:center;color:#8A949B;padding:18px">No hay artículos que coincidan con la búsqueda.</td></tr>`;
+  const catOpts=`<option value="">Todas las familias</option>`+cats.map(c=>`<option value="${incEsc(c)}" ${f.cat===c?'selected':''}>${incEsc(c)}</option>`).join('');
+  const sortOpts=[['cat','Orden: por familia'],['nombre','Orden: alfabético (A-Z)'],['cod','Orden: por código']].map(o=>`<option value="${o[0]}" ${f.sort===o[0]?'selected':''}>${o[1]}</option>`).join('');
+  const lupa=`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;
+  const bar=`<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px">
+      <div style="position:relative;flex:1;min-width:170px">
+        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#8A949B;line-height:0">${lupa}</span>
+        <input id="artQ" class="inp" style="padding-left:34px;width:100%" placeholder="Buscar por nombre, código o proveedor…" value="${incEsc(f.q||'')}" oninput="setArtQuery(this.value)">
+      </div>
+      <select class="inp" style="max-width:220px" onchange="setArtCat(this.value)">${catOpts}</select>
+      <select class="inp" style="max-width:200px" onchange="setArtSort(this.value)">${sortOpts}</select>
+      ${(f.q||f.cat)?`<button class="btn btn-ghost btn-sm" onclick="setArtClear()">Quitar filtros</button>`:''}
+    </div>`;
   return `<div class="toolbar" style="margin:6px 0 14px">
       <div><div class="section-title">Artículos</div>
       <div class="section-sub" style="margin:0">Catálogo único. Misma ficha para todos: código, nombre, categoría, proveedor habitual, mínimo y precio de referencia.</div></div>
       <div class="actions"><button class="btn btn-primary" onclick="openModal('articulo')">＋ Nuevo artículo</button></div>
     </div>
+    ${bar}
     <div class="matrix"><table>
       <thead><tr><th>Código</th><th>Nombre</th><th>Categoría</th><th>Proveedor habitual</th><th>Mínimo</th><th>Precio ref.</th><th>Acción</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
 }
+function setArtQuery(v){ if(!S.artF)S.artF={q:'',cat:'',sort:'cat'}; S.artF.q=v; render(); const n=el('artQ'); if(n){ n.focus(); const val=n.value; n.value=''; n.value=val; } }
+function setArtCat(v){ if(!S.artF)S.artF={q:'',cat:'',sort:'cat'}; S.artF.cat=v; render(); }
+function setArtSort(v){ if(!S.artF)S.artF={q:'',cat:'',sort:'cat'}; S.artF.sort=v; render(); }
+function setArtClear(){ S.artF={q:'',cat:'',sort:(S.artF&&S.artF.sort)||'cat'}; render(); }
 
 /* ---- ALERTAS / CAMPANAS (separadas) ---- */
 function showCadPop(){
@@ -1564,10 +1637,11 @@ function articleModalContent(){
     <div class="modal-body">
       <div class="note" style="margin-top:0">Una sola ficha para cualquier tipo de material. El stock se cuenta en unidades (si una caja la tratas como 1, la registras como 1).</div>
       <div class="grid2">
-        <div class="fld" style="margin-top:0"><label>Código</label><input class="inp" placeholder="Ej. FUN-010" value="${F.acod}" oninput="setInp('acod',this.value)"></div>
+        <div class="fld" style="margin-top:0"><label>Código</label><input class="inp" placeholder="Ej. FUN-010" value="${F.acod}" oninput="setInp('acod',this.value);artDupCheck()"></div>
         <div class="fld" style="margin-top:0"><label>Categoría</label><select class="inp" onchange="setSel('acat',this.value)">${catOptions(F.acat)}</select></div>
       </div>
-      <div class="fld"><label>Nombre</label><input class="inp" placeholder="Nombre del artículo" value="${F.anombre}" oninput="setInp('anombre',this.value)"></div>
+      <div class="fld"><label>Nombre</label><input class="inp" placeholder="Nombre del artículo" value="${F.anombre}" oninput="setInp('anombre',this.value);artDupCheck()"></div>
+      <div id="artDupMsg" style="font-size:12.5px;margin:-2px 0 4px;min-height:16px"></div>
       <div class="fld"><label>Descripción (opcional)</label><textarea class="inp" placeholder="Notas sobre el material: referencia, medidas, marca, dónde se usa…" oninput="setInp('adesc',this.value)">${F.adesc||''}</textarea></div>
       <div class="fld"><label>Proveedor habitual</label>
         <select class="inp" onchange="setSel('aprov',this.value)">
@@ -1631,8 +1705,11 @@ function editArticleModalContent(){
         <button class="chip-sel ${F.eactivo?'on':''}" onclick="setToggle('eactivo',true)">Activo</button>
         <button class="chip-sel ${!F.eactivo?'on':''}" onclick="setToggle('eactivo',false)">Dado de baja</button></div>
       <div class="hint" style="text-align:left">Stock actual: ${a.stock} ud. · Coste medio: ${eur(a.cost||0)}/ud. (el stock se cambia desde salidas/entradas, no aquí)</div>
+      ${((a.stock||0)>0 || (S.movimientos||[]).some(m=>String(m.cod)===String(a.cod)))?`<div class="hint" style="text-align:left;color:#8A5A00">No se puede eliminar mientras tenga stock o movimientos registrados. Si ya no lo usas, dale a "Dado de baja".</div>`:''}
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <div class="modal-foot">
+      ${((a.stock||0)===0 && !(S.movimientos||[]).some(m=>String(m.cod)===String(a.cod)))?`<button class="btn btn-ghost" style="color:#C0392B;margin-right:auto" title="Eliminar definitivamente" onclick="artDelete('${a.cod}')">Eliminar</button>`:''}
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="commitEdit()">Guardar</button></div>
   </div></div>`;
 }
@@ -1890,7 +1967,7 @@ async function loadFromDB(){
   try{
     const [arts, provs, movs, peds, segs] = await Promise.all([
       sbc.from('lucai_articulos').select('*').order('cod'),
-      sbc.from('lucai_proveedores').select('nombre').order('nombre'),
+      sbc.from('lucai_proveedores').select('*').order('nombre'),
       sbc.from('lucai_movimientos').select('*').order('created_at',{ascending:false}),
       sbc.from('lucai_pedidos').select('*').order('created_at',{ascending:false}),
       sbc.from('lucai_seguimientos').select('*').order('created_at',{ascending:false}),
@@ -1900,7 +1977,7 @@ async function loadFromDB(){
       min:Number(r.min)||0, precioRef:Number(r.precio_ref)||0, stock:Number(r.stock)||0,
       cost:Number(r.cost)||0, aviso:r.aviso!==false, activo:r.activo!==false,
       caduca:r.caduca||null, trazable:r.trazable===true }));
-    if(provs.data) S.proveedores = provs.data.map(r=>r.nombre);
+    if(provs.data){ S.proveedores = provs.data.map(r=>r.nombre); S.proveedoresInfo = {}; provs.data.forEach(r=>{ S.proveedoresInfo[r.nombre] = { telefono:r.telefono||'', contacto:r.contacto||'', email:r.email||'', web:r.web||'' }; }); }
     if(movs.data) S.movimientos = movs.data.map(r=>({
       id:r.id, ts:r.ts, tipo:r.tipo, user:r.user_nombre, doctor:r.doctor, cod:r.cod,
       nombre:r.nombre, cant:Number(r.cant)||0,
@@ -2097,11 +2174,25 @@ function commitPedido(){
   srvProveedor(prov); srvPedidoInsert(ped, 'Pedido creado · pendiente de recibir');
 }
 
+function artDupCheck(){
+  const e=document.getElementById('artDupMsg'); if(!e) return;
+  const cod=(F.acod||'').trim().toUpperCase();
+  const nom=(F.anombre||'').trim();
+  const norm=s=>(s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+  let msg='';
+  const byCod = cod ? (S.articulos||[]).find(a=>String(a.cod).toUpperCase()===cod) : null;
+  if(byCod){ msg=`<span style="color:#C0392B;font-weight:600">Ese código ya existe: ${incEsc(byCod.nombre)}${byCod.activo===false?' (dado de baja)':''}. Usa otro código.</span>`; }
+  else if(nom){ const byNom=(S.articulos||[]).find(a=>norm(a.nombre)===norm(nom)); if(byNom){ msg=`<span style="color:#8A5A00;font-weight:600">Ojo: ya hay un artículo con ese nombre (${incEsc(byNom.cod)}). Comprueba que no lo estás duplicando.</span>`; } }
+  e.innerHTML = msg;
+}
 function commitArticulo(){
   const cod=(F.acod||'').trim().toUpperCase();
   const nombre=(F.anombre||'').trim();
   if(!cod||!nombre||!F.acat){ toast('Código, nombre y categoría son obligatorios'); return; }
-  if(art(cod)){ toast('Ese código ya existe'); return; }
+  if(art(cod)){ toast('Ese código ya existe. Cambia el código.'); return; }
+  const _norm=s=>(s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+  const dupNom=(S.articulos||[]).find(a=>_norm(a.nombre)===_norm(nombre));
+  if(dupNom && !confirm('Ya existe un artículo con ese nombre ('+dupNom.cod+'). ¿Crearlo de todas formas?')) return;
   const prov=(F.aprov==='__nuevo__'?(F.aprovNuevo||''):(F.aprov||'')).trim();
   if(prov && !S.proveedores.includes(prov)) S.proveedores.push(prov);
   const precio=parseFloat(String(F.aprecio).replace(',','.'))||0;
@@ -2109,6 +2200,20 @@ function commitArticulo(){
   S.articulos.push(nuevo);
   closeModal(); S.sub='arts'; render();
   srvProveedor(prov); srvArticulo(nuevo, 'Artículo creado');
+}
+async function srvArticuloDel(cod){
+  try{ const { error } = await sbc.from('lucai_articulos').delete().eq('cod', cod); if(error) throw error; }
+  catch(e){ console.error('srvArticuloDel', e); await syncAll(); toast('No se pudo eliminar: '+(e.message||e)); return false; }
+  return true;
+}
+async function artDelete(cod){
+  const a=art(cod); if(!a) return;
+  if((a.stock||0)>0){ toast('No se puede eliminar: tiene '+a.stock+' ud. en stock.'); return; }
+  if((S.movimientos||[]).some(m=>String(m.cod)===String(cod))){ toast('No se puede eliminar: ya tiene movimientos. Mejor dale de baja.'); return; }
+  if(!confirm('¿Eliminar definitivamente el artículo "'+a.nombre+'" ('+cod+')?\n\nNo se puede deshacer.')) return;
+  const ok=await srvArticuloDel(cod); if(!ok) return;
+  S.articulos = (S.articulos||[]).filter(x=>String(x.cod)!==String(cod));
+  closeModal(); render(); toast('Artículo eliminado');
 }
 
 function commitEdit(){
