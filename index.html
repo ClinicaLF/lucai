@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-91">
+<meta name="lucai-version" content="2026-06-19-92">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -566,6 +566,24 @@
   .tar-det-actions > *{ flex:1 1 0 }
   .tar-det-actions > .btn-primary{ flex:1.3 1 0 }
   .tar-det-actions .btn{ width:100%; justify-content:center; white-space:nowrap; padding-left:8px; padding-right:8px; font-size:13.5px }
+}
+
+/* --- TAREAS · lista como TARJETAS en móvil (tabla solo en escritorio) --- */
+.tar-cards{ display:none }
+@media(max-width:720px){
+  .tar-table-wrap{ display:none }
+  .tar-cards{ display:block; margin-top:4px }
+  .tar-card{ border:1px solid var(--line); border-radius:14px; padding:13px 14px; margin-bottom:10px; background:#fff; cursor:pointer }
+  .tar-card:active{ background:#FAF8F3 }
+  .tar-card-venc{ background:#FBEEEA }
+  .tar-card-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px }
+  .tar-card-fecha{ font-size:12.5px; color:#5A6770; white-space:nowrap; flex:0 0 auto }
+  .tar-card-title{ font-weight:700; font-size:15.5px; line-height:1.3; color:var(--ink);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+  .tar-card-desc{ font-size:13px; color:#6C757D; line-height:1.4; margin-top:5px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+  .tar-card-actions{ margin-top:11px; display:flex; justify-content:flex-end }
+  .tar-card-actions .btn-sm{ font-size:13px; padding:8px 16px }
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -4248,7 +4266,7 @@ function tarBuzonView(modo){
       <button class="btn btn-ghost btn-sm" onclick="tarToggleFilt()" style="width:100%;justify-content:center">${S.tarFiltOpen?'Ocultar filtros':'Filtros'}${nFilt?` · ${nFilt}`:''}</button>
       ${S.tarFiltOpen?`<div class="tar-mfilt-panel">${mPrio}${mCat}${mPersona}${mEstado}${mSearch}${mRango}${nFilt?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()" style="width:100%;justify-content:center">Limpiar filtros</button>`:''}</div>`:''}
     </div>`;
-  if(!list.length) return tarKpis(all)+toggle+mfilt+`<div class="inctable-wrap"><table class="inctable inctable-tar">${thead}<tbody><tr><td colspan="${esMias?6:7}" class="muted" style="padding:20px;text-align:center">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</td></tr></tbody></table></div>`;
+  if(!list.length) return tarKpis(all)+toggle+mfilt+`<div class="muted" style="padding:22px;text-align:center;border:1px solid var(--line);border-radius:12px;background:#FAF8F3">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</div>`;
   const rows=list.map(t=>{
     const persona = otroDe(t);
     const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:#8A949B">↗ </span>':'<span title="Te la mandaron" style="color:#6E8E00">↙ </span>') : '';
@@ -4268,7 +4286,35 @@ function tarBuzonView(modo){
       <td class="tar-c-act">${quick}</td>
     </tr>`;
   }).join('');
-  return tarKpis(all)+toggle+mfilt+`<div class="inctable-wrap"><table class="inctable inctable-tar">${thead}<tbody>${rows}</tbody></table></div>`;
+  const cards=list.map(t=>{
+    const persona = otroDe(t);
+    const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:#8A949B">↗ </span>':'<span title="Te la mandaron" style="color:#6E8E00">↙ </span>') : '';
+    const fijada = tarEstaFijada(t.id, me);
+    const pinBtn = `<button onclick="event.stopPropagation();tarTogglePin('${t.id}')" title="${fijada?'Quitar de fijadas':'Fijar arriba'}" style="border:none;background:none;cursor:pointer;padding:0 6px 0 0;line-height:0;vertical-align:middle;color:${fijada?'#6E8E00':'#C7CDD1'}">${TAR_IC_PIN}</button>`;
+    const quick = tarActiva(t)
+      ? `<button class="btn btn-ghost btn-sm" title="Marcar esta tarea como terminada" onclick="event.stopPropagation();tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`
+      : '';
+    const dRest = tarDiasRest(t);
+    let fechaLbl;
+    if(t.fechaLimite){
+      const f = fmtFecha(t.fechaLimite);
+      if(tarActiva(t) && dRest<0) fechaLbl = `<span style="color:#C0392B;font-weight:700">${f} · vencida</span>`;
+      else if(tarActiva(t) && dRest===0) fechaLbl = `<span style="color:#B8860B;font-weight:700">${f} · hoy</span>`;
+      else if(tarActiva(t) && dRest<=2) fechaLbl = `<span style="color:#B8860B;font-weight:700">${f} · ${dRest} d</span>`;
+      else fechaLbl = f;
+    } else fechaLbl = '<span class="muted">Sin fecha</span>';
+    const dFull = tarCap((t.descripcion||''));
+    const descCard = dFull ? `<div class="tar-card-desc">${incEsc(dFull)}</div>` : '';
+    return `<div class="tar-card${tarVencida(t)?' tar-card-venc':''}" onclick="openTarDet('${t.id}')">
+      <div class="tar-card-head">${tarPrioChip(t.prioridad)}<span class="tar-card-fecha">${fechaLbl}</span></div>
+      <div class="tar-card-title">${pinBtn}${dir}${incEsc(tarCap(t.titulo))}${tarRecurMark(t)}${tarNvBadge(t)}</div>
+      ${descCard}
+      ${quick?`<div class="tar-card-actions">${quick}</div>`:''}
+    </div>`;
+  }).join('');
+  return tarKpis(all)+toggle+mfilt
+    + `<div class="tar-cards">${cards}</div>`
+    + `<div class="inctable-wrap tar-table-wrap"><table class="inctable inctable-tar">${thead}<tbody>${rows}</tbody></table></div>`;
 }
 function setTarBuzF(field,v){ if(!S.tarBuzF) S.tarBuzF={prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''}; S.tarBuzF[field]=v; render(); }
 function tarToggleFilt(){ S.tarFiltOpen=!S.tarFiltOpen; render(); }
