@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-100">
+<meta name="lucai-version" content="2026-06-19-101">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -1485,7 +1485,7 @@ function openModal(type){
   else if(type==='merma') F={type, cod:"", cant:1, motivo:"Roto / defectuoso", ref:""};
   S.modal=type; render();
 }
-function closeModal(){ S.modal=null; F.msgReplyTo=null; F.emojiOpen=null; F.msgEdit=null; F.msgEditDraft=null; const o=document.querySelector(".overlay"); if(o)o.remove(); }
+function closeModal(){ S.modal=null; F.msgReplyTo=null; F.emojiOpen=null; F.reaxOpen=null; F.msgEdit=null; F.msgEditDraft=null; const o=document.querySelector(".overlay"); if(o)o.remove(); }
 function setSel(field,v){ F[field]=v; render(); }
 function setInp(field,v){ F[field]=v; }
 function setProv(v){ F.proveedor=v; if(v!=='__nuevo__') F.proveedorNuevo=''; render(); }
@@ -5168,6 +5168,7 @@ function tarThreadHtml(t, bare){
     const editing = F.msgEdit && F.msgEdit.tarId===t.id && String(F.msgEdit.ts)===tsId;
     const acts = puede ? `<span class="msg-actions" style="margin-left:auto;display:inline-flex;gap:9px;align-items:center;flex-wrap:wrap">
           <button title="Responder a este mensaje" onclick="tarReplyTo('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#6E8E00;font-size:11.5px;font-weight:600;padding:0">Responder</button>
+          <button title="Reaccionar a este mensaje" onclick="tarReactToggle('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#5A6770;font-size:11.5px;font-weight:600;padding:0">Reaccionar</button>
           ${mine?`<button title="Editar este mensaje" onclick="tarMsgEditStart('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#5A6770;font-size:11.5px;font-weight:600;padding:0">Editar</button>`:''}
           ${(mine||admin)?`<button title="Borrar este mensaje" onclick="tarMsgDel('${t.id}','${tsId}')" style="border:none;background:none;cursor:pointer;color:#C0392B;font-size:11.5px;font-weight:600;padding:0">Borrar</button>`:''}
         </span>` : '';
@@ -5178,6 +5179,17 @@ function tarThreadHtml(t, bare){
             <button class="btn btn-primary btn-sm" onclick="tarMsgEditSave('${t.id}','${tsId}')">Guardar</button>
           </div>`
       : `<div style="font-size:14px;line-height:1.45;white-space:pre-wrap">${incEsc(mm.texto||'')}</div>${tarAdjView(mm.adj,'msg')}`;
+    const reaxObj = (mm.reax && typeof mm.reax==='object' && !Array.isArray(mm.reax)) ? mm.reax : null;
+    let reaxHtml='';
+    if(reaxObj){
+      const chips = Object.keys(reaxObj).filter(k=>Array.isArray(reaxObj[k])&&reaxObj[k].length).map(k=>{
+        const arr=reaxObj[k]; const mineR=arr.indexOf(me)>=0;
+        return `<button ${puede?`onclick="tarReact('${t.id}','${tsId}','${k}')"`:''} title="${incEsc(arr.join(', '))}" style="border:1px solid ${mineR?'#A8B400':'var(--line)'};background:${mineR?'#EAF1D8':'#FFF'};border-radius:11px;padding:0 7px;font-size:12px;cursor:${puede?'pointer':'default'};line-height:1.75">${k} ${arr.length}</button>`;
+      }).join('');
+      if(chips) reaxHtml = `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">${chips}</div>`;
+    }
+    const reaxOpen = puede && F.reaxOpen===(t.id+':'+tsId);
+    const picker = reaxOpen ? `<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:6px;background:#FFF;border:1px solid var(--line);border-radius:10px;padding:4px">${['❤️','👍','👌','✅','😂','🙏','🎉','🔥'].map(e=>`<button onclick="tarReact('${t.id}','${tsId}','${e}')" style="border:none;background:none;cursor:pointer;font-size:19px;padding:2px 5px;border-radius:6px" onmouseover="this.style.background='#F4F0E9'" onmouseout="this.style.background='none'">${e}</button>`).join('')}</div>` : '';
     return `<div style="margin-bottom:8px;display:flex;${mine?'justify-content:flex-end':''}">
       <div style="position:relative;${editing?'flex:1;max-width:100%':'max-width:82%'};background:${mine?'#EAF1D8':'#F4F0E9'};border:1px solid var(--line);border-radius:12px;padding:8px 11px">
         <div style="font-size:11px;color:#8A949B;margin-bottom:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -5186,6 +5198,8 @@ function tarThreadHtml(t, bare){
         </div>
         ${citaHtml}
         ${cuerpo}
+        ${picker}
+        ${reaxHtml}
       </div></div>`;
   }).join('') : `<div class="muted" style="font-size:13px">Aún no hay mensajes. Escribe el primero para aclarar o comentar la tarea.</div>`;
 
@@ -5324,6 +5338,25 @@ function tarMsgDel(tarId, ts){
   if(F.msgReplyTo && String(F.msgReplyTo.ts)===String(ts)) F.msgReplyTo=null;
   render();
   tarMsgMutate(tarId, arr=>arr.filter(x=>String(x.ts)!==String(ts)), 'Mensaje borrado');
+}
+function tarReactToggle(tarId, ts){ const key=tarId+':'+String(ts); F.reaxOpen = (F.reaxOpen===key)?null:key; render(); }
+function tarReact(tarId, ts, emoji){
+  const t=(S.tareas||[]).find(x=>x.id===tarId); if(!t) return;
+  const me=S.user.nombre;
+  if(!(isAdmin()||tarInvolucra(t,me))){ toast('No puedes reaccionar en esta tarea'); return; }
+  const toggle = (m)=>{
+    const reax = (m.reax && typeof m.reax==='object' && !Array.isArray(m.reax)) ? Object.assign({}, m.reax) : {};
+    Object.keys(reax).forEach(k=>{ reax[k]=Array.isArray(reax[k])?reax[k].slice():[]; });
+    const yaTengo = Array.isArray(reax[emoji]) && reax[emoji].indexOf(me)>=0;
+    Object.keys(reax).forEach(k=>{ reax[k]=reax[k].filter(n=>n!==me); });
+    if(!yaTengo){ if(!reax[emoji]) reax[emoji]=[]; reax[emoji].push(me); }
+    Object.keys(reax).forEach(k=>{ if(!reax[k].length) delete reax[k]; });
+    return reax;
+  };
+  const m=(t.mensajes||[]).find(x=>String(x.ts)===String(ts));
+  if(m) m.reax = toggle(m);
+  F.reaxOpen=null; render();
+  tarMsgMutate(tarId, arr=>arr.map(x=> String(x.ts)===String(ts) ? Object.assign({}, x, {reax: toggle(x)}) : x));
 }
 function tarFmtMin(m){ m=Math.max(0,Math.round(Number(m)||0)); const h=Math.floor(m/60), mm=m%60; return h ? (mm?`${h}h ${mm}m`:`${h}h`) : `${mm}m`; }
 function tarTotalMin(t){ return (Array.isArray(t.tiempos)?t.tiempos:[]).reduce((s,e)=>s+(Number(e.min)||0),0); }
