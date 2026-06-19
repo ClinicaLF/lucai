@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-99">
+<meta name="lucai-version" content="2026-06-19-100">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -1061,15 +1061,25 @@ function proveedoresView(){
       </div>
     </div>`;
   };
-  const listHtml = provs.length ? provs.map(card).join('') : `<div class="muted" style="padding:18px;text-align:center;border:1px dashed var(--line);border-radius:12px">Aún no hay proveedores. Añade el primero con el botón de arriba.</div>`;
+  const norm=s=>(s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const q=norm(S.provQ);
+  const provsF = q ? provs.filter(p=>{ const info=S.proveedoresInfo[p]||{}; return norm(p+' '+(info.contacto||'')+' '+(info.email||'')+' '+(info.telefono||'')).includes(q); }) : provs;
+  const lupaSvg=`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;
+  const searchBar = provs.length>0 ? `<div style="position:relative;margin:0 0 12px">
+      <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#8A949B;line-height:0">${lupaSvg}</span>
+      <input id="provQ" class="inp" style="padding-left:34px;width:100%" placeholder="Buscar proveedor…" value="${incEsc(S.provQ||'')}" oninput="setProvQuery(this.value)">
+    </div>` : '';
+  const listHtml = provsF.length ? provsF.map(card).join('') : (q ? `<div class="muted" style="padding:18px;text-align:center;border:1px dashed var(--line);border-radius:12px">Ningún proveedor coincide con la búsqueda.</div>` : `<div class="muted" style="padding:18px;text-align:center;border:1px dashed var(--line);border-radius:12px">Aún no hay proveedores. Añade el primero con el botón de arriba.</div>`);
   return `
     <div class="toolbar" style="margin:6px 0 12px">
       <div><div class="section-sub" style="margin:0">Ficha de cada proveedor: teléfono, contacto, correo y web. Aparecen en el desplegable al crear artículos y pedidos.</div></div>
       <div class="actions">${editing?'':`<button class="btn btn-primary" onclick="provNew()">＋ Nuevo proveedor</button>`}</div>
     </div>
     ${formHtml}
+    ${searchBar}
     ${listHtml}`;
 }
+function setProvQuery(v){ S.provQ=v; render(); const n=el('provQ'); if(n){ n.focus(); const val=n.value; n.value=''; n.value=val; } }
 function provNew(){ S.provEdit='__new__'; F.pvNombre=''; F.pvTel=''; F.pvContacto=''; F.pvEmail=''; F.pvWeb=''; render(); }
 function provEditStart(nombre){ const info=(S.proveedoresInfo||{})[nombre]||{}; S.provEdit=nombre; F.pvNombre=nombre; F.pvTel=info.telefono||''; F.pvContacto=info.contacto||''; F.pvEmail=info.email||''; F.pvWeb=info.web||''; render(); }
 function provCancel(){ S.provEdit=null; render(); }
@@ -5194,7 +5204,7 @@ function tarThreadHtml(t, bare){
 
   // panel de emojis
   const emojiOpen = F.emojiOpen===t.id;
-  const EMOJIS = ['😀','😄','😁','😅','😂','🤣','😊','😍','🤩','😘','😜','🤔','😏','😐','😑','😶','🙄','😬','🤐','😴','😪','😮','😯','😲','😢','😭','😤','😠','😡','🤯','😱','🥺','🤗','🤝','👍','👎','👏','🙌','🙏','👋','💪','✌️','👌','✅','❌','⭐','🔥','💡','📌','📎','📋','💬','📅','⏰','🚨','✨','❤️','💚','🎉','🚀'];
+  const EMOJIS = ['👍','👌','✅','❤️','🙏','👏','🎉','🔥','💪','🙌','😀','😊','😍','😂','🤣','😅','😉','😘','😜','🤔','😐','🙄','😴','😢','😭','😤','😠','😡','🤯','😱','🥺','🤗','🤝','👎','👋','✌️','⭐','💡','💬','📌','📎','📋','📅','⏰','🚨','✨','💚','🚀'];
   const emojiPanel = emojiOpen ? `<div style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;background:#FFF;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px;max-height:160px;overflow-y:auto">
       ${EMOJIS.map(e=>`<button onclick="tarInsertEmoji('${e}')" style="border:none;background:none;cursor:pointer;font-size:20px;padding:4px;border-radius:6px" onmouseover="this.style.background='#F4F0E9'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
     </div>` : '';
@@ -5204,13 +5214,14 @@ function tarThreadHtml(t, bare){
   const ICO_CLIP = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.3-8.3a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.6 1.6 0 0 1-2.3-2.3l7.6-7.6"/></svg>';
   const compose = puede ? `${replyBar}<div style="margin-top:10px">
       <textarea id="tarMsgInput-${t.id}" class="inp" rows="1" placeholder="Escribe un mensaje…" oninput="setInp('msgDraft',this.value);tarAutoGrow(this)" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}else if(event.key==='Escape'){tarReplyCancel()}" style="font-size:16px;min-height:46px;max-height:160px;line-height:1.45;resize:none;overflow-y:auto">${incEsc(F.msgDraft||'')}</textarea>
+      ${emojiPanel}
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-        <button class="btn btn-ghost" onclick="tarToggleEmoji('${t.id}')" title="Emojis" aria-label="Emojis" style="flex:0 0 auto;padding:9px 12px;line-height:0">${ICO_EMOJI}</button>
+        <button class="btn btn-ghost" onclick="tarToggleEmoji('${t.id}')" title="Emojis para el mensaje" aria-label="Emojis" style="flex:0 0 auto;padding:9px 12px;line-height:0;${emojiOpen?'background:#F4F0E9;border-color:#A8B400':''}">${ICO_EMOJI}</button>
         <button class="btn btn-ghost" onclick="tarAddMsgImg('${t.id}')" title="Adjuntar imagen (o pega una con Ctrl+V)" aria-label="Adjuntar imagen" style="flex:0 0 auto;padding:9px 12px;line-height:0">${ICO_IMG}</button>
         <button class="btn btn-ghost" onclick="tarAddMsgArchivo('${t.id}')" title="Adjuntar archivo (PDF, Word, Excel…)" aria-label="Adjuntar archivo" style="flex:0 0 auto;padding:9px 12px;line-height:0">${ICO_CLIP}</button>
         <button class="btn btn-primary" onclick="tarAddMsg('${t.id}')" style="margin-left:auto;padding:11px 24px">Enviar</button>
       </div>
-    </div>${emojiPanel}` : '';
+    </div>` : '';
 
   // contenedor con id para auto-scroll al final tras cada render (lo aplica render() post-paso)
   const scrollerId = `tarMsgsScroll-${t.id}`;
