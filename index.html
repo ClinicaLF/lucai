@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-89">
+<meta name="lucai-version" content="2026-06-19-90">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -554,6 +554,11 @@
 @media(max-width:720px){
   .inctable-tar td .btn-sm{ min-height:38px; padding:8px 12px }
 }
+
+/* --- TAREAS · menú "Acciones" del detalle (escritorio y móvil) --- */
+.tar-acc-item:last-child{ border-bottom:none !important }
+.tar-acc-item:hover{ background:#F7F4EE }
+.tar-acc-item:active{ background:#EFE8DC }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -4829,7 +4834,7 @@ function commitTarea(){
 
 function openTarDet(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
-  F={type:'tar_det', id, detTab:'conv'}; S.modal='tar_det'; render();
+  F={type:'tar_det', id, detTab:'conv'}; S.modal='tar_det'; S.tarAccMenu=false; render();
   const me=S.user.nombre;
   const primera = !(t.vistos && t.vistos[me]);
   if(primera || tarNuevosPara(t,me)>0){ if(!t.vistos||typeof t.vistos!=='object'||Array.isArray(t.vistos)) t.vistos={}; t.vistos[me]=now(); srvTarUpdate(id, t); }
@@ -4839,6 +4844,7 @@ function openTarDet(id){
   }
 }
 function tarDetTab(tab){ F.detTab=tab; render(); }
+function tarToggleAccMenu(){ S.tarAccMenu=!S.tarAccMenu; render(); }
 function tarDetModalContent(){
   const t=(S.tareas||[]).find(x=>x.id===F.id)||{};
   const me=S.user.nombre, admin=isAdmin();
@@ -4846,16 +4852,26 @@ function tarDetModalContent(){
   const d=tarDiasRest(t);
   const limTxt = !t.fechaLimite ? 'sin fecha' : (t.estado==='Hecha' ? fmtFecha(t.fechaLimite) : (d<0?`${fmtFecha(t.fechaLimite)} · vencida hace ${-d} d`:(d===0?`${fmtFecha(t.fechaLimite)} · hoy`:`${fmtFecha(t.fechaLimite)} · faltan ${d} d`)));
   const horaTxt = t.horaInicio ? ` · ${incEsc(t.horaInicio)}${t.horaFin?'–'+incEsc(t.horaFin):''}` : '';
-  let acciones='';
+  // "Marcar hecha" se queda visible (acción del día a día). El resto va al menú "Acciones".
+  let tarPrimary='';
+  let tarAccItems='';
+  const _accItem=(label,oc,danger)=>`<button class="tar-acc-item" onclick="S.tarAccMenu=false;${oc}" style="display:block;width:100%;text-align:left;padding:12px 16px;font-size:14px;font-weight:600;background:none;border:none;border-bottom:1px solid #F1ECE3;cursor:pointer;color:${danger?'#C0392B':'#333F48'}">${label}</button>`;
   if((soyPara||admin) && tarActiva(t)){
-    if(t.estado==='Pendiente') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','En curso')">Marcar en curso</button>`;
-    if(t.estado==='En espera') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','En curso')">Reanudar</button>`;
-    else acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','En espera')">Poner en espera</button>`;
-    acciones+=`<button class="btn btn-primary" onclick="tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`;
+    if(t.estado==='Pendiente') tarAccItems+=_accItem('Marcar en curso',`tarMarcar('${t.id}','En curso')`);
+    if(t.estado==='En espera') tarAccItems+=_accItem('Reanudar',`tarMarcar('${t.id}','En curso')`);
+    else tarAccItems+=_accItem('Poner en espera',`tarMarcar('${t.id}','En espera')`);
+    tarPrimary=`<button class="btn btn-primary" onclick="tarMarcar('${t.id}','Hecha')">Marcar hecha</button>`;
   }
-  if((soyPara||soyDe||admin) && t.estado==='Hecha') acciones+=`<button class="btn btn-ghost" onclick="tarMarcar('${t.id}','Pendiente')">Reabrir</button>`;
-  if(soyDe||admin) acciones+=`<button class="btn btn-ghost" onclick="openTarEdit('${t.id}')">Editar</button>`;
-  if(soyDe||admin) acciones+=`<button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="tarEliminar('${t.id}')">Eliminar</button>`;
+  if((soyPara||soyDe||admin) && t.estado==='Hecha') tarAccItems+=_accItem('Reabrir',`tarMarcar('${t.id}','Pendiente')`);
+  if(soyDe||admin) tarAccItems+=_accItem('Editar',`openTarEdit('${t.id}')`);
+  if(soyDe||admin) tarAccItems+=_accItem('Eliminar',`tarEliminar('${t.id}')`,true);
+  const accOpen=!!S.tarAccMenu;
+  const _chev=`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px">${accOpen?'<path d="M6 15l6-6 6 6"/>':'<path d="M6 9l6 6 6-6"/>'}</svg>`;
+  const tarAccMenu = tarAccItems ? `<span style="position:relative;display:inline-flex">
+      <button class="btn btn-ghost" onclick="tarToggleAccMenu()">Acciones${_chev}</button>
+      ${accOpen?`<div style="position:absolute;bottom:calc(100% + 6px);right:0;min-width:210px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 34px rgba(51,63,72,.18);overflow:hidden;z-index:30">${tarAccItems}</div>`:''}
+    </span>` : '';
+  const tarAccBackdrop = accOpen ? `<div onclick="tarToggleAccMenu()" style="position:fixed;inset:0;z-index:25"></div>` : '';
   const recurInfo = (t.serieId||t.recurrencia) ? `<span style="display:inline-block;font-size:11px;font-weight:600;background:#EAF1D8;color:#3f5400;border-radius:10px;padding:1px 9px;margin-left:6px;vertical-align:middle">⟳ ${incEsc(tarRecurLabel(t.recurrencia)||'Recurrente')}</span>` : '';
   const tab=F.detTab||'conv';
   const nMsg=(t.mensajes||[]).length, nTime=(t.tiempos||[]).length, nImg=(t.adjuntos||[]).length, totMin=tarTotalMin(t);
@@ -4887,7 +4903,9 @@ function tarDetModalContent(){
       <div style="flex:0 0 auto;margin-top:8px">${tabBar}</div>
       <div style="flex:1 1 auto;min-height:160px;overflow-y:auto">${tabBody}</div>
       <div style="flex:0 0 auto;display:flex;gap:10px;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);flex-wrap:wrap">
-        ${acciones}
+        ${tarAccBackdrop}
+        ${tarPrimary}
+        ${tarAccMenu}
         <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
       </div>
     </div></div></div>`;
@@ -4946,7 +4964,7 @@ function tarThreadHtml(t, bare){
   const ICO_IMG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h2l1.2-1.8h7.6L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.3"/></svg>';
   const ICO_CLIP = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.3-8.3a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.6 1.6 0 0 1-2.3-2.3l7.6-7.6"/></svg>';
   const compose = puede ? `${replyBar}<div style="margin-top:10px">
-      <input id="tarMsgInput-${t.id}" class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}else if(event.key==='Escape'){tarReplyCancel()}" style="font-size:16px">
+      <textarea id="tarMsgInput-${t.id}" class="inp" rows="1" placeholder="Escribe un mensaje…" oninput="setInp('msgDraft',this.value);tarAutoGrow(this)" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}else if(event.key==='Escape'){tarReplyCancel()}" style="font-size:16px;min-height:46px;max-height:160px;line-height:1.45;resize:none;overflow-y:auto">${incEsc(F.msgDraft||'')}</textarea>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
         <button class="btn btn-ghost" onclick="tarToggleEmoji('${t.id}')" title="Emojis" aria-label="Emojis" style="flex:0 0 auto;padding:9px 12px;line-height:0">${ICO_EMOJI}</button>
         <button class="btn btn-ghost" onclick="tarAddMsgImg('${t.id}')" title="Adjuntar imagen (o pega una con Ctrl+V)" aria-label="Adjuntar imagen" style="flex:0 0 auto;padding:9px 12px;line-height:0">${ICO_IMG}</button>
@@ -4971,7 +4989,7 @@ function tarReplyTo(tarId, ts){
   const m=(t.mensajes||[]).find(x=>String(x.ts)===String(ts)); if(!m) return;
   F.msgReplyTo = { tarId, ts: m.ts, de: m.de, texto: (m.texto||'').slice(0,200) };
   render();
-  setTimeout(()=>{ const i=document.getElementById('tarMsgInput-'+tarId); if(i) try{ i.focus(); }catch(_){ } }, 50);
+  setTimeout(()=>{ const i=document.getElementById('tarMsgInput-'+tarId); if(i) try{ i.focus(); tarAutoGrow(i); }catch(_){ } }, 50);
 }
 function tarReplyCancel(){ if(F.msgReplyTo){ F.msgReplyTo=null; render(); } }
 function tarToggleEmoji(tarId){ F.emojiOpen = (F.emojiOpen===tarId) ? null : tarId; render(); }
@@ -4987,7 +5005,7 @@ function tarInsertEmoji(e){
     render();
     setTimeout(()=>{
       const i2 = tarId ? document.getElementById('tarMsgInput-'+tarId) : null;
-      if(i2){ try{ i2.focus(); const pos = (a+e).length; i2.setSelectionRange(pos,pos); }catch(_){ } }
+      if(i2){ try{ i2.focus(); const pos = (a+e).length; i2.setSelectionRange(pos,pos); tarAutoGrow(i2); }catch(_){ } }
     }, 30);
   } else {
     F.msgDraft = cur + e;
@@ -4995,6 +5013,7 @@ function tarInsertEmoji(e){
   }
 }
 function tarMsgTime(ts){ ts=String(ts||''); const d=ts.slice(0,10).split('-'); const hm=ts.slice(11,16); return (d.length===3?`${d[2]}/${d[1]}`:ts)+(hm?` ${hm}`:''); }
+function tarAutoGrow(el){ if(!el) return; el.style.height='auto'; el.style.height=Math.min(el.scrollHeight, 160)+'px'; }
 function tarAutoEnCurso(t){ if(t && t.estado==='Pendiente'){ t.estado='En curso'; return true; } return false; }
 function tarAddMsg(id){
   const txt=(F.msgDraft||'').trim(); if(!txt) return;
