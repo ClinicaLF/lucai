@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-88">
+<meta name="lucai-version" content="2026-06-19-89">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4872,7 +4872,7 @@ function tarDetModalContent(){
   const descExp = !!(S.tarDescExp && S.tarDescExp[t.id]);
   const descBloque = t.descripcion ? (descExp
     ? `<div class="inc-detalle" style="background:#F7F4EE;border-radius:8px;padding:10px 12px;max-height:140px;overflow-y:auto;font-size:14px;margin-top:6px">${incEsc(t.descripcion)} <button onclick="tarToggleDescExp('${t.id}')" style="border:none;background:none;color:#6E8E00;font-size:12px;font-weight:600;cursor:pointer;padding:0;margin-left:4px">ocultar</button></div>`
-    : `<button onclick="tarToggleDescExp('${t.id}')" style="border:none;background:none;color:#6E8E00;font-size:12px;font-weight:600;cursor:pointer;padding:2px 0;margin-top:2px">📄 Ver descripción</button>`
+    : `<button onclick="tarToggleDescExp('${t.id}')" style="border:none;background:none;color:#6E8E00;font-size:12px;font-weight:600;cursor:pointer;padding:2px 0;margin-top:2px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/></svg>Ver descripción</button>`
   ) : '';
   return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:820px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column">
     <div class="modal-head" style="padding:16px 22px 4px"><h2 style="font-size:19px">Tarea</h2><button class="x" onclick="closeModal()">×</button></div>
@@ -4942,12 +4942,17 @@ function tarThreadHtml(t, bare){
       ${EMOJIS.map(e=>`<button onclick="tarInsertEmoji('${e}')" style="border:none;background:none;cursor:pointer;font-size:20px;padding:4px;border-radius:6px" onmouseover="this.style.background='#F4F0E9'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
     </div>` : '';
 
-  const compose = puede ? `${replyBar}<div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-      <button class="btn btn-ghost" onclick="tarToggleEmoji('${t.id}')" title="Emojis (también puedes usar el teclado del sistema: Win+. en Windows, Ctrl+Cmd+Espacio en Mac)" style="flex:0 0 auto;padding:8px 11px">😀</button>
-      <button class="btn btn-ghost" onclick="tarAddMsgImg('${t.id}')" title="Adjuntar imagen (o pega una con Ctrl+V)" style="flex:0 0 auto;padding:8px 11px">📷</button>
-      <button class="btn btn-ghost" onclick="tarAddMsgArchivo('${t.id}')" title="Adjuntar archivo (PDF, Word, Excel…)" style="flex:0 0 auto;padding:8px 11px">📎</button>
-      <input id="tarMsgInput-${t.id}" class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}else if(event.key==='Escape'){tarReplyCancel()}">
-      <button class="btn btn-primary" onclick="tarAddMsg('${t.id}')">Enviar</button>
+  const ICO_EMOJI = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4 4 0 0 0 7 0"/><path d="M9 9.6h.01" stroke-width="2.3"/><path d="M15 9.6h.01" stroke-width="2.3"/></svg>';
+  const ICO_IMG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h2l1.2-1.8h7.6L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.3"/></svg>';
+  const ICO_CLIP = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.3-8.3a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.6 1.6 0 0 1-2.3-2.3l7.6-7.6"/></svg>';
+  const compose = puede ? `${replyBar}<div style="margin-top:10px">
+      <input id="tarMsgInput-${t.id}" class="inp" placeholder="Escribe un mensaje…" value="${incEsc(F.msgDraft||'')}" oninput="setInp('msgDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}else if(event.key==='Escape'){tarReplyCancel()}" style="font-size:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <button class="btn btn-ghost" onclick="tarToggleEmoji('${t.id}')" title="Emojis" aria-label="Emojis" style="flex:0 0 auto;padding:9px 12px;line-height:0">${ICO_EMOJI}</button>
+        <button class="btn btn-ghost" onclick="tarAddMsgImg('${t.id}')" title="Adjuntar imagen (o pega una con Ctrl+V)" aria-label="Adjuntar imagen" style="flex:0 0 auto;padding:9px 12px;line-height:0">${ICO_IMG}</button>
+        <button class="btn btn-ghost" onclick="tarAddMsgArchivo('${t.id}')" title="Adjuntar archivo (PDF, Word, Excel…)" aria-label="Adjuntar archivo" style="flex:0 0 auto;padding:9px 12px;line-height:0">${ICO_CLIP}</button>
+        <button class="btn btn-primary" onclick="tarAddMsg('${t.id}')" style="margin-left:auto;padding:11px 24px">Enviar</button>
+      </div>
     </div>${emojiPanel}` : '';
 
   // contenedor con id para auto-scroll al final tras cada render (lo aplica render() post-paso)
