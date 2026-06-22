@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-111">
+<meta name="lucai-version" content="2026-06-19-113">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4524,16 +4524,19 @@ function gcalModalContent(){
     </div>`;
   } else {
     const raw=src.trim();
-    let embed, ncal;
-    if(/^https?:\/\//i.test(raw) && raw.indexOf('calendar/embed')>=0){
-      embed = /[?&]mode=/i.test(raw) ? raw.replace(/([?&])mode=[^&]*/i,'$1mode='+mode) : (raw + (raw.indexOf('?')>=0?'&':'?') + 'mode='+mode);
-      ncal = (raw.match(/[?&]src=/gi)||[]).length || 1;
+    const flat=raw.replace(/\s+/g,'');
+    let ncal, srcParams;
+    const toks=flat.match(/src=[^&"'<>]+/gi);
+    if(toks && toks.length){
+      const uniq=[...new Set(toks)];
+      srcParams=uniq.join('&');
+      ncal=uniq.length;
     } else {
-      const ids=raw.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
+      const ids=[...new Set(raw.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean))];
+      srcParams=ids.map(id=>'src='+encodeURIComponent(id)).join('&');
       ncal=ids.length;
-      const srcParams=ids.map(id=>'src='+encodeURIComponent(id)).join('&');
-      embed=`https://calendar.google.com/calendar/embed?${srcParams}&ctz=Europe%2FMadrid&wkst=2&mode=${mode}&showTitle=0&showPrint=0&showTabs=1&showCalendars=${ids.length>1?1:0}&showTz=0`;
     }
+    const embed=`https://calendar.google.com/calendar/embed?${srcParams}&ctz=Europe%2FMadrid&wkst=2&mode=${mode}&showTitle=0&showPrint=0&showTabs=1&showCalendars=${ncal>1?1:0}&showTz=0`;
     inner=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
         <div class="seg"><button class="${mode==='DAY'?'on':''}" onclick="gcalSetMode('DAY')">Día</button><button class="${mode==='WEEK'?'on':''}" onclick="gcalSetMode('WEEK')">Semana</button><button class="${mode==='MONTH'?'on':''}" onclick="gcalSetMode('MONTH')">Mes</button><button class="${mode==='AGENDA'?'on':''}" onclick="gcalSetMode('AGENDA')">Agenda</button></div>
         <a class="btn btn-primary btn-sm" href="${full}" target="_blank" rel="noopener">Abrir completo</a>
