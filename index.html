@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-107">
+<meta name="lucai-version" content="2026-06-19-108">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -765,7 +765,7 @@ async function loadEstado(){
 }
 /* Campos que viven en la tabla lucai_estado (no en una tabla propia por filas).
    Estos son los que se persisten cuando se llama a _persistSoon / persistNow. */
-const ESTADO_FIELDS = ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones'];
+const ESTADO_FIELDS = ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones','gcalSrc'];
 function _persistSoon(){
   if (!(DEVICE && LOADED && S.user)) return;
   clearTimeout(_persistT); _persistT = setTimeout(persistNow, 400);
@@ -2016,7 +2016,7 @@ async function loadFromDB(){
       try{
         const { data: estRow } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
         const d = estRow && estRow.data;
-        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
+        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones','gcalSrc'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
       }catch(_){}
       window._estadoLoaded=true;
     }
@@ -4303,7 +4303,7 @@ function tareasView(){
   else if(sub==='tar_recibidas') body=tarBuzonView('recibidas');
   else if(sub==='tar_mias') body=tarBuzonView('mias');
   else body=tarBuzonView('todas');
-  const acts=`<div class="actions">${canAccess('comunicaciones')?`<button class="btn btn-ghost" onclick="setModule('comunicaciones')">Comunicaciones</button>`:''}${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<a class="btn btn-ghost" href="https://calendar.google.com/calendar/u/0/r" target="_blank" rel="noopener" title="Abrir Google Calendar" style="display:inline-flex;align-items:center;gap:7px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18"/><path d="M8 3v3M16 3v3"/></svg>Google Calendar</a><button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
+  const acts=`<div class="actions">${canAccess('comunicaciones')?`<button class="btn btn-ghost" onclick="setModule('comunicaciones')">Comunicaciones</button>`:''}${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<a class="btn btn-ghost" href="javascript:void(0)" onclick="gcalOpen()" title="Ver Google Calendar dentro de la app" style="display:inline-flex;align-items:center;gap:7px;text-decoration:none"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18"/><path d="M8 3v3M16 3v3"/></svg>Google Calendar</a><button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
   <main><div class="wrap">
     <div class="toolbar" style="margin-bottom:14px">
@@ -4499,6 +4499,38 @@ function reuDelete(id){
     S.reuniones=S.reuniones.filter(x=>x.id!==id);
   }
   closeModal(); render(); if(typeof persistNow==='function') persistNow(); toast('Reunión borrada');
+}
+/* ===================== VENTANA GOOGLE CALENDAR (consulta, dentro de la app) ===================== */
+function gcalOpen(){ F={type:'gcal', src:(S.gcalSrc||'')}; if(!S.gcalMode) S.gcalMode='WEEK'; S.modal='gcal'; render(); }
+function gcalSave(){ const v=(F.src||'').trim(); if(!v){ toast('Escribe tu dirección de Google (tu Gmail)'); return; } S.gcalSrc=v; if(typeof persistNow==='function') persistNow(); render(); }
+function gcalForget(){ S.gcalSrc=''; if(F) F.src=''; if(typeof persistNow==='function') persistNow(); render(); }
+function gcalSetMode(m){ S.gcalMode=m; if(typeof persistNow==='function') persistNow(); render(); }
+function gcalModalContent(){
+  const src=S.gcalSrc||''; const mode=S.gcalMode||'WEEK'; const full='https://calendar.google.com/calendar/u/0/r';
+  let inner;
+  if(!src){
+    inner=`<div style="padding:6px 2px">
+      <p style="font-size:13.5px;color:#5A6770;line-height:1.55">Para ver tu Google Calendar aquí dentro, escribe tu dirección de Google (tu Gmail). Solo hay que hacerlo una vez.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <input class="inp" style="flex:1;min-width:200px" placeholder="tucorreo@gmail.com" value="${incEsc(F.src||'')}" oninput="F.src=this.value" onkeydown="if(event.key==='Enter')gcalSave()">
+        <button class="btn btn-primary" onclick="gcalSave()">Guardar</button>
+      </div>
+      <p style="font-size:12px;color:#8A949B;margin-top:12px">Esta ventana muestra tu calendario para <strong>consultarlo</strong>. Para crear o editar usa "Abrir completo". Necesitas tener tu sesión de Google iniciada en este navegador.</p>
+    </div>`;
+  } else {
+    const embed=`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(src)}&ctz=Europe%2FMadrid&wkst=2&mode=${mode}&showTitle=0&showPrint=0&showTabs=1&showCalendars=0&showTz=0`;
+    inner=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <div class="seg"><button class="${mode==='DAY'?'on':''}" onclick="gcalSetMode('DAY')">Día</button><button class="${mode==='WEEK'?'on':''}" onclick="gcalSetMode('WEEK')">Semana</button><button class="${mode==='MONTH'?'on':''}" onclick="gcalSetMode('MONTH')">Mes</button><button class="${mode==='AGENDA'?'on':''}" onclick="gcalSetMode('AGENDA')">Agenda</button></div>
+        <a class="btn btn-primary btn-sm" href="${full}" target="_blank" rel="noopener">Abrir completo</a>
+        <button class="btn btn-ghost btn-sm" onclick="gcalForget()" style="margin-left:auto">Cambiar cuenta</button>
+      </div>
+      <iframe src="${embed}" style="width:100%;height:60vh;border:1px solid var(--line);border-radius:10px;background:#fff" loading="lazy"></iframe>
+      <p style="font-size:12px;color:#8A949B;margin-top:8px">Vista para consultar (no se edita desde aquí). Si sale vacío o pide permiso, comprueba que tu sesión de Google está abierta en este navegador.</p>`;
+  }
+  return `<div class="overlay"><div class="modal" style="max-width:920px;width:96vw">
+    <div class="modal-head"><h2>Google Calendar</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">${inner}</div>
+  </div></div>`;
 }
 function tarKpis(arr){
   const act=arr.filter(tarActiva);
@@ -5690,6 +5722,7 @@ modalContent = function(){
   if(F.type==='tar_det')   return tarDetModalContent();
   if(F.type==='tar_edit')  return tarEditModalContent();
   if(F.type==='reu_nuevo') return reuModalContent();
+  if(F.type==='gcal') return gcalModalContent();
   return _modalContent_tar();
 };
 const _appView_tar = appView;
