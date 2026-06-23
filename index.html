@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-113">
+<meta name="lucai-version" content="2026-06-19-114">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4102,6 +4102,10 @@ loadFromDB = async function(){
       }));
     }
   }catch(e){ console.error('loadTareas', e); }
+  try{
+    const _t = await sbc.from('lucai_tiempos').select('*').order('fecha',{ascending:false});
+    if(!_t.error && Array.isArray(_t.data)){ S.registros = _t.data.map(r=>({ id:r.id, usuario:r.usuario, area:r.area||'General', minutos:Number(r.minutos)||0, fecha:r.fecha, descripcion:r.descripcion||'' })); }
+  }catch(e){ console.error('loadTiempos', e); }
   await _prev;
 };
 function tarToRow(t){
@@ -4290,12 +4294,13 @@ function tarTopUpSeries(){
 function tareasView(){
   if(!window._tarToppedUp){ window._tarToppedUp=true; setTimeout(tarTopUpSeries, 50); }
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_resumen'];
+  const subs = admin ? ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_registro','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
-  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_semana:'Semana',tar_cal:'Calendario',tar_todas:'Equipo',tar_resumen:'Resumen'};
+  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
+  else if(sub==='tar_registro') body=registroView();
   else if(sub==='tar_cal') body=tarCalendarView();
   else if(sub==='tar_todas') body=tarTodasView();
   else if(sub==='tar_resumen') body=tarResumenView();
@@ -4549,6 +4554,96 @@ function gcalModalContent(){
     <div class="modal-head"><h2>Google Calendar</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">${inner}</div>
   </div></div>`;
+}
+/* ===================== REGISTRO DE TIEMPO (suelto, con informe) ===================== */
+async function srvRegInsert(r){
+  try{ const { error } = await sbc.from('lucai_tiempos').insert({ id:r.id, usuario:r.usuario, area:r.area, minutos:r.minutos, fecha:r.fecha, descripcion:r.descripcion||null }); if(error) throw error; }
+  catch(e){ console.error('srvRegInsert', e); toast('Error al guardar: '+(e.message||e)); return false; }
+  return true;
+}
+async function srvRegDel(id){
+  try{ const { error } = await sbc.from('lucai_tiempos').delete().eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvRegDel', e); toast('Error al borrar: '+(e.message||e)); return false; }
+  return true;
+}
+function regSetF(k,v){ if(!S.regF) S.regF={}; S.regF[k]=v; }
+function regClearFilter(){ S.regFiltro={fecha:'', persona:''}; render(); }
+function _fmtMin(m){ m=Number(m)||0; const h=Math.floor(m/60), mm=m%60; return h? (h+'h'+(mm?' '+mm+'m':'')) : (mm+'m'); }
+async function regAdd(){
+  const f=S.regF||{};
+  const desc=(f.desc||'').trim();
+  const min=parseInt(f.min,10)||0;
+  const fecha=f.fecha||todayStr();
+  const area=f.area||(tarAreas()[0]||'General');
+  if(!desc){ toast('Pon una descripción'); return; }
+  if(min<=0){ toast('Pon los minutos (mayor que 0)'); return; }
+  if(!Array.isArray(S.registros)) S.registros=[];
+  const r={ id:uid(), usuario:S.user.nombre, area, minutos:min, fecha, descripcion:desc };
+  S.registros.unshift(r);
+  S.regF={desc:'', min:'', area:area, fecha:fecha};
+  render();
+  const ok=await srvRegInsert(r); if(!ok){ S.registros=S.registros.filter(x=>x.id!==r.id); render(); }
+  else toast('Tiempo registrado');
+}
+async function regDel(id){
+  if(!confirm('¿Borrar este registro de tiempo?')) return;
+  const ok=await srvRegDel(id); if(!ok) return;
+  S.registros=(S.registros||[]).filter(x=>x.id!==id); render(); toast('Registro borrado');
+}
+function registroView(){
+  if(!Array.isArray(S.registros)) S.registros=[];
+  if(!S.regF) S.regF={desc:'', min:'', area:(tarAreas()[0]||'General'), fecha:todayStr()};
+  if(!S.regFiltro) S.regFiltro={fecha:'', persona:''};
+  const me=S.user.nombre, admin=isAdmin(), areas=tarAreas(), fil=S.regFiltro;
+  let list=S.registros.filter(r=> admin || r.usuario===me);
+  if(fil.fecha) list=list.filter(r=>r.fecha===fil.fecha);
+  if(admin && fil.persona) list=list.filter(r=>r.usuario===fil.persona);
+  list=[...list].sort((a,b)=> (b.fecha||'').localeCompare(a.fecha||''));
+  const total=list.reduce((s,r)=>s+(Number(r.minutos)||0),0);
+  const porArea={}; list.forEach(r=>{ porArea[r.area]=(porArea[r.area]||0)+(Number(r.minutos)||0); });
+  const areaRows=Object.keys(porArea).sort((a,b)=>porArea[b]-porArea[a]).map(a=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #F0EBE1"><span>${incEsc(a)}</span><strong>${_fmtMin(porArea[a])}</strong></div>`).join('');
+  let personaRows='';
+  if(admin){ const porP={}; list.forEach(r=>{ porP[r.usuario]=(porP[r.usuario]||0)+(Number(r.minutos)||0); }); personaRows=Object.keys(porP).sort((a,b)=>porP[b]-porP[a]).map(p=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #F0EBE1"><span>${incEsc(p)}</span><strong>${_fmtMin(porP[p])}</strong></div>`).join(''); }
+  const areaOpts=areas.map(a=>`<option ${S.regF.area===a?'selected':''}>${incEsc(a)}</option>`).join('');
+  const form=`<div style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-family:var(--serif,Georgia);font-size:16px;margin-bottom:10px">Anotar tiempo</div>
+      <div class="fld" style="margin-top:0"><label>¿En qué has trabajado?</label><input class="inp" id="regDesc" placeholder="Descripción de la tarea" value="${incEsc(S.regF.desc||'')}" oninput="regSetF('desc',this.value)"></div>
+      <div class="grid2">
+        <div class="fld"><label>Área / tema</label><select class="inp" onchange="regSetF('area',this.value)">${areaOpts}</select></div>
+        <div class="fld"><label>Minutos</label><input class="inp" type="number" min="0" step="5" placeholder="Ej. 30" value="${incEsc(S.regF.min||'')}" oninput="regSetF('min',this.value)"></div>
+      </div>
+      <div class="grid2">
+        <div class="fld"><label>Día</label><input class="inp" type="date" value="${S.regF.fecha||todayStr()}" onchange="regSetF('fecha',this.value)"></div>
+        <div class="fld" style="display:flex;align-items:flex-end"><button class="btn btn-primary" style="width:100%" onclick="regAdd()">Añadir registro</button></div>
+      </div>
+    </div>`;
+  const userOpts = admin? `<option value="">Todo el equipo</option>`+[...new Set(S.registros.map(r=>r.usuario))].sort().map(u=>`<option value="${incEsc(u)}" ${fil.persona===u?'selected':''}>${incEsc(u)}</option>`).join('') : '';
+  const filtros=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label style="font-size:12px;color:#8A949B">Día:</label>
+      <input class="inp" type="date" style="max-width:170px" value="${fil.fecha||''}" onchange="S.regFiltro.fecha=this.value;render()">
+      ${admin?`<select class="inp" style="max-width:200px" onchange="S.regFiltro.persona=this.value;render()">${userOpts}</select>`:''}
+      ${(fil.fecha||fil.persona)?`<button class="btn btn-ghost btn-sm" onclick="regClearFilter()">Quitar filtros</button>`:''}
+      <span style="margin-left:auto;font-weight:700">Total: ${_fmtMin(total)}</span>
+    </div>`;
+  const informe=`<div class="grid2" style="margin-bottom:14px">
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px"><div style="font-size:12px;font-weight:700;color:#8A949B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Tiempo por área</div>${areaRows||'<div class="muted" style="font-size:13px">Sin datos</div>'}</div>
+      ${admin?`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px"><div style="font-size:12px;font-weight:700;color:#8A949B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Tiempo por persona</div>${personaRows||'<div class="muted" style="font-size:13px">Sin datos</div>'}</div>`:''}
+    </div>`;
+  const filas = list.length ? list.map(r=>`<tr>
+      <td data-label="Día">${incEsc(fmtFecha(r.fecha))}</td>
+      ${admin?`<td data-label="Quién">${incEsc(r.usuario)}</td>`:''}
+      <td data-label="Área">${incEsc(r.area)}</td>
+      <td data-label="Tiempo">${_fmtMin(r.minutos)}</td>
+      <td data-label="Descripción">${incEsc(r.descripcion||'')}</td>
+      <td data-label="">${(admin||r.usuario===me)?`<button class="btn btn-ghost btn-sm" onclick="regDel('${r.id}')" style="color:#C0392B">Borrar</button>`:''}</td>
+    </tr>`).join('') : `<tr><td colspan="${admin?6:5}" style="text-align:center;color:#8A949B;padding:18px">No hay registros para este filtro.</td></tr>`;
+  return `${form}
+    <div class="section-sub" style="margin:0 0 10px">${admin?'Ves el tiempo de todo el equipo.':'Ves tu propio tiempo.'} Filtra por día para tu informe.</div>
+    ${filtros}${informe}
+    <div class="matrix"><table>
+      <thead><tr><th>Día</th>${admin?'<th>Quién</th>':''}<th>Área</th><th>Tiempo</th><th>Descripción</th><th></th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>`;
 }
 function tarKpis(arr){
   const act=arr.filter(tarActiva);
