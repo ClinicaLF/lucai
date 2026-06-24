@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-119">
+<meta name="lucai-version" content="2026-06-19-120">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4366,10 +4366,12 @@ function tarDragUp(ev){ document.removeEventListener('pointermove',tarDragMove);
 }
 function tarCalNuevaEnGrid(d, ev, r0, hourH){ if(_calSuppress){ _calSuppress=false; return; } let mins=r0; try{ const y=(ev&&ev.offsetY!=null)?ev.offsetY:0; mins=r0 + Math.round((y/hourH*60)/15)*15; }catch(_){}; const hi=_mh(mins); openTarea({fechaLimite:d, horaInicio:hi, horaFin:_mh(mins+30)}); }
 function _colBlocks(tasks, r0, hourH){
-  const arr=tasks.filter(t=>_hm(t.horaInicio)!=null).map(t=>{ const s=_hm(t.horaInicio); let e=_hm(t.horaFin); if(e==null||e<=s) e=s+30; return Object.assign({},t,{_s:s,_e:e}); }).sort((a,b)=>a._s-b._s);
-  const lanes=[]; arr.forEach(t=>{ let i=0; for(;i<lanes.length;i++){ if(lanes[i]<=t._s) break; } t._lane=i; lanes[i]=t._e; });
-  const nL=Math.max(1,lanes.length);
-  return arr.map(t=>{ const top=(t._s-r0)/60*hourH; const h=Math.max((t._e-t._s)/60*hourH,20); const w=100/nL; const left=t._lane*w; const col=_tarCalColor(t); const rec=(t.serieId||t.recurrencia)?' ⟳':''; const corto=h<34;
+  const arr=tasks.filter(t=>_hm(t.horaInicio)!=null).map(t=>{ const s=_hm(t.horaInicio); let e=_hm(t.horaFin); if(e==null||e<=s) e=s+30; return Object.assign({},t,{_s:s,_e:e}); }).sort((a,b)=> (a._s-b._s) || (a._e-b._e));
+  let _cl=[], _curEnd=-1;
+  const _flush=()=>{ const lanes=[]; _cl.forEach(t=>{ let i=0; for(;i<lanes.length;i++){ if(lanes[i]<=t._s) break; } t._lane=i; lanes[i]=t._e; }); const n=Math.max(1,lanes.length); _cl.forEach(t=> t._lanes=n); _cl=[]; _curEnd=-1; };
+  arr.forEach(t=>{ if(_cl.length && t._s>=_curEnd) _flush(); _cl.push(t); _curEnd=Math.max(_curEnd,t._e); });
+  if(_cl.length) _flush();
+  return arr.map(t=>{ const top=(t._s-r0)/60*hourH; const h=Math.max((t._e-t._s)/60*hourH,20); const w=100/(t._lanes||1); const left=(t._lane||0)*w; const col=_tarCalColor(t); const rec=(t.serieId||t.recurrencia)?' ⟳':''; const corto=h<34;
     const inner = corto
       ? `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15"><b>${incEsc(t.horaInicio)}</b> ${incEsc(t.titulo||'')}${rec}</div>`
       : `<div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(t.horaInicio)}${t.horaFin?'–'+incEsc(t.horaFin):''}</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(t.titulo||'')}${rec}</div>`;
