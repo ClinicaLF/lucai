@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-116">
+<meta name="lucai-version" content="2026-06-19-117">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4155,7 +4155,7 @@ async function srvTarUpdate(id, t, okMsg){
       area:t.area||'General',
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
       hora_inicio:t.horaInicio||null, hora_fin:t.horaFin||null,
-      serie_id:t.serieId||null, recurrencia:t.recurrencia||null,
+      serie_id:t.serieId||null, recurrencia:t.recurrencia||null, color:t.color||null,
       estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:_msgs, vistos:_vistos, tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]), participantes:(t.participantes||[]) }).eq('id', id);
     if(error) throw error;
   }catch(e){ console.error('srvTarUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
