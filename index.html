@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-114">
+<meta name="lucai-version" content="2026-06-19-115">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4093,7 +4093,7 @@ loadFromDB = async function(){
         horaInicio:x.hora_inicio||'', horaFin:x.hora_fin||'',
         serieId:x.serie_id||null,
         recurrencia: (x.recurrencia && typeof x.recurrencia==='object' && !Array.isArray(x.recurrencia)) ? x.recurrencia : (function(){ try{ return x.recurrencia?JSON.parse(x.recurrencia):null; }catch(_){ return null; } })(),
-        estado:x.estado||'Pendiente', ts:x.ts, fechaHecha:x.fecha_hecha,
+        estado:x.estado||'Pendiente', ts:x.ts, fechaHecha:x.fecha_hecha, color:x.color||'',
         tiempos: Array.isArray(x.tiempos) ? x.tiempos : (function(){ try{ return x.tiempos?JSON.parse(x.tiempos):[]; }catch(_){ return []; } })(),
         mensajes: Array.isArray(x.mensajes) ? x.mensajes : (function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
         adjuntos: Array.isArray(x.adjuntos) ? x.adjuntos : (function(){ try{ return x.adjuntos?JSON.parse(x.adjuntos):[]; }catch(_){ return []; } })(),
@@ -4114,7 +4114,7 @@ function tarToRow(t){
     fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
     hora_inicio:t.horaInicio||null, hora_fin:t.horaFin||null,
     serie_id:t.serieId||null, recurrencia:t.recurrencia||null,
-    estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]), participantes:(t.participantes||[]) };
+    estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, color:t.color||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]), participantes:(t.participantes||[]) };
 }
 async function srvTarInsert(t, okMsg){
   try{
@@ -4294,7 +4294,7 @@ function tarTopUpSeries(){
 function tareasView(){
   if(!window._tarToppedUp){ window._tarToppedUp=true; setTimeout(tarTopUpSeries, 50); }
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_registro','tar_resumen'];
+  const subs = admin ? ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
   const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
@@ -4343,36 +4343,45 @@ function calToday(){ S.calRef=todayStr(); render(); }
 function calOpenDia(iso){ S.calRef=iso; S.calMode='dia'; render(); }
 function calStep(dir){ const mode=S.calMode||'semana', ref=S.calRef||todayStr(); if(mode==='dia') S.calRef=tarAddDias(ref,dir); else if(mode==='semana') S.calRef=tarAddDias(ref,dir*7); else { const d=new Date(ref+'T00:00:00'); d.setDate(1); d.setMonth(d.getMonth()+dir); S.calRef=d.toISOString().slice(0,10); } render(); }
 function _reuRango(reuns){ let lo=8*60, hi=20*60; reuns.forEach(r=>{ const s=_hm(r.horaInicio); let e=_hm(r.horaFin); if(e==null&&s!=null) e=s+30; if(s!=null) lo=Math.min(lo,s); if(e!=null) hi=Math.max(hi,e); }); lo=Math.floor(lo/60)*60; hi=Math.ceil(hi/60)*60; if(hi-lo<120) hi=lo+120; return [lo,hi]; }
-function _colBlocks(reuns, r0, hourH){
-  const arr=reuns.filter(r=>_hm(r.horaInicio)!=null).map(r=>{ const s=_hm(r.horaInicio); let e=_hm(r.horaFin); if(e==null||e<=s) e=s+30; return Object.assign({},r,{_s:s,_e:e}); }).sort((a,b)=>a._s-b._s);
-  const lanes=[]; arr.forEach(r=>{ let i=0; for(;i<lanes.length;i++){ if(lanes[i]<=r._s) break; } r._lane=i; lanes[i]=r._e; });
+function tarCalVisibles(){ const me=S.user.nombre, admin=isAdmin(); return (S.tareas||[]).filter(t=> tarActiva(t) && t.fechaLimite && (admin||tarInvolucra(t,me))); }
+function tarCalDe(iso){ return tarCalVisibles().filter(t=>t.fechaLimite===iso).sort((a,b)=>{ const ha=_hm(a.horaInicio); const hb=_hm(b.horaInicio); return (ha==null?9999:ha)-(hb==null?9999:hb); }); }
+function _tarCalColor(t){ return t.color || (t.prioridad==='Alta'?'#C0392B':(t.prioridad==='Baja'?'#6E8E00':'#B8860B')); }
+function tarCalNueva(d){ openTarea({fechaLimite:d||S.calRef||todayStr()}); }
+function tarCalNuevaEnGrid(d, ev, r0, hourH){ let mins=r0; try{ const y=(ev&&ev.offsetY!=null)?ev.offsetY:0; mins=r0 + Math.round((y/hourH*60)/15)*15; }catch(_){}; const hi=_mh(mins); openTarea({fechaLimite:d, horaInicio:hi, horaFin:_mh(mins+30)}); }
+function _colBlocks(tasks, r0, hourH){
+  const arr=tasks.filter(t=>_hm(t.horaInicio)!=null).map(t=>{ const s=_hm(t.horaInicio); let e=_hm(t.horaFin); if(e==null||e<=s) e=s+30; return Object.assign({},t,{_s:s,_e:e}); }).sort((a,b)=>a._s-b._s);
+  const lanes=[]; arr.forEach(t=>{ let i=0; for(;i<lanes.length;i++){ if(lanes[i]<=t._s) break; } t._lane=i; lanes[i]=t._e; });
   const nL=Math.max(1,lanes.length);
-  return arr.map(r=>{ const top=(r._s-r0)/60*hourH; const h=Math.max((r._e-r._s)/60*hourH,22); const w=100/nL; const left=r._lane*w; const col=_reuColor(r);
-    return `<div onclick="event.stopPropagation();reuOpen('${r.id}')" title="${incEsc(r.titulo||'')}" style="position:absolute;top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);background:${col}1f;border:1px solid ${col};border-left:3px solid ${col};border-radius:6px;padding:2px 5px;font-size:11px;overflow:hidden;cursor:pointer;color:#2C3A1E;box-sizing:border-box">
-      <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(r.horaInicio)}${r.horaFin?'–'+incEsc(r.horaFin):''}</div>
-      <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(r.titulo||'')}${(r.serieId||r.recurrencia)?' ⟳':''}</div>
+  return arr.map(t=>{ const top=(t._s-r0)/60*hourH; const h=Math.max((t._e-t._s)/60*hourH,22); const w=100/nL; const left=t._lane*w; const col=_tarCalColor(t);
+    return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="position:absolute;top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);background:${col}1f;border:1px solid ${col};border-left:3px solid ${col};border-radius:6px;padding:2px 5px;font-size:11px;overflow:hidden;cursor:pointer;color:#2C3A1E;box-sizing:border-box">
+      <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(t.horaInicio)}${t.horaFin?'–'+incEsc(t.horaFin):''}</div>
+      <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(t.titulo||'')}${(t.serieId||t.recurrencia)?' ⟳':''}</div>
     </div>`; }).join('');
 }
 function _grid(dias){
-  const HOURH=44, totalH=24*HOURH, headerH=dias.length>1?28:0;
+  const HOURH=44, totalH=24*HOURH;
+  const dayNameH=dias.length>1?22:0, allDayH=50, headerH=dayNameH+allDayH;
   const gutterHours=[]; for(let h=0;h<24;h++) gutterHours.push(`<div style="position:absolute;top:${h*HOURH-7}px;right:5px;font-size:10px;color:#8A949B">${String(h).padStart(2,'0')}:00</div>`);
-  const gutter=`<div style="flex:0 0 44px;position:sticky;left:0;z-index:3;background:#fff">${headerH?`<div style="height:${headerH}px;position:sticky;top:0;background:#fff;z-index:4"></div>`:''}<div style="position:relative;height:${totalH}px">${gutterHours.join('')}</div></div>`;
+  const gutter=`<div style="flex:0 0 44px;position:sticky;left:0;z-index:3;background:#fff">
+      <div style="position:sticky;top:0;z-index:4;background:#fff">${dayNameH?`<div style="height:${dayNameH}px"></div>`:''}<div style="height:${allDayH}px;display:flex;align-items:center;justify-content:flex-end;padding-right:4px;font-size:8.5px;color:#8A949B;text-align:right;line-height:1.1;border-bottom:1px solid var(--line)">todo<br>el día</div></div>
+      <div style="position:relative;height:${totalH}px">${gutterHours.join('')}</div></div>`;
   const linesArr=[]; for(let h=0;h<=24;h++) linesArr.push(`<div style="position:absolute;top:${h*HOURH}px;left:0;right:0;border-top:1px solid #EFEAE0;height:0;pointer-events:none"></div>`);
   const linesHtml=linesArr.join('');
-  const cols=dias.map(d=>{ const reuns=reuDe(d); const hoy=d===todayStr();
-    const head=headerH?`<div style="height:${headerH}px;line-height:${headerH}px;text-align:center;font-size:11px;font-weight:700;color:${hoy?'#5A6E00':'#5A6770'};background:${hoy?'#F0F3DE':'#fff'};border-bottom:1px solid var(--line);text-transform:capitalize;position:sticky;top:0;z-index:2">${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>`:'';
-    return `<div style="flex:1;min-width:${dias.length>1?'90px':'auto'};border-left:1px solid #EFEAE0">${head}<div style="position:relative;height:${totalH}px" onclick="reuNuevaEnGrid('${d}',event,0,${HOURH})">${linesHtml}${_colBlocks(reuns,0,HOURH)}</div></div>`;
+  const cols=dias.map(d=>{ const items=tarCalDe(d); const untimed=items.filter(t=>_hm(t.horaInicio)==null); const hoy=d===todayStr();
+    const dayName=dayNameH?`<div style="height:${dayNameH}px;line-height:${dayNameH}px;text-align:center;font-size:11px;font-weight:700;color:${hoy?'#5A6E00':'#5A6770'};background:${hoy?'#F0F3DE':'#fff'};text-transform:capitalize">${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>`:'';
+    const allDay=`<div onclick="tarCalNueva('${d}')" title="Crear tarea sin hora" style="height:${allDayH}px;overflow:auto;border-bottom:1px solid var(--line);background:${hoy?'#FAFBF2':'#fff'};padding:2px;cursor:pointer">${untimed.map(t=>{const col=_tarCalColor(t);return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="background:${col}1f;border-left:3px solid ${col};border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${incEsc(t.titulo||'')}${(t.serieId||t.recurrencia)?' ⟳':''}</div>`;}).join('')}</div>`;
+    const header=`<div style="position:sticky;top:0;z-index:2">${dayName}${allDay}</div>`;
+    return `<div style="flex:1;min-width:${dias.length>1?'90px':'auto'};border-left:1px solid #EFEAE0">${header}<div style="position:relative;height:${totalH}px" onclick="tarCalNuevaEnGrid('${d}',event,0,${HOURH})">${linesHtml}${_colBlocks(items,0,HOURH)}</div></div>`;
   }).join('');
-  return `<div id="calScroll" onscroll="S.calScrollTop=this.scrollTop" style="border:1px solid var(--line);border-radius:12px;max-height:62vh;overflow:auto"><div style="display:flex;min-width:${dias.length>1?(44+dias.length*90)+'px':'100%'}">${gutter}<div style="flex:1;display:flex">${cols}</div></div></div>`;
+  return `<div id="calScroll" onscroll="S.calScrollTop=this.scrollTop" style="border:1px solid var(--line);border-radius:12px;max-height:64vh;overflow:auto"><div style="display:flex;min-width:${dias.length>1?(44+dias.length*90)+'px':'100%'}">${gutter}<div style="flex:1;display:flex">${cols}</div></div></div>`;
 }
-function reuNuevaEnGrid(d, ev, r0, hourH){ let mins=r0; try{ const y=(ev&&ev.offsetY!=null)?ev.offsetY:0; mins=r0 + Math.round((y/hourH*60)/15)*15; }catch(_){}; reuNueva(d, _mh(mins)); }
 function _calDia(ref){ return _grid([ref]); }
 function _calSemana(ref){ const lun=_calLunes(ref); const dias=[]; for(let i=0;i<7;i++) dias.push(tarAddDias(lun,i)); return _grid(dias); }
 function _calMes(ref){
   const d=new Date(ref+'T00:00:00'); d.setDate(1); const primero=d.toISOString().slice(0,10);
   const inicio=tarAddDias(primero,-_calDow(primero)); const mesActual=primero.slice(0,7); let celdas=''; let cur=inicio;
-  for(let i=0;i<42;i++){ const enMes=cur.slice(0,7)===mesActual, hoy=cur===todayStr(), items=reuDe(cur), max=3;
-    const chips=items.slice(0,max).map(r=>{ const col=_reuColor(r); const h=r.horaInicio?incEsc(r.horaInicio)+' ':''; return `<div onclick="event.stopPropagation();reuOpen('${r.id}')" title="${incEsc(r.titulo||'')}" style="border-left:3px solid ${col};background:${col}14;border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h}${incEsc(r.titulo||'')}</div>`; }).join('');
+  for(let i=0;i<42;i++){ const enMes=cur.slice(0,7)===mesActual, hoy=cur===todayStr(), items=tarCalDe(cur), max=3;
+    const chips=items.slice(0,max).map(t=>{ const col=_tarCalColor(t); const h=t.horaInicio?incEsc(t.horaInicio)+' ':''; return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="border-left:3px solid ${col};background:${col}14;border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h}${incEsc(t.titulo||'')}</div>`; }).join('');
     const mas=items.length>max?`<div style="font-size:9.5px;color:#8A949B">+${items.length-max} más</div>`:'';
     celdas+=`<div onclick="calOpenDia('${cur}')" style="min-height:76px;border:1px solid var(--line);border-radius:8px;padding:3px 4px;background:${enMes?'#fff':'#FAF8F3'};opacity:${enMes?1:.55};cursor:pointer;overflow:hidden"><div style="font-size:11px;font-weight:700;color:${hoy?'#fff':'#5A6770'};${hoy?'background:#A8B400;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;margin-left:auto':'text-align:right'}">${cur.slice(8,10)*1}</div>${chips}${mas}</div>`;
     cur=tarAddDias(cur,1);
@@ -4381,7 +4390,7 @@ function _calMes(ref){
   return `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">${head}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:3px">${celdas}</div>`;
 }
 function tarCalendarView(){
-  if(!Array.isArray(S.reuniones)) S.reuniones=[];
+  if(!Array.isArray(S.tareas)) S.tareas=[];
   if(!S.calMode) S.calMode='semana';
   if(!S.calRef) S.calRef=todayStr();
   const mode=S.calMode, ref=S.calRef;
@@ -4397,12 +4406,12 @@ function tarCalendarView(){
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div class="seg">${toggle}</div>
-        <button class="btn btn-primary btn-sm" onclick="reuNueva()">Nueva reunión</button>
+        <button class="btn btn-primary btn-sm" onclick="tarCalNueva()">Nueva tarea</button>
       </div>
     </div>`;
   const cuerpo=mode==='mes'?_calMes(ref):(mode==='semana'?_calSemana(ref):_calDia(ref));
   if(mode!=='mes'){ setTimeout(()=>{ const c=document.getElementById('calScroll'); if(c){ if(S.calScrollTop==null) S.calScrollTop=7*44; c.scrollTop=S.calScrollTop; } },0); }
-  const nota=`<div style="font-size:12px;color:#8A949B;margin-top:10px">Aquí solo se ven reuniones y bloques de trabajo (no las tareas). ${mode!=='mes'?'Toca un hueco a una hora para crear uno ahí.':'Toca un día para verlo en detalle.'}</div>`;
+  const nota=`<div style="font-size:12px;color:#8A949B;margin-top:10px">Son tus tareas con fecha. Toca una para abrirla (mensajes, marcar hecha…). ${mode!=='mes'?'Toca un hueco a una hora para crear una tarea ahí, o la franja de arriba para una sin hora.':'Toca un día para verlo en detalle.'}</div>`;
   return bar+cuerpo+nota;
 }
 /* --- crear / editar / borrar reunión --- */
@@ -5210,8 +5219,9 @@ function tarAreaDelete(i){
   if(areas.length<=1){ toast('Debe quedar al menos un área'); return; }
   areas.splice(i,1); S.tarAreas=areas; _tarPersistAreas(); render(); toast('Área borrada');
 }
+function tarSetColor(c){ F.color=c; render(); }
 function openTarea(preset){
-  F={type:'tar_nuevo', id:uid(), titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre, horaInicio:'', horaFin:'', adjuntos:[], participantes:[], recurTipo:'no', recurDias:[], recurHasta:''};
+  F={type:'tar_nuevo', id:uid(), titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre, horaInicio:'', horaFin:'', color:'', adjuntos:[], participantes:[], recurTipo:'no', recurDias:[], recurHasta:''};
   if(preset && typeof preset==='object') Object.assign(F, preset);
   S.modal='tar_nuevo'; render();
 }
@@ -5285,6 +5295,8 @@ function tarFormBody(){
         <input class="inp" type="time" value="${incEsc(F.horaFin||'')}" oninput="setInp('horaFin',this.value)"></div>
       ${repetirSel}
     </div>
+    <div class="fld"><label>Color <span class="muted" style="font-weight:400">(en el calendario)</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:9px">${REU_COLORS.map(c=>`<button type="button" onclick="tarSetColor('${c}')" aria-label="color" style="width:25px;height:25px;border-radius:50%;background:${c};border:${(F.color||'')===c?'3px solid #333F48':'2px solid #fff'};box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0"></button>`).join('')}<button type="button" onclick="tarSetColor('')" title="Por prioridad" style="width:25px;height:25px;border-radius:50%;background:#fff;border:${!(F.color)?'3px solid #333F48':'2px solid #fff'};box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0;color:#8A949B;font-size:14px;line-height:1">∅</button></div></div>
     ${recurDetalle}
     ${puedeFecha?'':'<div class="muted" style="font-size:11px;margin-top:4px">La fecha de entrega solo la cambia quien emitió la tarea.</div>'}
   </div>`;
@@ -5364,7 +5376,7 @@ function commitTarea(){
   const base={ titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
     prioridad:F.prioridad||'Media', area:F.area||'General', deQuien:S.user.nombre, paraQuien:F.paraQuien,
     participantes:[...new Set((Array.isArray(F.participantes)?F.participantes:[]).filter(n=>n && n!==F.paraQuien))],
-    horaInicio:F.horaInicio||'', horaFin:F.horaFin||'' };
+    horaInicio:F.horaInicio||'', horaFin:F.horaFin||'', color:F.color||'' };
   const rule=tarReglaDesdeForm();
   if(rule){
     const start=F.fechaLimite;
@@ -5742,7 +5754,7 @@ function tarDelTiempo(id, idx){
 function openTarEdit(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   if(!(isAdmin()||t.deQuien===S.user.nombre)){ toast('Solo puede editarla quien la creó o Dirección'); return; }
-  F={type:'tar_edit', id, titulo:t.titulo||'', descripcion:t.descripcion||'', prioridad:t.prioridad||'Media', area:t.area||'General', fechaLimite:t.fechaLimite||'', paraQuien:t.paraQuien||'', deQuien:t.deQuien||'', horaInicio:t.horaInicio||'', horaFin:t.horaFin||'', participantes:Array.isArray(t.participantes)?t.participantes.slice():[]};
+  F={type:'tar_edit', id, titulo:t.titulo||'', descripcion:t.descripcion||'', prioridad:t.prioridad||'Media', area:t.area||'General', fechaLimite:t.fechaLimite||'', paraQuien:t.paraQuien||'', deQuien:t.deQuien||'', horaInicio:t.horaInicio||'', horaFin:t.horaFin||'', color:t.color||'', participantes:Array.isArray(t.participantes)?t.participantes.slice():[]};
   S.modal='tar_edit'; render();
 }
 function tarEditModalContent(){
@@ -5781,7 +5793,7 @@ function commitTarEdit(scope){
   scope=scope||'una';
   if(!tarValid()) return;
   const t=(S.tareas||[]).find(x=>x.id===F.id); if(!t) return;
-  const cont={ titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(), prioridad:F.prioridad||'Media', area:F.area||'General', paraQuien:F.paraQuien, participantes:[...new Set((Array.isArray(F.participantes)?F.participantes:[]).filter(n=>n && n!==F.paraQuien))], horaInicio:F.horaInicio||'', horaFin:F.horaFin||'' };
+  const cont={ titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(), prioridad:F.prioridad||'Media', area:F.area||'General', paraQuien:F.paraQuien, participantes:[...new Set((Array.isArray(F.participantes)?F.participantes:[]).filter(n=>n && n!==F.paraQuien))], horaInicio:F.horaInicio||'', horaFin:F.horaFin||'', color:F.color||'' };
   // aplicar siempre a esta tarea (incluida su fecha, si soy el emisor)
   Object.assign(t, cont);
   if(t.deQuien===S.user.nombre) t.fechaLimite=F.fechaLimite;
@@ -5794,7 +5806,7 @@ function commitTarEdit(scope){
   const hermanas=tarSerieHermanas(t.serieId).filter(x=> x.id!==t.id && (scope==='todas' || (x.fechaLimite||'') >= (t.fechaLimite||'')) );
   hermanas.forEach(x=> Object.assign(x, cont));
   const ids=hermanas.map(x=>x.id);
-  const fields={ titulo:cont.titulo, descripcion:cont.descripcion||null, prioridad:cont.prioridad, area:cont.area, para_quien:cont.paraQuien, participantes:cont.participantes, hora_inicio:cont.horaInicio||null, hora_fin:cont.horaFin||null };
+  const fields={ titulo:cont.titulo, descripcion:cont.descripcion||null, prioridad:cont.prioridad, area:cont.area, para_quien:cont.paraQuien, participantes:cont.participantes, hora_inicio:cont.horaInicio||null, hora_fin:cont.horaFin||null, color:cont.color||null };
   closeModal(); render();
   // esta tarea por separado (puede llevar fecha distinta), y el resto en lote
   (async()=>{
