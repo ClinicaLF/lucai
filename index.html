@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-118">
+<meta name="lucai-version" content="2026-06-19-119">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4348,7 +4348,23 @@ function _txtOn(hex){ try{ const h=(hex||'').replace('#',''); const r=parseInt(h
 function tarCalDe(iso){ return tarCalVisibles().filter(t=>t.fechaLimite===iso).sort((a,b)=>{ const ha=_hm(a.horaInicio); const hb=_hm(b.horaInicio); return (ha==null?9999:ha)-(hb==null?9999:hb); }); }
 function _tarCalColor(t){ return t.color || (t.prioridad==='Alta'?'#C0392B':(t.prioridad==='Baja'?'#6E8E00':'#B8860B')); }
 function tarCalNueva(d){ openTarea({fechaLimite:d||S.calRef||todayStr()}); }
-function tarCalNuevaEnGrid(d, ev, r0, hourH){ let mins=r0; try{ const y=(ev&&ev.offsetY!=null)?ev.offsetY:0; mins=r0 + Math.round((y/hourH*60)/15)*15; }catch(_){}; const hi=_mh(mins); openTarea({fechaLimite:d, horaInicio:hi, horaFin:_mh(mins+30)}); }
+let _calDrag=null, _calSuppress=false;
+function _dayUnder(x){ const els=document.querySelectorAll('.calbody'); for(let i=0;i<els.length;i++){ const r=els[i].getBoundingClientRect(); if(x>=r.left && x<=r.right) return els[i].getAttribute('data-d'); } return null; }
+function tarDragDown(ev,id,mode){ ev.stopPropagation(); if(ev.button&&ev.button!==0) return; const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return; const el=ev.currentTarget.closest('[data-tid]'); const s0=_hm(t.horaInicio); _calDrag={id,mode,sx:ev.clientX,sy:ev.clientY,moved:false,s0:s0,e0:(_hm(t.horaFin)||((s0==null?0:s0)+30)),d0:t.fechaLimite,el}; document.addEventListener('pointermove',tarDragMove); document.addEventListener('pointerup',tarDragUp); }
+function tarDragMove(ev){ const D=_calDrag; if(!D) return; const dx=ev.clientX-D.sx, dy=ev.clientY-D.sy; if(!D.moved && Math.abs(dx)<5 && Math.abs(dy)<5) return; D.moved=true; if(ev.cancelable) ev.preventDefault(); const HOURH=44;
+  if(D.mode==='resize'){ let e=D.e0+Math.round((dy/HOURH*60)/15)*15; e=Math.max(D.s0+15,Math.min(1440,e)); D.prev={s:D.s0,e:e,d:D.d0}; if(D.el) D.el.style.height=((e-D.s0)/60*HOURH)+'px'; }
+  else { const dur=D.e0-D.s0; let s=D.s0+Math.round((dy/HOURH*60)/15)*15; s=Math.max(0,Math.min(1440-dur,s)); const d=_dayUnder(ev.clientX)||D.d0; D.prev={s:s,e:s+dur,d:d}; if(D.el){ D.el.style.transform=`translate(${dx}px,${(s-D.s0)/60*HOURH}px)`; D.el.style.opacity='.85'; D.el.style.zIndex='30'; D.el.style.cursor='grabbing'; } }
+}
+function tarDragUp(ev){ document.removeEventListener('pointermove',tarDragMove); document.removeEventListener('pointerup',tarDragUp); const D=_calDrag; _calDrag=null; if(!D) return;
+  if(!D.moved){ openTarDet(D.id); return; }
+  _calSuppress=true; setTimeout(()=>{_calSuppress=false;},350);
+  const t=(S.tareas||[]).find(x=>x.id===D.id); const p=D.prev; if(!t||!p){ render(); return; }
+  let msg = D.mode==='resize' ? 'Duración cambiada' : 'Tarea movida';
+  t.horaInicio=_mh(p.s); t.horaFin=_mh(p.e);
+  if(D.mode==='move' && p.d && p.d!==t.fechaLimite){ if(t.deQuien===S.user.nombre){ t.fechaLimite=p.d; } else { msg='Hora cambiada (la fecha solo la cambia quien la creó)'; } }
+  render(); srvTarUpdate(t.id, t, msg);
+}
+function tarCalNuevaEnGrid(d, ev, r0, hourH){ if(_calSuppress){ _calSuppress=false; return; } let mins=r0; try{ const y=(ev&&ev.offsetY!=null)?ev.offsetY:0; mins=r0 + Math.round((y/hourH*60)/15)*15; }catch(_){}; const hi=_mh(mins); openTarea({fechaLimite:d, horaInicio:hi, horaFin:_mh(mins+30)}); }
 function _colBlocks(tasks, r0, hourH){
   const arr=tasks.filter(t=>_hm(t.horaInicio)!=null).map(t=>{ const s=_hm(t.horaInicio); let e=_hm(t.horaFin); if(e==null||e<=s) e=s+30; return Object.assign({},t,{_s:s,_e:e}); }).sort((a,b)=>a._s-b._s);
   const lanes=[]; arr.forEach(t=>{ let i=0; for(;i<lanes.length;i++){ if(lanes[i]<=t._s) break; } t._lane=i; lanes[i]=t._e; });
@@ -4357,7 +4373,7 @@ function _colBlocks(tasks, r0, hourH){
     const inner = corto
       ? `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15"><b>${incEsc(t.horaInicio)}</b> ${incEsc(t.titulo||'')}${rec}</div>`
       : `<div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(t.horaInicio)}${t.horaFin?'–'+incEsc(t.horaFin):''}</div><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(t.titulo||'')}${rec}</div>`;
-    return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')} · ${incEsc(t.horaInicio)}${t.horaFin?'–'+incEsc(t.horaFin):''}" style="position:absolute;top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);background:${col};border-radius:6px;padding:1px 5px;font-size:11px;line-height:1.15;overflow:hidden;cursor:pointer;color:${_txtOn(col)};box-sizing:border-box">${inner}</div>`; }).join('');
+    return `<div data-tid="${t.id}" onpointerdown="tarDragDown(event,'${t.id}','move')" onclick="event.stopPropagation()" title="${incEsc(t.titulo||'')} · ${incEsc(t.horaInicio)}${t.horaFin?'–'+incEsc(t.horaFin):''}" style="position:absolute;top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);background:${col};border-radius:6px;padding:1px 5px;font-size:11px;line-height:1.15;overflow:hidden;cursor:grab;color:${_txtOn(col)};box-sizing:border-box;touch-action:none;user-select:none">${inner}<div onpointerdown="tarDragDown(event,'${t.id}','resize')" style="position:absolute;left:0;right:0;bottom:0;height:9px;cursor:ns-resize;touch-action:none"></div></div>`; }).join('');
 }
 function _grid(dias){
   const HOURH=44, totalH=24*HOURH;
@@ -4372,7 +4388,7 @@ function _grid(dias){
     const dayName=dayNameH?`<div style="height:${dayNameH}px;line-height:${dayNameH}px;text-align:center;font-size:11px;font-weight:700;color:${hoy?'#5A6E00':'#5A6770'};background:${hoy?'#F0F3DE':'#fff'};text-transform:capitalize">${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>`:'';
     const allDay=`<div onclick="tarCalNueva('${d}')" title="Crear tarea sin hora" style="height:${allDayH}px;overflow:auto;border-bottom:1px solid var(--line);background:${hoy?'#FAFBF2':'#fff'};padding:2px;cursor:pointer">${untimed.map(t=>{const col=_tarCalColor(t);return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="background:${col};color:${_txtOn(col)};border-radius:4px;padding:1px 5px;margin-bottom:2px;font-size:10px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${incEsc(t.titulo||'')}${(t.serieId||t.recurrencia)?' ⟳':''}</div>`;}).join('')}</div>`;
     const header=`<div style="position:sticky;top:0;z-index:2">${dayName}${allDay}</div>`;
-    return `<div style="flex:1;min-width:${dias.length>1?'90px':'auto'};border-left:1px solid #EFEAE0">${header}<div style="position:relative;height:${totalH}px" onclick="tarCalNuevaEnGrid('${d}',event,0,${HOURH})">${linesHtml}${_colBlocks(items,0,HOURH)}</div></div>`;
+    return `<div style="flex:1;min-width:${dias.length>1?'90px':'auto'};border-left:1px solid #EFEAE0">${header}<div class="calbody" data-d="${d}" style="position:relative;height:${totalH}px" onclick="tarCalNuevaEnGrid('${d}',event,0,${HOURH})">${linesHtml}${_colBlocks(items,0,HOURH)}</div></div>`;
   }).join('');
   return `<div id="calScroll" onscroll="S.calScrollTop=this.scrollTop" style="border:1px solid var(--line);border-radius:12px;max-height:64vh;overflow:auto"><div style="display:flex;min-width:${dias.length>1?(44+dias.length*90)+'px':'100%'}">${gutter}<div style="flex:1;display:flex">${cols}</div></div></div>`;
 }
