@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-06-19-115">
+<meta name="lucai-version" content="2026-06-19-116">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4343,7 +4343,8 @@ function calToday(){ S.calRef=todayStr(); render(); }
 function calOpenDia(iso){ S.calRef=iso; S.calMode='dia'; render(); }
 function calStep(dir){ const mode=S.calMode||'semana', ref=S.calRef||todayStr(); if(mode==='dia') S.calRef=tarAddDias(ref,dir); else if(mode==='semana') S.calRef=tarAddDias(ref,dir*7); else { const d=new Date(ref+'T00:00:00'); d.setDate(1); d.setMonth(d.getMonth()+dir); S.calRef=d.toISOString().slice(0,10); } render(); }
 function _reuRango(reuns){ let lo=8*60, hi=20*60; reuns.forEach(r=>{ const s=_hm(r.horaInicio); let e=_hm(r.horaFin); if(e==null&&s!=null) e=s+30; if(s!=null) lo=Math.min(lo,s); if(e!=null) hi=Math.max(hi,e); }); lo=Math.floor(lo/60)*60; hi=Math.ceil(hi/60)*60; if(hi-lo<120) hi=lo+120; return [lo,hi]; }
-function tarCalVisibles(){ const me=S.user.nombre, admin=isAdmin(); return (S.tareas||[]).filter(t=> tarActiva(t) && t.fechaLimite && (admin||tarInvolucra(t,me))); }
+function tarCalVisibles(){ const me=S.user.nombre; return (S.tareas||[]).filter(t=> tarActiva(t) && t.fechaLimite && tarInvolucra(t,me)); }
+function _txtOn(hex){ try{ const h=(hex||'').replace('#',''); const r=parseInt(h.substr(0,2),16), g=parseInt(h.substr(2,2),16), b=parseInt(h.substr(4,2),16); return (0.299*r+0.587*g+0.114*b)>160 ? '#1f2937' : '#fff'; }catch(_){ return '#fff'; } }
 function tarCalDe(iso){ return tarCalVisibles().filter(t=>t.fechaLimite===iso).sort((a,b)=>{ const ha=_hm(a.horaInicio); const hb=_hm(b.horaInicio); return (ha==null?9999:ha)-(hb==null?9999:hb); }); }
 function _tarCalColor(t){ return t.color || (t.prioridad==='Alta'?'#C0392B':(t.prioridad==='Baja'?'#6E8E00':'#B8860B')); }
 function tarCalNueva(d){ openTarea({fechaLimite:d||S.calRef||todayStr()}); }
@@ -4353,7 +4354,7 @@ function _colBlocks(tasks, r0, hourH){
   const lanes=[]; arr.forEach(t=>{ let i=0; for(;i<lanes.length;i++){ if(lanes[i]<=t._s) break; } t._lane=i; lanes[i]=t._e; });
   const nL=Math.max(1,lanes.length);
   return arr.map(t=>{ const top=(t._s-r0)/60*hourH; const h=Math.max((t._e-t._s)/60*hourH,22); const w=100/nL; const left=t._lane*w; const col=_tarCalColor(t);
-    return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="position:absolute;top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);background:${col}1f;border:1px solid ${col};border-left:3px solid ${col};border-radius:6px;padding:2px 5px;font-size:11px;overflow:hidden;cursor:pointer;color:#2C3A1E;box-sizing:border-box">
+    return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="position:absolute;top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);background:${col};border-radius:6px;padding:2px 5px;font-size:11px;overflow:hidden;cursor:pointer;color:${_txtOn(col)};box-sizing:border-box">
       <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(t.horaInicio)}${t.horaFin?'–'+incEsc(t.horaFin):''}</div>
       <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(t.titulo||'')}${(t.serieId||t.recurrencia)?' ⟳':''}</div>
     </div>`; }).join('');
@@ -4369,7 +4370,7 @@ function _grid(dias){
   const linesHtml=linesArr.join('');
   const cols=dias.map(d=>{ const items=tarCalDe(d); const untimed=items.filter(t=>_hm(t.horaInicio)==null); const hoy=d===todayStr();
     const dayName=dayNameH?`<div style="height:${dayNameH}px;line-height:${dayNameH}px;text-align:center;font-size:11px;font-weight:700;color:${hoy?'#5A6E00':'#5A6770'};background:${hoy?'#F0F3DE':'#fff'};text-transform:capitalize">${new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>`:'';
-    const allDay=`<div onclick="tarCalNueva('${d}')" title="Crear tarea sin hora" style="height:${allDayH}px;overflow:auto;border-bottom:1px solid var(--line);background:${hoy?'#FAFBF2':'#fff'};padding:2px;cursor:pointer">${untimed.map(t=>{const col=_tarCalColor(t);return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="background:${col}1f;border-left:3px solid ${col};border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${incEsc(t.titulo||'')}${(t.serieId||t.recurrencia)?' ⟳':''}</div>`;}).join('')}</div>`;
+    const allDay=`<div onclick="tarCalNueva('${d}')" title="Crear tarea sin hora" style="height:${allDayH}px;overflow:auto;border-bottom:1px solid var(--line);background:${hoy?'#FAFBF2':'#fff'};padding:2px;cursor:pointer">${untimed.map(t=>{const col=_tarCalColor(t);return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="background:${col};color:${_txtOn(col)};border-radius:4px;padding:1px 5px;margin-bottom:2px;font-size:10px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${incEsc(t.titulo||'')}${(t.serieId||t.recurrencia)?' ⟳':''}</div>`;}).join('')}</div>`;
     const header=`<div style="position:sticky;top:0;z-index:2">${dayName}${allDay}</div>`;
     return `<div style="flex:1;min-width:${dias.length>1?'90px':'auto'};border-left:1px solid #EFEAE0">${header}<div style="position:relative;height:${totalH}px" onclick="tarCalNuevaEnGrid('${d}',event,0,${HOURH})">${linesHtml}${_colBlocks(items,0,HOURH)}</div></div>`;
   }).join('');
@@ -4381,7 +4382,7 @@ function _calMes(ref){
   const d=new Date(ref+'T00:00:00'); d.setDate(1); const primero=d.toISOString().slice(0,10);
   const inicio=tarAddDias(primero,-_calDow(primero)); const mesActual=primero.slice(0,7); let celdas=''; let cur=inicio;
   for(let i=0;i<42;i++){ const enMes=cur.slice(0,7)===mesActual, hoy=cur===todayStr(), items=tarCalDe(cur), max=3;
-    const chips=items.slice(0,max).map(t=>{ const col=_tarCalColor(t); const h=t.horaInicio?incEsc(t.horaInicio)+' ':''; return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="border-left:3px solid ${col};background:${col}14;border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h}${incEsc(t.titulo||'')}</div>`; }).join('');
+    const chips=items.slice(0,max).map(t=>{ const col=_tarCalColor(t); const h=t.horaInicio?incEsc(t.horaInicio)+' ':''; return `<div onclick="event.stopPropagation();openTarDet('${t.id}')" title="${incEsc(t.titulo||'')}" style="background:${col};color:${_txtOn(col)};border-radius:4px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.4;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h}${incEsc(t.titulo||'')}</div>`; }).join('');
     const mas=items.length>max?`<div style="font-size:9.5px;color:#8A949B">+${items.length-max} más</div>`:'';
     celdas+=`<div onclick="calOpenDia('${cur}')" style="min-height:76px;border:1px solid var(--line);border-radius:8px;padding:3px 4px;background:${enMes?'#fff':'#FAF8F3'};opacity:${enMes?1:.55};cursor:pointer;overflow:hidden"><div style="font-size:11px;font-weight:700;color:${hoy?'#fff':'#5A6770'};${hoy?'background:#A8B400;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;margin-left:auto':'text-align:right'}">${cur.slice(8,10)*1}</div>${chips}${mas}</div>`;
     cur=tarAddDias(cur,1);
