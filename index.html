@@ -416,21 +416,8 @@
   main,.wrap{width:100%;max-width:100%}
 }
 
-/* === movil: la tabla SIGUE siendo tabla y se desliza de lado con el dedo (no tarjetas) === */
-@media(max-width:720px){
-  .matrix{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
-  .matrix table{display:table;width:100%;min-width:680px}
-  .matrix thead{display:table-header-group}
-  .matrix tbody{display:table-row-group}
-  .matrix tr{display:table-row;border:none;border-radius:0;margin:0;background:transparent;padding:0}
-  .matrix thead tr:not(.filterrow){display:table-row}
-  .matrix thead tr.filterrow{display:table-row}
-  .matrix thead tr.filterrow th{display:table-cell;flex:none}
-  .matrix th,.matrix td{display:table-cell;border:none;border-bottom:1px solid #f1ece3;
-    padding:9px 12px;text-align:left;justify-content:flex-start;white-space:nowrap}
-  .matrix td::before{display:none}
-  .matrix td.empty{text-align:center}
-}
+/* === móvil: las tablas .matrix se muestran como tarjetas (usa el data-label de cada celda).
+   El bloque que forzaba tabla con scroll lateral se retiró en el rediseño móvil (Fase 2). === */
 
 /* === Incidencias === */
 .inccard{border:1px solid var(--line);border-radius:12px;background:var(--white);padding:14px 16px;margin-bottom:10px}
@@ -1169,6 +1156,32 @@ function stockView(){
         : `<button class="btn btn-ghost btn-sm" onclick="quickOut('${a.cod}')" ${a.stock<=0?'disabled':''} title="Descontar 1 (genérico)">−1</button>`}</td>
     </tr>`;
   }).join("") : `<tr><td colspan="8" class="empty">Ningún artículo coincide con el filtro.</td></tr>`;
+  /* tarjetas para móvil (la tabla de arriba queda solo para escritorio) */
+  const cards = list.length ? list.map(a=>{
+    const est=estadoOf(a);
+    const cad=cadEstado(a);
+    const chip = est==='SIN STOCK' ? '<span class="alm-chip alm-rojo-bg">Sin stock</span>'
+      : cad==='caducado' ? `<span class="alm-chip alm-rojo-bg">Caducado</span>`
+      : est==='PEDIR' ? '<span class="alm-chip alm-rojo-bg">Pedir</span>'
+      : cad==='por_caducar' ? `<span class="alm-chip alm-ambar-bg">Caduca ${diasHasta(a.caduca)} d</span>`
+      : est==='OK' ? '<span class="alm-chip alm-ok-bg">OK</span>' : '';
+    const urgente = est==='SIN STOCK'||est==='PEDIR'||cad==='caducado';
+    const cadTxt = (a.caduca && cad==='ok') ? ` · caduca ${fmtFecha(a.caduca)}` : '';
+    const btn = a.trazable
+      ? `<button class="btn btn-ghost btn-sm" onclick="openSalida('${a.cod}')" ${a.stock<=0?'disabled':''}>Salida</button>`
+      : `<button class="btn btn-ghost btn-sm" onclick="quickOut('${a.cod}')" ${a.stock<=0?'disabled':''}>−1 salida</button>`;
+    return `<div class="alm-card${urgente?' alm-card-urg':''}">
+      <div class="alm-top">
+        <div class="alm-nom">${a.nombre}${a.trazable?' <span class="tag" style="background:#5A6770;color:#fff">paciente</span>':''}
+          <div class="alm-sub">${a.cod} · ${a.categoria}${a.proveedor?' · '+a.proveedor:''}</div></div>
+        ${chip}
+      </div>
+      <div class="alm-bot">
+        <div><span class="alm-q${urgente?' alm-rojo':(est==='Sin aviso'&&a.stock<=0?' alm-gris':'')}">${a.stock}</span><span class="alm-u"> uds · mín. ${a.min}${cadTxt}</span></div>
+        ${btn}
+      </div>
+    </div>`;
+  }).join('') : `<div class="empty">Ningún artículo coincide con el filtro.</div>`;
   return `
     <div class="kpi" style="margin-bottom:14px">
       <div><div class="lbl">Artículos en el almacén</div><div class="val">${totalArt}</div></div>
@@ -1182,10 +1195,11 @@ function stockView(){
       </div>
       <button class="btn btn-ghost btn-sm" onclick="exportStock()">⤓ Exportar a Excel</button>
     </div>
-    <div class="matrix"><table>
+    <div class="matrix alm-desk"><table>
       <thead><tr><th>Artículo</th><th>Categoría</th><th>Proveedor</th><th>Stock</th><th>Mínimo</th><th>Caduca</th><th>Estado</th><th>Salida</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>`;
+    </table></div>
+    <div class="alm-cards">${cards}</div>`;
 }
 
 /* ---- PEDIDOS ---- */
@@ -8365,6 +8379,10 @@ function cargaPedidoModal(){
   body.has-tb .cadpop{bottom:calc(88px + env(safe-area-inset-bottom))}
   body.has-tb .ia-fab{bottom:calc(84px + env(safe-area-inset-bottom)) !important}
   body.has-tb .ia-panel{bottom:calc(150px + env(safe-area-inset-bottom)) !important;height:min(68vh,620px) !important}
+  /* cabecera limpia en móvil: los botones de texto viven en la hoja "Más" */
+  body.has-tb header .logout{display:none}
+  /* botoneras de módulo: secundarios de dos en dos, sin partir palabras */
+  body.has-tb .actions .btn-ghost{flex:1 1 45%;font-size:13px;padding:10px 8px;white-space:nowrap}
 }
 /* hoja "Más" (se abre desde la barra; solo móvil) */
 .lucai-more-ov{position:fixed;inset:0;background:rgba(51,63,72,.42);z-index:1300;display:flex;align-items:flex-end;backdrop-filter:blur(2px)}
@@ -8377,6 +8395,30 @@ function cargaPedidoModal(){
 .lucai-more .mo-ic svg{width:18px;height:18px;stroke:var(--ink);stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .lucai-more .mo-sub{font-size:12px;color:var(--grey-2);font-weight:500;display:block;margin-top:1px}
 .lucai-more .mo-n{margin-left:auto;min-width:22px;height:22px;padding:0 6px;border-radius:12px;background:#C0392B;color:#fff;font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center}
+
+/* ============================================================
+   LUCAI · ALMACÉN EN TARJETAS (solo móvil, Fase 2)
+   ============================================================ */
+.alm-cards{display:none}
+@media(max-width:720px){
+  .alm-desk{display:none !important}
+  .alm-cards{display:block;margin-top:4px}
+  .alm-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:9px}
+  .alm-card-urg{border-left:3px solid var(--alert)}
+  .alm-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .alm-nom{font-weight:700;font-size:14.5px;line-height:1.3;color:var(--ink);min-width:0}
+  .alm-sub{font-weight:500;font-size:12px;color:var(--grey-2);margin-top:2px}
+  .alm-chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;flex:0 0 auto}
+  .alm-rojo-bg{background:var(--alert-bg);color:var(--alert)}
+  .alm-ambar-bg{background:#FAEEDA;color:#854F0B}
+  .alm-ok-bg{background:#eef1ec;color:var(--ok)}
+  .alm-bot{display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px}
+  .alm-q{font-family:var(--serif);font-size:24px;color:var(--ink)}
+  .alm-q.alm-rojo{color:var(--alert)}
+  .alm-q.alm-gris{color:var(--grey-2)}
+  .alm-u{font-size:12px;color:var(--grey-2)}
+  .alm-card .btn-sm{min-height:38px;padding:8px 14px}
+}
 </style>
 <script>
 /* ============================================================
@@ -8422,6 +8464,7 @@ function lucaiTbHTML(){
     const items=(typeof MODULES!=='undefined'?MODULES:[]).filter(m=>!inBar[m.id] && canAccess(m.id));
     sheet = `<div class="lucai-more-ov" onclick="if(event.target===this){S.tbMore=false;lucaiTbPaint();}"><div class="lucai-more"><div class="mo-grab"></div>
       ${items.map(m=>{ const n=tbBadgeOf(m.id); return `<button class="mo-it" onclick="tbMoreGo('${m.id}')"><span class="mo-ic">${TB_IC[m.id]?`<svg viewBox="0 0 24 24">${TB_IC[m.id]}</svg>`:`<b style="font-family:Georgia,serif">${m.ini}</b>`}</span><span>${m.nombre}${m.estado==='pronto'?`<span class="mo-sub">Próximamente</span>`:''}</span>${n?`<span class="mo-n">${n}</span>`:''}</button>`; }).join('')}
+      ${(typeof isAdmin==='function'&&isAdmin())?`<button class="mo-it" onclick="S.tbMore=false;lucaiTbPaint();openUsuarios()"><span class="mo-ic"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span>Usuarios</span></button><button class="mo-it" onclick="S.tbMore=false;lucaiTbPaint();openDoctores()"><span class="mo-ic"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span>Doctores</span></button>${(typeof nnSupported==='function'&&nnSupported())?`<button class="mo-it" onclick="nnToggle();setTimeout(lucaiTbPaint,400)"><span class="mo-ic"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span>Avisos del navegador<span class="mo-sub">${(typeof nnEnabled==='function'&&nnEnabled())?'Activados · toca para pausar':'Desactivados · toca para activar'}</span></span></button>`:''}`:''}
       <button class="mo-it" onclick="S.tbMore=false;lucaiTbPaint();openCambiarPin()"><span class="mo-ic"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span>Mi contraseña</span></button>
       <button class="mo-it" onclick="S.tbMore=false;logout()" style="color:#C0392B"><span class="mo-ic"><svg viewBox="0 0 24 24" style="stroke:#C0392B"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></span><span>Cerrar sesión</span></button>
     </div></div>`;
