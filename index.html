@@ -738,9 +738,16 @@ const PERSIST_FIELDS = ['articulos','proveedores','pedidos','movimientos','segui
 let _persistT = null;
 
 async function boot(){
-  DEVICE = true;                 // sin login de correo: la barrera es el PIN de cada usuario
-  await loadEstado();
-  try{ if(typeof lucaiMigrarUsuarios==='function') await lucaiMigrarUsuarios(); }catch(_){}
+  // Sin sesión de Supabase guardada, RLS no devuelve datos: hay que pasar UNA vez
+  // por "Acceso del dispositivo" (correo + contraseña) en cada navegador/equipo.
+  try{
+    const { data } = await sbc.auth.getSession();
+    DEVICE = !!(data && data.session);
+  }catch(_){ DEVICE = false; }
+  if (DEVICE){
+    await loadEstado();
+    try{ if(typeof lucaiMigrarUsuarios==='function') await lucaiMigrarUsuarios(); }catch(_){}
+  }
   render();
   try{
     lucaiStampVersion();
@@ -803,7 +810,9 @@ async function doDeviceLogin(){
   if (!email || !pass){ el('dverr').textContent = 'Pon tu correo y contrasena.'; return; }
   const { data, error } = await sbc.auth.signInWithPassword({ email, password: pass });
   if (error){ el('dverr').textContent = /invalid login/i.test(error.message) ? 'Correo o contrasena incorrectos.' : error.message; return; }
-  DEVICE = true; await loadEstado(); render();
+  DEVICE = true; await loadEstado();
+  try{ if(typeof lucaiMigrarUsuarios==='function') await lucaiMigrarUsuarios(); }catch(_){}
+  render();
 }
 /* ================================================================================================= */
 const el = id => document.getElementById(id);
