@@ -602,7 +602,7 @@ const USERS = [
 const TG_BOT='LucaiAvisos_bot';   // usuario del bot, SIN @
 const TG_FN='https://wnwuvgrpmokwkelqhzuz.supabase.co/functions/v1/telegram';    // URL de la Edge Function
 const DOCTORS = ["Dra. Laura Fernández","Dr. Javier Ruiz","Dra. Ana Gómez"];
-const CATEGORIAS = ["RMR","Ortodoncia","Implantología","Endodoncia","Anestesia","Fungible","Higiene y prevención"];
+let CATEGORIAS = ["RMR","Ortodoncia","Implantología","Endodoncia","Anestesia","Fungible","Higiene y prevención"]; // editable: las nuevas familias se guardan en lucai_estado (almCategorias)
 const PROVEEDORES_SEED = ["Ortoplus","Dentaurum","American Orthodontics","BioHorizons","Dentsply Sirona","Inibsa","Henry Schein","GACD"];
 
 /* 50 artículos de ejemplo (se limpian luego). Cada uno: cod, nombre, categoria, proveedor, min, precioRef, stock */
@@ -759,7 +759,7 @@ async function loadEstado(){
 }
 /* Campos que viven en la tabla lucai_estado (no en una tabla propia por filas).
    Estos son los que se persisten cuando se llama a _persistSoon / persistNow. */
-const ESTADO_FIELDS = ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones','gcalSrc'];
+const ESTADO_FIELDS = ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones','gcalSrc','almCategorias'];
 function _persistSoon(){
   if (!(DEVICE && LOADED && S.user)) return;
   clearTimeout(_persistT); _persistT = setTimeout(persistNow, 400);
@@ -1174,7 +1174,7 @@ function stockView(){
       <div class="alm-top">
         <div class="alm-nom">${a.nombre}${a.trazable?' <span class="tag" style="background:#5A6770;color:#fff">paciente</span>':''}
           <div class="alm-sub">${a.cod} · ${a.categoria}${a.proveedor?' · '+a.proveedor:''}</div></div>
-        ${chip}
+        <div style="display:flex;align-items:center;gap:6px;flex:0 0 auto">${chip}<button class="alm-edit" onclick="openEdit('${a.cod}')" title="Editar artículo"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></button></div>
       </div>
       <div class="alm-bot">
         <div><span class="alm-q${urgente?' alm-rojo':(est==='Sin aviso'&&a.stock<=0?' alm-gris':'')}">${a.stock}</span><span class="alm-u"> uds · mín. ${a.min}${cadTxt}</span></div>
@@ -1380,14 +1380,15 @@ function seguiView(){
     <td data-label="Estado">${s.estado==='ok'?'<span class="tag sal">OK</span>':'<span class="tag inc">Incidencia</span>'}</td>
     <td data-label="Registrado por">${s.user}</td>
     <td data-label="Comentario"><span class="muted">${s.comentario||'—'}</span></td>
-  </tr>`).join("") || `<tr><td colspan="5" class="empty">Sin seguimientos.</td></tr>`;
+    <td data-label="Acción">${(s.id && (isAdmin() || s.user===(S.user&&S.user.nombre)))?`<button class="btn btn-ghost btn-sm" onclick="seguiDel('${s.id}')">Borrar</button>`:'<span class="muted">—</span>'}</td>
+  </tr>`).join("") || `<tr><td colspan="6" class="empty">Sin seguimientos.</td></tr>`;
   return `<div class="toolbar" style="margin:6px 0 14px">
       <div><div class="section-title">Seguimiento</div>
       <div class="section-sub" style="margin:0">Registra revisiones del material: si está todo OK o si hay una incidencia.</div></div>
       <div class="actions"><button class="btn btn-primary" onclick="openModal('seguimiento')">＋ Nuevo seguimiento</button></div>
     </div>
     <div class="matrix"><table>
-      <thead><tr><th>Fecha</th><th>Categorías</th><th>Estado</th><th>Registrado por</th><th>Comentario</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Categorías</th><th>Estado</th><th>Registrado por</th><th>Comentario</th><th>Acción</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
 }
@@ -1680,7 +1681,7 @@ function articleModalContent(){
       <div class="note" style="margin-top:0">Una sola ficha para cualquier tipo de material. El stock se cuenta en unidades (si una caja la tratas como 1, la registras como 1).</div>
       <div class="grid2">
         <div class="fld" style="margin-top:0"><label>Código</label><input class="inp" placeholder="Ej. FUN-010" value="${F.acod}" oninput="setInp('acod',this.value);artDupCheck()"></div>
-        <div class="fld" style="margin-top:0"><label>Categoría</label><select class="inp" onchange="setSel('acat',this.value)">${catOptions(F.acat)}</select></div>
+        <div class="fld" style="margin-top:0"><label>Categoría</label><select class="inp" onchange="if(this.value==='__nueva__'){almCatNueva('acat')}else{setSel('acat',this.value)}">${catOptions(F.acat)}<option value="__nueva__">＋ Nueva familia…</option></select></div>
       </div>
       <div class="fld"><label>Nombre</label><input class="inp" placeholder="Nombre del artículo" value="${F.anombre}" oninput="setInp('anombre',this.value);artDupCheck()"></div>
       <div id="artDupMsg" style="font-size:12.5px;margin:-2px 0 4px;min-height:16px"></div>
@@ -1730,7 +1731,7 @@ function editArticleModalContent(){
       <div class="fld" style="margin-top:0"><label>Nombre</label><input class="inp" value="${F.enombre}" oninput="setInp('enombre',this.value)"></div>
       <div class="fld"><label>Descripción (opcional)</label><textarea class="inp" placeholder="Notas sobre el material: referencia, medidas, marca, dónde se usa…" oninput="setInp('edesc',this.value)">${F.edesc||''}</textarea></div>
       <div class="grid2">
-        <div class="fld" style="margin-top:0"><label>Categoría</label><select class="inp" onchange="setSel('ecat',this.value)">${CATEGORIAS.map(c=>`<option ${F.ecat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="fld" style="margin-top:0"><label>Categoría</label><select class="inp" onchange="if(this.value==='__nueva__'){almCatNueva('ecat')}else{setSel('ecat',this.value)}">${CATEGORIAS.map(c=>`<option ${F.ecat===c?'selected':''}>${c}</option>`).join('')}<option value="__nueva__">＋ Nueva familia…</option></select></div>
         <div class="fld" style="margin-top:0"><label>Proveedor habitual</label><select class="inp" onchange="setInp('eprov',this.value)"><option value="">Sin proveedor</option>${S.proveedores.map(p=>`<option ${F.eprov===p?'selected':''}>${p}</option>`).join('')}</select></div>
       </div>
       <div class="grid2">
@@ -1746,7 +1747,12 @@ function editArticleModalContent(){
       <div class="fld"><label>Estado</label>
         <button class="chip-sel ${F.eactivo?'on':''}" onclick="setToggle('eactivo',true)">Activo</button>
         <button class="chip-sel ${!F.eactivo?'on':''}" onclick="setToggle('eactivo',false)">Dado de baja</button></div>
-      <div class="hint" style="text-align:left">Stock actual: ${a.stock} ud. · Coste medio: ${eur(a.cost||0)}/ud. (el stock se cambia desde salidas/entradas, no aquí)</div>
+      <div class="fld"><label>Ajuste de stock (recuento)</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input class="inp" type="number" min="0" inputmode="numeric" placeholder="Unidades reales" value="${F.eajuste!==undefined?F.eajuste:''}" oninput="setInp('eajuste',this.value)" style="max-width:160px">
+          <button class="btn btn-ghost btn-sm" onclick="commitAjuste()">Aplicar recuento</button>
+        </div>
+        <div class="hint" style="text-align:left">Stock según la app: <b>${a.stock} ud.</b> · Coste medio: ${eur(a.cost||0)}/ud. Si al contar el material real no coincide, escribe aquí las unidades reales: se registrará el movimiento de ajuste automáticamente (entrada o baja por recuento).</div></div>
       ${((a.stock||0)>0 || (S.movimientos||[]).some(m=>String(m.cod)===String(a.cod)))?`<div class="hint" style="text-align:left;color:#8A5A00">No se puede eliminar mientras tenga stock o movimientos registrados. Si ya no lo usas, dale a "Dado de baja".</div>`:''}
     </div>
     <div class="modal-foot">
@@ -2039,7 +2045,8 @@ async function loadFromDB(){
       try{
         const { data: estRow } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
         const d = estRow && estRow.data;
-        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones','gcalSrc'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
+        if(d){ ['usuarios','doctores','tarAreas','grupos','comCategorias','accesos','tarPins','reuniones','gcalSrc','almCategorias'].forEach(f=>{ if(d[f]!==undefined && d[f]!==null) S[f]=d[f]; }); }
+        if(Array.isArray(S.almCategorias) && S.almCategorias.length) CATEGORIAS = S.almCategorias.slice();
       }catch(_){}
       window._estadoLoaded=true;
     }
@@ -4349,9 +4356,9 @@ function tarTopUpSeries(){
 function tareasView(){
   if(!window._tarToppedUp){ window._tarToppedUp=true; setTimeout(tarTopUpSeries, 50); }
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_resumen'];
+  const subs = admin ? ['tar_todas_mias','tar_mias','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
-  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
+  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_ideas:'Ideas'+(typeof ideasPendCount==='function'&&ideasPendCount()?` (${ideasPendCount()})`:''),tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
@@ -4362,6 +4369,7 @@ function tareasView(){
   else if(sub==='tar_emitidas') body=tarBuzonView('emitidas');
   else if(sub==='tar_recibidas') body=tarBuzonView('recibidas');
   else if(sub==='tar_mias') body=tarBuzonView('mias');
+  else if(sub==='tar_ideas') body=tarIdeasView();
   else body=tarBuzonView('todas');
   const acts=`<div class="actions">${canAccess('comunicaciones')?`<button class="btn btn-ghost" onclick="setModule('comunicaciones')">Comunicaciones</button>`:''}${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<a class="btn btn-ghost" href="javascript:void(0)" onclick="gcalOpen()" title="Ver Google Calendar dentro de la app" style="display:inline-flex;align-items:center;gap:7px;text-decoration:none"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18"/><path d="M8 3v3M16 3v3"/></svg>Google Calendar</a><button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
@@ -8418,6 +8426,8 @@ function cargaPedidoModal(){
   .alm-q.alm-gris{color:var(--grey-2)}
   .alm-u{font-size:12px;color:var(--grey-2)}
   .alm-card .btn-sm{min-height:38px;padding:8px 14px}
+  .alm-edit{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:#fff;color:var(--grey-2);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
+  .alm-edit:active{background:var(--arena-1)}
 }
 </style>
 <script>
@@ -8484,6 +8494,225 @@ function lucaiTbPaint(){
   const _r = render;
   render = function(){ _r.apply(this, arguments); try{ lucaiTbPaint(); }catch(_){} };
 })();
+
+/* ============================================================
+   LUCAI · EDITABILIDAD DEL ALMACÉN (auditoría)
+   1) Nueva familia de artículos desde los modales de artículo.
+   2) Ajuste de stock por recuento desde la ficha del artículo.
+   3) Borrar seguimientos (autor o Dirección).
+   ============================================================ */
+function almCatNueva(campo){
+  const n = prompt('Nombre de la nueva familia de artículos:');
+  if(n===null){ render(); return; }               // canceló: repinta para deshacer la selección del select
+  const nombre=(n||'').trim();
+  if(!nombre){ render(); return; }
+  const ya = CATEGORIAS.find(c=>c.toLowerCase()===nombre.toLowerCase());
+  if(ya){ F[campo]=ya; render(); toast('Esa familia ya existía; seleccionada.'); return; }
+  CATEGORIAS.push(nombre);
+  S.almCategorias = CATEGORIAS.slice();
+  F[campo]=nombre; render();
+  if(typeof _persistSoon==='function') _persistSoon();
+  toast('Familia añadida: '+nombre);
+}
+function commitAjuste(){
+  const a=art(F.cod); if(!a) return;
+  const real=parseInt(F.eajuste);
+  if(isNaN(real) || real<0){ toast('Escribe las unidades reales contadas'); return; }
+  const dif = real-(a.stock||0);
+  if(dif===0){ toast('El stock ya coincide: '+real+' ud.'); return; }
+  if(!confirm('Stock en la app: '+a.stock+' ud.\nRecuento real: '+real+' ud.\n\nSe registrará un ajuste de '+(dif>0?'+':'')+dif+' ud. ¿Continuar?')) return;
+  if(dif>0){
+    a.stock+=dif;
+    const mov={id:uid(),ts:tsFrom(todayStr()),tipo:"entrada",user:S.user.nombre,cod:a.cod,nombre:a.nombre,cant:dif,precio:0,motivo:"Ajuste de recuento (inventario)",pac:null};
+    S.movimientos.unshift(mov);
+    closeModal(); render(); srvMov(mov, 'Stock ajustado a '+real+' ud.');
+  } else {
+    const cant=-dif, valorPerdido=cant*(a.cost||0);
+    a.stock-=cant;
+    const mov={id:uid(),ts:tsFrom(todayStr()),tipo:"merma",user:S.user.nombre,cod:a.cod,nombre:a.nombre,cant,motivo:"Recuento (faltan)",ref:"Ajuste de recuento",valorPerdido,pac:null};
+    S.movimientos.unshift(mov);
+    closeModal(); render(); srvMov(mov, 'Stock ajustado a '+real+' ud.');
+  }
+}
+async function seguiDel(id){
+  const s=(S.seguimientos||[]).find(x=>String(x.id)===String(id)); if(!s) return;
+  if(!confirm('¿Borrar este seguimiento del '+fmtFecha(s.ts)+' ('+(s.nombre||'General')+')?')) return;
+  try{ const { error } = await sbc.from('lucai_seguimientos').delete().eq('id', String(id)); if(error) throw error; }
+  catch(e){ console.error('seguiDel', e); toast('No se pudo borrar: '+(e.message||e)); return; }
+  S.seguimientos=(S.seguimientos||[]).filter(x=>String(x.id)!==String(id));
+  render(); toast('Seguimiento borrado');
+}
+
+/* ============================================================
+   LUCAI · TAREAS · CARTERA DE IDEAS (personal)
+   Ideas "para cuando se pueda": cada usuario ve solo las suyas.
+   Se revisan periódicamente y se convierten en tarea o se descartan.
+   Tabla Supabase: tar_ideas. No toca nada del flujo de tareas.
+   ============================================================ */
+if(!Array.isArray(S.ideas)) S.ideas=[];
+
+/* ---- persistencia ---- */
+const _loadFromDB_ideas = loadFromDB;
+loadFromDB = async function(){
+  const _prev = _loadFromDB_ideas();
+  try{
+    const r = await sbc.from('tar_ideas').select('*').order('ts',{ascending:false});
+    if(r.error) throw r.error;
+    S.ideas = (r.data||[]).map(x=>({ id:x.id, titulo:x.titulo, descripcion:x.descripcion||'', usuario:x.usuario,
+      importancia:x.importancia||'Normal', estado:x.estado||'Pendiente', ts:x.ts, fechaResuelta:x.fecha_resuelta||null }));
+  }catch(e){ console.error('loadIdeas', e); }
+  await _prev;
+};
+function ideaToRow(i){
+  return { id:i.id, titulo:i.titulo, descripcion:i.descripcion||null, usuario:i.usuario,
+    importancia:i.importancia||'Normal', estado:i.estado||'Pendiente', ts:i.ts, fecha_resuelta:i.fechaResuelta||null };
+}
+async function srvIdeaInsert(i, okMsg){
+  try{ const { error } = await sbc.from('tar_ideas').insert(ideaToRow(i)); if(error) throw error; }
+  catch(e){ console.error('srvIdeaInsert', e); await syncAll(); toast('Error al guardar la idea: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvIdeaUpdate(id, i, okMsg){
+  try{ const { error } = await sbc.from('tar_ideas').update(ideaToRow(i)).eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvIdeaUpdate', e); await syncAll(); toast('Error al guardar la idea: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvIdeaDelete(id, okMsg){
+  try{ const { error } = await sbc.from('tar_ideas').delete().eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvIdeaDelete', e); await syncAll(); toast('No se pudo borrar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+
+/* ---- helpers ---- */
+function ideasMias(){ const me=S.user&&S.user.nombre; return (S.ideas||[]).filter(i=>i.usuario===me); }
+function ideasPendCount(){ return ideasMias().filter(i=>i.estado==='Pendiente').length; }
+
+/* ---- vista ---- */
+function tarIdeasView(){
+  const pend=ideasMias().filter(i=>i.estado==='Pendiente')
+    .sort((a,b)=>{ const ra=a.importancia==='Alta'?0:1, rb=b.importancia==='Alta'?0:1; if(ra!==rb) return ra-rb; return String(a.ts||'').localeCompare(String(b.ts||'')); });
+  const hist=ideasMias().filter(i=>i.estado!=='Pendiente')
+    .sort((a,b)=>String(b.fechaResuelta||'').localeCompare(String(a.fechaResuelta||'')));
+  const chip=i=> i.importancia==='Alta'
+    ? `<span style="font-size:11px;font-weight:700;color:#C0392B;background:#FBEAE8;border-radius:99px;padding:2px 9px">Alta</span>`
+    : `<span style="font-size:11px;font-weight:700;color:#6C757D;background:#F4F0E9;border-radius:99px;padding:2px 9px">Normal</span>`;
+  const card=i=>`<div style="background:#fff;border:1px solid #E7E0D4;border-radius:12px;padding:14px 16px;margin-bottom:10px">
+    <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-weight:700;color:#333F48">${incEsc(i.titulo)}</div>
+        ${i.descripcion?`<div class="muted" style="font-size:13px;margin-top:4px;white-space:pre-wrap">${incEsc(i.descripcion)}</div>`:''}
+        <div class="muted" style="font-size:12px;margin-top:6px">${chip(i)} &nbsp;·&nbsp; apuntada el ${fmtFecha(i.ts)}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="ideaConvertir('${i.id}')">Convertir en tarea</button>
+        <button class="btn btn-ghost btn-sm" onclick="openIdea('${i.id}')">Editar</button>
+        <button class="btn btn-ghost btn-sm" onclick="ideaResolver('${i.id}','Descartada')">Descartar</button>
+      </div>
+    </div>
+  </div>`;
+  const cardHist=i=>`<div style="background:#FBF9F5;border:1px solid #EDE7DB;border-radius:12px;padding:11px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <div style="font-weight:600;color:#6C757D">${incEsc(i.titulo)}</div>
+      <div class="muted" style="font-size:12px;margin-top:2px">${i.estado==='Convertida'?'✔ Convertida en tarea':'✖ Descartada'} el ${fmtFecha(i.fechaResuelta||'')}</div>
+    </div>
+    <div style="display:flex;gap:6px">
+      ${i.estado==='Descartada'?`<button class="btn btn-ghost btn-sm" onclick="ideaRecuperar('${i.id}')">Recuperar</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="ideaBorrar('${i.id}')">Borrar</button>
+    </div>
+  </div>`;
+  const vacio=`<div class="muted" style="padding:24px;text-align:center">Tu cartera está vacía. Apunta aquí las ideas y proyectos que no son para ya, y revísalos cuando toque (por ejemplo, cada viernes).</div>`;
+  return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px">
+      <div class="note" style="margin:0;flex:1;min-width:220px">Cartera personal: cosas que quieres hacer <b>cuando se pueda</b>, sin fecha ni presión. Revísala periódicamente y decide: convertir en tarea o descartar. Solo la ves tú.</div>
+      <button class="btn btn-primary" onclick="openIdea()">Nueva idea</button>
+    </div>
+    ${pend.length?pend.map(card).join(''):vacio}
+    ${hist.length?`<div style="margin-top:18px">
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#6C757D;cursor:pointer">
+        <input type="checkbox" ${S.ideasVerHist?'checked':''} onchange="S.ideasVerHist=!S.ideasVerHist;render()"> Ver historial (${hist.length})</label>
+      ${S.ideasVerHist?`<div style="margin-top:10px">${hist.map(cardHist).join('')}</div>`:''}
+    </div>`:''}`;
+}
+
+/* ---- alta / edición ---- */
+function openIdea(id){
+  if(id){
+    const i=(S.ideas||[]).find(x=>x.id===id); if(!i) return;
+    F={type:'idea_form', id:i.id, titulo:i.titulo, descripcion:i.descripcion||'', importancia:i.importancia||'Normal', _edit:true};
+  } else {
+    F={type:'idea_form', id:'I'+Date.now().toString(36)+Math.floor(Math.random()*1000), titulo:'', descripcion:'', importancia:'Normal', _edit:false};
+  }
+  S.modal='idea_form'; render();
+}
+function ideaFormModalContent(){
+  return `<div class="overlay"><div class="modal">
+    <div class="modal-head"><h2>${F._edit?'Editar idea':'Nueva idea'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld"><label>Idea</label>
+        <input class="inp" placeholder="¿Qué quieres hacer cuando se pueda?" value="${incEsc(F.titulo||'')}" oninput="setInp('titulo',this.value)"></div>
+      <div class="fld"><label>Detalle (opcional)</label>
+        <textarea class="inp" rows="3" placeholder="Contexto, por qué merece la pena, primeros pasos…" oninput="setInp('descripcion',this.value)">${incEsc(F.descripcion||'')}</textarea></div>
+      <div class="fld"><label>Importancia</label>
+        <select class="inp" onchange="setSel('importancia',this.value)">
+          <option ${F.importancia!=='Alta'?'selected':''}>Normal</option>
+          <option ${F.importancia==='Alta'?'selected':''}>Alta</option>
+        </select></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitIdea()">${F._edit?'Guardar cambios':'Guardar idea'}</button>
+      </div>
+    </div></div></div>`;
+}
+function commitIdea(){
+  const titulo=(F.titulo||'').trim();
+  if(!titulo){ toast('Escribe la idea'); return; }
+  if(F._edit){
+    const i=(S.ideas||[]).find(x=>x.id===F.id); if(!i){ closeModal(); render(); return; }
+    i.titulo=titulo; i.descripcion=(F.descripcion||'').trim(); i.importancia=F.importancia||'Normal';
+    closeModal(); render(); srvIdeaUpdate(i.id, i, 'Idea actualizada');
+    return;
+  }
+  const i={ id:F.id, titulo, descripcion:(F.descripcion||'').trim(), usuario:S.user.nombre,
+    importancia:F.importancia||'Normal', estado:'Pendiente', ts:now(), fechaResuelta:null };
+  S.ideas.unshift(i); closeModal(); render(); srvIdeaInsert(i, 'Idea guardada en la cartera');
+}
+
+/* ---- convertir / descartar / recuperar / borrar ---- */
+function ideaConvertir(id){
+  const i=(S.ideas||[]).find(x=>x.id===id); if(!i) return;
+  // abre el formulario de tarea ya relleno; la idea se archiva al guardar la tarea
+  openTarea({ titulo:i.titulo, descripcion:i.descripcion||'', paraQuien:S.user.nombre, _ideaId:i.id });
+}
+const _commitTarea_ideas = commitTarea;
+commitTarea = function(){
+  const ideaId=F._ideaId;
+  _commitTarea_ideas();
+  // si el modal se cerró es que la tarea se creó de verdad (la validación lo deja abierto)
+  if(ideaId && !S.modal) ideaResolver(ideaId, 'Convertida', true);
+};
+function ideaResolver(id, estado, silencio){
+  const i=(S.ideas||[]).find(x=>x.id===id); if(!i) return;
+  i.estado=estado; i.fechaResuelta=todayStr();
+  render(); srvIdeaUpdate(id, i, silencio?'':(estado==='Descartada'?'Idea descartada (puedes recuperarla desde el historial)':''));
+}
+function ideaRecuperar(id){
+  const i=(S.ideas||[]).find(x=>x.id===id); if(!i) return;
+  i.estado='Pendiente'; i.fechaResuelta=null;
+  render(); srvIdeaUpdate(id, i, 'Idea recuperada');
+}
+function ideaBorrar(id){
+  const i=(S.ideas||[]).find(x=>x.id===id); if(!i) return;
+  if(!confirm('¿Borrar definitivamente la idea "'+i.titulo+'"?')) return;
+  S.ideas=(S.ideas||[]).filter(x=>x.id!==id);
+  render(); srvIdeaDelete(id, 'Idea borrada');
+}
+
+/* ---- enganche del modal (gana la última) ---- */
+const _modalContent_ideas = modalContent;
+modalContent = function(){
+  if(F.type==='idea_form') return ideaFormModalContent();
+  return _modalContent_ideas();
+};
+/* ===== FIN CARTERA DE IDEAS ===== */
 
 boot();
 
