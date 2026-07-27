@@ -8904,6 +8904,8 @@ function tarPanelView(){
   };
   const alta=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="btn btn-ghost" onclick="pPriorizarIA()" title="El asistente te propone por dónde empezar" style="white-space:nowrap">✨ Priorizar con IA</button>
+      <button class="btn btn-ghost" onclick="pImprimir()" title="Versión en limpio para imprimir" style="white-space:nowrap">Imprimir</button>
+      <button class="btn btn-ghost" onclick="pExportXlsx()" title="Descargar todo en Excel" style="white-space:nowrap">Excel</button>
       <input class="inp" style="flex:1;min-width:180px;max-width:320px" placeholder="Nueva categoría (Casa, Clínica, Papeleo…)" value="${incEsc(S.pNewCat||'')}" oninput="S.pNewCat=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();pCatAdd();}">
       <button class="btn btn-primary" onclick="pCatAdd()">Crear</button>
     </div>`;
@@ -8967,6 +8969,49 @@ function pCatClearDone(catId){
   if(!ids.length) return;
   S.pitems=(S.pitems||[]).filter(x=>!ids.includes(x.id));
   render(); srvPItemDeleteIds(ids);
+}
+
+/* ---- descargar / imprimir ---- */
+function pExportXlsx(){
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar Excel'); return; }
+  const cats=pCatsMias();
+  const rows=[["Categoría","Qué hacer","Estado","Apuntado el","Hecho el"]];
+  cats.forEach(c=>{ pItemsDe(c.id).forEach(i=>rows.push([c.nombre, i.texto, i.hecho?'Hecha':'Pendiente', (i.ts||'').slice(0,10), i.fechaHecha||''])); });
+  if(rows.length===1){ toast('No hay nada que exportar'); return; }
+  const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:22},{wch:56},{wch:11},{wch:12},{wch:12}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Mi panel");
+  XLSX.writeFile(wb,`mi_panel_${todayStr()}.xlsx`); toast('Panel descargado en Excel');
+}
+function pImprimir(){
+  const cats=pCatsMias().filter(c=>pItemsDe(c.id).length);
+  if(!cats.length){ toast('No hay nada que imprimir'); return; }
+  const bloques=cats.map(c=>{
+    const items=pItemsDe(c.id);
+    const pend=items.filter(i=>!i.hecho), hechas=items.filter(i=>i.hecho);
+    const li=i=>`<div class="it">${i.hecho?'☑':'☐'} <span class="${i.hecho?'done':''}">${incEsc(i.texto)}</span>${i.hecho&&i.fechaHecha?` <small>(hecha el ${incEsc(fmtFecha(i.fechaHecha))})</small>`:''}</div>`;
+    return `<div class="cat"><h2>${incEsc(c.nombre)} <small>· ${pend.length} pendiente${pend.length===1?'':'s'}</small></h2>${pend.map(li).join('')}${hechas.map(li).join('')}</div>`;
+  }).join('');
+  const w=window.open('','_blank');
+  if(!w){ toast('El navegador ha bloqueado la ventana. Permite las ventanas emergentes.'); return; }
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Mi panel · ${incEsc(S.user.nombre)}</title>
+    <style>
+      body{font-family:Georgia,'Times New Roman',serif;color:#222;margin:40px auto;max-width:720px;padding:0 20px}
+      h1{font-size:22px;margin:0 0 2px}
+      .sub{color:#777;font-size:13px;margin:0 0 26px;font-family:Arial,sans-serif}
+      .cat{margin-bottom:26px;break-inside:avoid}
+      h2{font-size:16px;border-bottom:1.5px solid #999;padding-bottom:4px;margin:0 0 8px}
+      h2 small{font-weight:400;color:#777;font-size:12px;font-family:Arial,sans-serif}
+      .it{font-family:Arial,sans-serif;font-size:13.5px;padding:5px 0 5px 2px;border-bottom:1px dotted #ddd}
+      .it .done{text-decoration:line-through;color:#999}
+      .it small{color:#999;font-size:11px}
+      @media print{ body{margin:10mm auto} }
+    </style></head><body>
+    <h1>Mi panel</h1>
+    <p class="sub">${incEsc(S.user.nombre)} · ${incEsc(fmtFecha(todayStr()))} · Lucai</p>
+    ${bloques}
+  </body></html>`);
+  w.document.close();
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(_){} }, 300);
 }
 /* ===== FIN MI PANEL ===== */
 
