@@ -8876,7 +8876,7 @@ function tarPanelView(){
     const pend=items.filter(i=>!i.hecho), hechas=items.filter(i=>i.hecho);
     const fila=i=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:5px 0;border-bottom:1px solid #F5F1E8">
         <input type="checkbox" ${i.hecho?'checked':''} onchange="pItemToggle('${i.id}')" style="margin-top:3px;cursor:pointer">
-        <div style="flex:1;min-width:0;font-size:13.5px;color:${i.hecho?'#A8B0B6':'#333F48'};${i.hecho?'text-decoration:line-through;':''}word-break:break-word">${incEsc(i.texto)}</div>
+        <div onclick="pItemEdit('${i.id}')" title="Toca para editar el texto" style="flex:1;min-width:0;font-size:13.5px;color:${i.hecho?'#A8B0B6':'#333F48'};${i.hecho?'text-decoration:line-through;':''}word-break:break-word;cursor:pointer">${incEsc(i.texto)}</div>
         <button type="button" onclick="pItemDel('${i.id}')" title="Quitar" style="width:17px;height:17px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:11px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:3px">×</button>
       </div>`;
     return `<div style="background:#fff;border:1px solid #E7E0D4;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column">
@@ -8938,6 +8938,13 @@ function pItemToggle(id){
   const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
   i.hecho=!i.hecho; i.fechaHecha=i.hecho?todayStr():null;
   render(); srvPItemUpdate(id, i);
+}
+function pItemEdit(id){
+  const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
+  const n=prompt('Editar apunte:', i.texto);
+  if(n===null) return;
+  const v=(n||'').trim(); if(!v || v===i.texto) return;
+  i.texto=v; render(); srvPItemUpdate(id, i);
 }
 function pItemDel(id){
   const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
