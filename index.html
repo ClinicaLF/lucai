@@ -8902,8 +8902,9 @@ function tarPanelView(){
       </div>
     </div>`;
   };
-  const alta=`<div style="display:flex;gap:8px;align-items:center;max-width:420px">
-      <input class="inp" style="flex:1" placeholder="Nueva categoría (Casa, Clínica, Papeleo…)" value="${incEsc(S.pNewCat||'')}" oninput="S.pNewCat=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();pCatAdd();}">
+  const alta=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="pPriorizarIA()" title="El asistente te propone por dónde empezar" style="white-space:nowrap">✨ Priorizar con IA</button>
+      <input class="inp" style="flex:1;min-width:180px;max-width:320px" placeholder="Nueva categoría (Casa, Clínica, Papeleo…)" value="${incEsc(S.pNewCat||'')}" oninput="S.pNewCat=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();pCatAdd();}">
       <button class="btn btn-primary" onclick="pCatAdd()">Crear</button>
     </div>`;
   const vacio=`<div class="muted" style="padding:22px 0;font-size:14px">Este es tu panel personal: cosas que tienes que hacer tú, sin fecha ni personas. Crea una categoría (por ejemplo, "Papeleo") y ve apuntando dentro. Solo lo ves tú.</div>`;
@@ -9128,6 +9129,44 @@ modalContent = function(){
   return _modalContent_mej();
 };
 /* ===== FIN MEJORAS ===== */
+
+/* ============================================================
+   LUCAI · MI PANEL + IDEAS EN EL ASISTENTE DE IA
+   Añade al contexto del asistente el panel personal y la cartera
+   de ideas del usuario, y un botón en Mi panel para pedirle a la
+   IA un orden de prioridades. Sin datos de pacientes.
+   ============================================================ */
+const _iaContexto_perso = iaContexto;
+iaContexto = function(pregunta){
+  let base = _iaContexto_perso(pregunta);
+  try{
+    const me=S.user.nombre;
+    const lineas=[];
+    const cats=(typeof pCatsMias==='function')?pCatsMias():[];
+    lineas.push('\n[MI PANEL PERSONAL] Lista personal de cosas por hacer, sin fecha ni responsable (no son tareas del buzón del equipo). Si piden priorizar o "qué hago primero", tenlas en cuenta junto con las tareas.');
+    if(!cats.length) lineas.push('(sin categorías todavía)');
+    cats.forEach(c=>{
+      const pend=pItemsDe(c.id).filter(i=>!i.hecho);
+      lineas.push(`• Categoría "${c.nombre}"${pend.length?':':' — nada pendiente.'}`);
+      pend.slice(0,30).forEach(i=>lineas.push(`  - ${i.texto} (apuntado el ${(i.ts||'?').slice(0,10)})`));
+      if(pend.length>30) lineas.push(`  ...y ${pend.length-30} más.`);
+    });
+    const ideas=(S.ideas||[]).filter(i=>i.usuario===me && i.estado==='Pendiente');
+    lineas.push(`\n[CARTERA DE IDEAS] ${ideas.length} ideas "para cuando se pueda" (sin compromiso; se revisan periódicamente y se convierten en tarea o se descartan).`);
+    ideas.slice(0,25).forEach(i=>lineas.push(`- ${i.titulo}${i.importancia==='Alta'?' [importancia ALTA]':''}${i.descripcion?` | nota: ${String(i.descripcion).slice(0,160)}`:''} (apuntada el ${(i.ts||'?').slice(0,10)})`));
+    if(ideas.length>25) lineas.push(`...y ${ideas.length-25} más.`);
+    base += '\n' + lineas.join('\n');
+  }catch(e){ console.error('iaContexto perso', e); }
+  return base;
+};
+
+function pPriorizarIA(){
+  const pend=(typeof pCatsMias==='function')?pCatsMias().reduce((s,c)=>s+pItemsDe(c.id).filter(i=>!i.hecho).length,0):0;
+  if(!pend){ toast('No tienes nada pendiente en el panel'); return; }
+  if(!S.iaOpen && typeof iaToggle==='function') iaToggle();
+  setTimeout(()=>{ iaSend('Ayúdame a priorizar lo que tengo que hacer. Mira mi panel personal (y, si ayuda, también mis tareas pendientes y mi cartera de ideas) y proponme un orden de ataque concreto: qué haría primero y por qué, qué puede esperar, y si ves algo que convenga delegar como tarea a alguien o descartar. Sé práctico y directo.'); }, 180);
+}
+/* ===== FIN IA PERSONAL ===== */
 
 boot();
 
