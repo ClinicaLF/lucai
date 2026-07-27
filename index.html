@@ -4160,7 +4160,8 @@ loadFromDB = async function(){
         mensajes: Array.isArray(x.mensajes) ? x.mensajes : (function(){ try{ return x.mensajes?JSON.parse(x.mensajes):[]; }catch(_){ return []; } })(),
         adjuntos: Array.isArray(x.adjuntos) ? x.adjuntos : (function(){ try{ return x.adjuntos?JSON.parse(x.adjuntos):[]; }catch(_){ return []; } })(),
         vistos: (x.vistos && typeof x.vistos==='object' && !Array.isArray(x.vistos)) ? x.vistos : (function(){ try{ return x.vistos?JSON.parse(x.vistos):{}; }catch(_){ return {}; } })(),
-        participantes: Array.isArray(x.participantes) ? x.participantes : (function(){ try{ return x.participantes?JSON.parse(x.participantes):[]; }catch(_){ return []; } })()
+        participantes: Array.isArray(x.participantes) ? x.participantes : (function(){ try{ return x.participantes?JSON.parse(x.participantes):[]; }catch(_){ return []; } })(),
+        checklist: Array.isArray(x.checklist) ? x.checklist : (function(){ try{ return x.checklist?JSON.parse(x.checklist):[]; }catch(_){ return []; } })()
       }));
     }
   }catch(e){ console.error('loadTareas', e); }
@@ -4176,7 +4177,7 @@ function tarToRow(t){
     fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
     hora_inicio:t.horaInicio||null, hora_fin:t.horaFin||null,
     serie_id:t.serieId||null, recurrencia:t.recurrencia||null,
-    estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, color:t.color||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]), participantes:(t.participantes||[]) };
+    estado:t.estado, ts:t.ts, fecha_hecha:t.fechaHecha||null, color:t.color||null, mensajes:(t.mensajes||[]), vistos:(t.vistos||{}), tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]), participantes:(t.participantes||[]), checklist:(t.checklist||[]) };
 }
 async function srvTarInsert(t, okMsg){
   try{
@@ -4218,7 +4219,7 @@ async function srvTarUpdate(id, t, okMsg){
       fecha_limite:t.fechaLimite, de_quien:t.deQuien, para_quien:t.paraQuien,
       hora_inicio:t.horaInicio||null, hora_fin:t.horaFin||null,
       serie_id:t.serieId||null, recurrencia:t.recurrencia||null, color:t.color||null,
-      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:_msgs, vistos:_vistos, tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]), participantes:(t.participantes||[]) }).eq('id', id);
+      estado:t.estado, fecha_hecha:t.fechaHecha||null, mensajes:_msgs, vistos:_vistos, tiempos:(t.tiempos||[]), adjuntos:(t.adjuntos||[]), participantes:(t.participantes||[]), checklist:(t.checklist||[]) }).eq('id', id);
     if(error) throw error;
   }catch(e){ console.error('srvTarUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
@@ -4345,7 +4346,8 @@ function tarTopUpSeries(){
         if((S.tareas||[]).some(x=>x.id===id)) return;
         nuevas.push({ id, titulo:base.titulo, descripcion:base.descripcion, prioridad:base.prioridad, area:base.area,
           fechaLimite:f, deQuien:base.deQuien, paraQuien:base.paraQuien, horaInicio:base.horaInicio||'', horaFin:base.horaFin||'',
-          serieId:sid, recurrencia:base.recurrencia, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[] });
+          serieId:sid, recurrencia:base.recurrencia, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[],
+          checklist:(base.checklist||[]).map(c=>({id:c.id, texto:c.texto, hecho:false})) });
       });
     });
     if(nuevas.length){ nuevas.forEach(t=>S.tareas.push(t)); srvTarInsertMany(nuevas); }
@@ -5303,7 +5305,7 @@ function tarAreaDelete(i){
 }
 function tarSetColor(c){ F.color=c; render(); }
 function openTarea(preset){
-  F={type:'tar_nuevo', id:uid(), titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre, horaInicio:'', horaFin:'', color:'', adjuntos:[], participantes:[], recurTipo:'no', recurDias:[], recurHasta:''};
+  F={type:'tar_nuevo', id:uid(), titulo:'', descripcion:'', prioridad:'Media', area:'General', fechaLimite:'', paraQuien:'', deQuien:S.user.nombre, horaInicio:'', horaFin:'', color:'', adjuntos:[], participantes:[], recurTipo:'no', recurDias:[], recurHasta:'', checklist:[], chkDraft:''};
   if(preset && typeof preset==='object') Object.assign(F, preset);
   S.modal='tar_nuevo'; render();
 }
@@ -5364,6 +5366,7 @@ function tarFormBody(){
     <div class="fld"><label>Detalle (opcional)</label>
       <textarea class="inp" rows="2" oninput="setInp('descripcion',this.value)" placeholder="Contexto, dónde, con qué, lo que haga falta.">${incEsc(F.descripcion||'')}</textarea></div>
     ${tarFormAdjuntosHtml()}
+    ${esNuevo?tarFormChecklistHtml():''}
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <div class="fld" style="flex:1;min-width:170px"><label>Para quién</label>${paraSel}</div>
       <div class="fld" style="flex:0 0 140px;min-width:120px"><label>Prioridad</label>${prioSel}</div>
@@ -5458,7 +5461,7 @@ function commitTarea(){
   const base={ titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(),
     prioridad:F.prioridad||'Media', area:F.area||'General', deQuien:S.user.nombre, paraQuien:F.paraQuien,
     participantes:[...new Set((Array.isArray(F.participantes)?F.participantes:[]).filter(n=>n && n!==F.paraQuien))],
-    horaInicio:F.horaInicio||'', horaFin:F.horaFin||'', color:F.color||'' };
+    horaInicio:F.horaInicio||'', horaFin:F.horaFin||'', color:F.color||'', checklist:Array.isArray(F.checklist)?F.checklist:[] };
   const rule=tarReglaDesdeForm();
   if(rule){
     const start=F.fechaLimite;
@@ -5467,7 +5470,7 @@ function commitTarea(){
     let fechas=tarSerieFechas(rule, startGen, until);
     if(!fechas.length) fechas=[start];
     const serieId='S'+Date.now().toString(36)+Math.floor(Math.random()*1000);
-    const nuevas=fechas.map(f=>Object.assign({}, base, { id:serieId+'_'+f, fechaLimite:f, serieId, recurrencia:rule, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[] }));
+    const nuevas=fechas.map(f=>Object.assign({}, base, { id:serieId+'_'+f, fechaLimite:f, serieId, recurrencia:rule, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[], checklist:(base.checklist||[]).map(c=>Object.assign({},c)) }));
     // los adjuntos del formulario van solo en la primera instancia
     if(Array.isArray(F.adjuntos)&&F.adjuntos.length) nuevas[0].adjuntos=F.adjuntos.slice();
     nuevas.forEach(t=>S.tareas.unshift(t)); closeModal(); render();
@@ -5541,15 +5544,18 @@ function tarDetModalContent(){
   const recurInfo = (t.serieId||t.recurrencia) ? `<span style="display:inline-block;font-size:11px;font-weight:600;background:#EAF1D8;color:#3f5400;border-radius:10px;padding:1px 9px;margin-left:6px;vertical-align:middle">⟳ ${incEsc(tarRecurLabel(t.recurrencia)||'Recurrente')}</span>` : '';
   const tab=F.detTab||'conv';
   const nMsg=(t.mensajes||[]).length, nTime=(t.tiempos||[]).length, nImg=(t.adjuntos||[]).length, totMin=tarTotalMin(t);
+  const _chk=Array.isArray(t.checklist)?t.checklist:[], _chkDone=_chk.filter(c=>c&&c.hecho).length;
   const tabBtn=(k,lbl)=>`<button onclick="tarDetTab('${k}')" style="cursor:pointer;border:none;background:none;padding:8px 2px;margin-right:18px;font-size:13.5px;font-weight:600;color:${tab===k?'#333F48':'#8A949B'};border-bottom:2px solid ${tab===k?'#6E8E00':'transparent'}">${lbl}</button>`;
   const tabBar=`<div style="display:flex;border-bottom:1px solid var(--line);margin:4px 0 10px">
     ${tabBtn('conv','Conversación'+(nMsg?` (${nMsg})`:''))}
+    ${tabBtn('sub','Subtareas'+(_chk.length?` (${_chkDone}/${_chk.length})`:''))}
     ${tabBtn('time','Tiempo'+(totMin?` · ${tarFmtMin(totMin)}`:''))}
     ${tabBtn('img','Imágenes'+(nImg?` (${nImg})`:''))}
   </div>`;
   let tabBody='';
   if(tab==='time') tabBody=tarTiempoHtml(t,true);
   else if(tab==='img') tabBody=tarAdjuntosHtml(t,true);
+  else if(tab==='sub') tabBody=tarChecklistHtml(t);
   else tabBody=tarThreadHtml(t,true);
   const descExp = !!(S.tarDescExp && S.tarDescExp[t.id]);
   const descBloque = t.descripcion ? (descExp
@@ -8713,6 +8719,89 @@ modalContent = function(){
   return _modalContent_ideas();
 };
 /* ===== FIN CARTERA DE IDEAS ===== */
+
+/* ============================================================
+   LUCAI · TAREAS · SUBTAREAS (checklist dentro de la tarea)
+   Lista simple de puntos para marcar. Se guarda en la columna
+   jsonb "checklist" de tar_tareas. Solo se ve dentro de la tarea.
+   ============================================================ */
+
+/* editor en el formulario de nueva tarea */
+function tarFormChecklistHtml(){
+  const chk=Array.isArray(F.checklist)?F.checklist:[];
+  const filas=chk.map((c,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+      <span style="color:#B8A88F">•</span>
+      <span style="flex:1;font-size:13.5px;color:#333F48">${incEsc(c.texto)}</span>
+      <button type="button" onclick="tarFormChkDel(${i})" title="Quitar" style="width:18px;height:18px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:12px;line-height:1;cursor:pointer">×</button>
+    </div>`).join('');
+  return `<div class="fld"><label>Subtareas <span class="muted" style="font-weight:400">(opcional · puntos para marcar dentro de la tarea)</span></label>
+    ${filas}
+    <div style="display:flex;gap:8px;align-items:center${chk.length?';margin-top:4px':''}">
+      <input class="inp" style="flex:1" placeholder="Añadir subtarea…" value="${incEsc(F.chkDraft||'')}" oninput="setInp('chkDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarFormChkAdd();}">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="tarFormChkAdd()">Añadir</button>
+    </div>
+  </div>`;
+}
+function tarFormChkAdd(){
+  const v=(F.chkDraft||'').trim();
+  if(!v){ toast('Escribe la subtarea'); return; }
+  if(!Array.isArray(F.checklist)) F.checklist=[];
+  F.checklist.push({ id:uid(), texto:v, hecho:false });
+  F.chkDraft=''; render();
+}
+function tarFormChkDel(i){
+  if(!Array.isArray(F.checklist)) return;
+  F.checklist.splice(i,1); render();
+}
+
+/* pestaña Subtareas en la ficha de la tarea */
+function tarChecklistHtml(t){
+  const me=S.user.nombre;
+  const puede = isAdmin() || tarInvolucra(t,me);
+  const chk=Array.isArray(t.checklist)?t.checklist:[];
+  const hechas=chk.filter(c=>c&&c.hecho).length;
+  const barra = chk.length ? `<div style="display:flex;align-items:center;gap:10px;margin:2px 0 12px">
+      <div style="flex:1;height:6px;background:#F4F0E9;border-radius:99px;overflow:hidden"><div style="width:${Math.round(hechas/chk.length*100)}%;height:100%;background:#6E8E00;border-radius:99px"></div></div>
+      <span class="muted" style="font-size:12px;white-space:nowrap">${hechas} de ${chk.length}</span>
+    </div>` : '';
+  const filas=chk.map(c=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 2px;border-bottom:1px solid #F1ECE3">
+      <input type="checkbox" ${c.hecho?'checked':''} ${puede?'':'disabled'} onchange="tarChkToggle('${t.id}','${c.id}')" style="margin-top:3px;cursor:${puede?'pointer':'default'}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;color:${c.hecho?'#8A949B':'#333F48'};${c.hecho?'text-decoration:line-through;':''}word-break:break-word">${incEsc(c.texto)}</div>
+        ${c.hecho&&c.por?`<div class="muted" style="font-size:11px;margin-top:1px">✔ ${incEsc(c.por)} · ${incEsc(fmtFecha(c.ts||''))}</div>`:''}
+      </div>
+      ${puede?`<button type="button" onclick="tarChkDelItem('${t.id}','${c.id}')" title="Quitar" style="width:18px;height:18px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:12px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:3px">×</button>`:''}
+    </div>`).join('');
+  const vacio=`<div class="muted" style="padding:14px 2px;font-size:13.5px">Esta tarea no tiene subtareas. Añade puntos concretos para ir marcándolos según avances.</div>`;
+  const alta = puede ? `<div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+      <input class="inp" style="flex:1" placeholder="Añadir subtarea…" value="${incEsc(F.chkDraft||'')}" oninput="setInp('chkDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarChkAdd('${t.id}');}">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="tarChkAdd('${t.id}')">Añadir</button>
+    </div>` : '';
+  return `<div style="padding:2px 2px 6px">${barra}${chk.length?filas:vacio}${alta}</div>`;
+}
+function tarChkToggle(tid, cid){
+  const t=(S.tareas||[]).find(x=>x.id===tid); if(!t||!Array.isArray(t.checklist)) return;
+  const c=t.checklist.find(x=>x&&x.id===cid); if(!c) return;
+  c.hecho=!c.hecho;
+  if(c.hecho){ c.por=S.user.nombre; c.ts=todayStr(); } else { delete c.por; delete c.ts; }
+  render(); srvTarUpdate(tid, t);
+}
+function tarChkAdd(tid){
+  const t=(S.tareas||[]).find(x=>x.id===tid); if(!t) return;
+  const v=(F.chkDraft||'').trim();
+  if(!v){ toast('Escribe la subtarea'); return; }
+  if(!Array.isArray(t.checklist)) t.checklist=[];
+  t.checklist.push({ id:uid(), texto:v, hecho:false });
+  F.chkDraft=''; render(); srvTarUpdate(tid, t);
+}
+function tarChkDelItem(tid, cid){
+  const t=(S.tareas||[]).find(x=>x.id===tid); if(!t||!Array.isArray(t.checklist)) return;
+  const c=t.checklist.find(x=>x&&x.id===cid); if(!c) return;
+  if(!confirm('¿Quitar la subtarea "'+c.texto+'"?')) return;
+  t.checklist=t.checklist.filter(x=>x.id!==cid);
+  render(); srvTarUpdate(tid, t);
+}
+/* ===== FIN SUBTAREAS ===== */
 
 boot();
 
