@@ -4358,9 +4358,9 @@ function tarTopUpSeries(){
 function tareasView(){
   if(!window._tarToppedUp){ window._tarToppedUp=true; setTimeout(tarTopUpSeries, 50); }
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_todas_mias','tar_mias','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_resumen'];
+  const subs = admin ? ['tar_todas_mias','tar_mias','tar_panel','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_panel','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
-  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_ideas:'Ideas'+(typeof ideasPendCount==='function'&&ideasPendCount()?` (${ideasPendCount()})`:''),tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
+  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_panel:'Mi panel',tar_ideas:'Ideas'+(typeof ideasPendCount==='function'&&ideasPendCount()?` (${ideasPendCount()})`:''),tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
@@ -4372,6 +4372,7 @@ function tareasView(){
   else if(sub==='tar_recibidas') body=tarBuzonView('recibidas');
   else if(sub==='tar_mias') body=tarBuzonView('mias');
   else if(sub==='tar_ideas') body=tarIdeasView();
+  else if(sub==='tar_panel') body=tarPanelView();
   else body=tarBuzonView('todas');
   const acts=`<div class="actions">${canAccess('comunicaciones')?`<button class="btn btn-ghost" onclick="setModule('comunicaciones')">Comunicaciones</button>`:''}${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<a class="btn btn-ghost" href="javascript:void(0)" onclick="gcalOpen()" title="Ver Google Calendar dentro de la app" style="display:inline-flex;align-items:center;gap:7px;text-decoration:none"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18"/><path d="M8 3v3M16 3v3"/></svg>Google Calendar</a><button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
@@ -8802,6 +8803,155 @@ function tarChkDelItem(tid, cid){
   render(); srvTarUpdate(tid, t);
 }
 /* ===== FIN SUBTAREAS ===== */
+
+/* ============================================================
+   LUCAI · TAREAS · MI PANEL (checklist personal por categorías)
+   Panel personal de cada usuario: categorías con listas de cosas
+   por hacer, sin fecha, sin personas y sin chat. No se mezcla con
+   el buzón de tareas del equipo.
+   Tablas Supabase: tar_perso_cats y tar_perso_items.
+   ============================================================ */
+if(!Array.isArray(S.pcats)) S.pcats=[];
+if(!Array.isArray(S.pitems)) S.pitems=[];
+
+/* ---- persistencia ---- */
+const _loadFromDB_panel = loadFromDB;
+loadFromDB = async function(){
+  const _prev = _loadFromDB_panel();
+  try{
+    const c = await sbc.from('tar_perso_cats').select('*').order('ts',{ascending:true});
+    if(c.error) throw c.error;
+    S.pcats=(c.data||[]).map(x=>({ id:x.id, usuario:x.usuario, nombre:x.nombre, ts:x.ts }));
+    const i = await sbc.from('tar_perso_items').select('*').order('ts',{ascending:true});
+    if(i.error) throw i.error;
+    S.pitems=(i.data||[]).map(x=>({ id:x.id, usuario:x.usuario, catId:x.cat_id, texto:x.texto, hecho:!!x.hecho, ts:x.ts, fechaHecha:x.fecha_hecha||null }));
+  }catch(e){ console.error('loadPanel', e); }
+  await _prev;
+};
+async function srvPCatInsert(c){
+  try{ const { error } = await sbc.from('tar_perso_cats').insert({ id:c.id, usuario:c.usuario, nombre:c.nombre, ts:c.ts }); if(error) throw error; }
+  catch(e){ console.error('srvPCatInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+async function srvPCatUpdate(id, c){
+  try{ const { error } = await sbc.from('tar_perso_cats').update({ nombre:c.nombre }).eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvPCatUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+async function srvPCatDelete(id){
+  try{
+    let r = await sbc.from('tar_perso_items').delete().eq('cat_id', id); if(r.error) throw r.error;
+    r = await sbc.from('tar_perso_cats').delete().eq('id', id); if(r.error) throw r.error;
+  }catch(e){ console.error('srvPCatDelete', e); await syncAll(); toast('No se pudo borrar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+async function srvPItemInsert(i){
+  try{ const { error } = await sbc.from('tar_perso_items').insert({ id:i.id, usuario:i.usuario, cat_id:i.catId, texto:i.texto, hecho:!!i.hecho, ts:i.ts, fecha_hecha:i.fechaHecha||null }); if(error) throw error; }
+  catch(e){ console.error('srvPItemInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+async function srvPItemUpdate(id, i){
+  try{ const { error } = await sbc.from('tar_perso_items').update({ texto:i.texto, hecho:!!i.hecho, fecha_hecha:i.fechaHecha||null }).eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvPItemUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+async function srvPItemDeleteIds(ids){
+  if(!ids||!ids.length) return;
+  try{ const { error } = await sbc.from('tar_perso_items').delete().in('id', ids); if(error) throw error; }
+  catch(e){ console.error('srvPItemDeleteIds', e); await syncAll(); toast('No se pudo borrar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+
+/* ---- helpers ---- */
+function pCatsMias(){ const me=S.user&&S.user.nombre; return (S.pcats||[]).filter(c=>c.usuario===me); }
+function pItemsDe(catId){ const me=S.user&&S.user.nombre; return (S.pitems||[]).filter(i=>i.usuario===me && i.catId===catId); }
+function pDraftSet(catId, v){ if(!S.pDrafts) S.pDrafts={}; S.pDrafts[catId]=v; }
+
+/* ---- vista ---- */
+function tarPanelView(){
+  const cats=pCatsMias();
+  if(!S.pDrafts) S.pDrafts={};
+  const card=c=>{
+    const items=pItemsDe(c.id);
+    const pend=items.filter(i=>!i.hecho), hechas=items.filter(i=>i.hecho);
+    const fila=i=>`<div style="display:flex;align-items:flex-start;gap:9px;padding:5px 0;border-bottom:1px solid #F5F1E8">
+        <input type="checkbox" ${i.hecho?'checked':''} onchange="pItemToggle('${i.id}')" style="margin-top:3px;cursor:pointer">
+        <div style="flex:1;min-width:0;font-size:13.5px;color:${i.hecho?'#A8B0B6':'#333F48'};${i.hecho?'text-decoration:line-through;':''}word-break:break-word">${incEsc(i.texto)}</div>
+        <button type="button" onclick="pItemDel('${i.id}')" title="Quitar" style="width:17px;height:17px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:11px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:3px">×</button>
+      </div>`;
+    return `<div style="background:#fff;border:1px solid #E7E0D4;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="flex:1;font-weight:700;color:#333F48;font-size:15px">${incEsc(c.nombre)} ${pend.length?`<span style="font-size:11.5px;font-weight:700;color:#6E8E00;background:#EAF1D8;border-radius:99px;padding:1px 8px;vertical-align:middle">${pend.length}</span>`:''}</div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pCatRename('${c.id}')" title="Renombrar" style="padding:2px 8px">✎</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pCatDel('${c.id}')" title="Borrar categoría" style="padding:2px 8px;color:#C0392B">×</button>
+      </div>
+      ${items.length?pend.map(fila).join('')+hechas.map(fila).join(''):`<div class="muted" style="font-size:12.5px;padding:4px 0 6px">Nada apuntado todavía.</div>`}
+      <div style="display:flex;gap:7px;align-items:center;margin-top:9px">
+        <input class="inp" style="flex:1;padding:5px 9px;font-size:13px" placeholder="Añadir…" value="${incEsc(S.pDrafts[c.id]||'')}" oninput="pDraftSet('${c.id}',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();pItemAdd('${c.id}');}">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pItemAdd('${c.id}')">+</button>
+      </div>
+      ${hechas.length?`<button type="button" onclick="pCatClearDone('${c.id}')" style="border:none;background:none;color:#8A949B;font-size:12px;cursor:pointer;padding:6px 0 0;text-align:left">Limpiar hechas (${hechas.length})</button>`:''}
+    </div>`;
+  };
+  const alta=`<div style="display:flex;gap:8px;align-items:center;max-width:420px">
+      <input class="inp" style="flex:1" placeholder="Nueva categoría (Casa, Clínica, Papeleo…)" value="${incEsc(S.pNewCat||'')}" oninput="S.pNewCat=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();pCatAdd();}">
+      <button class="btn btn-primary" onclick="pCatAdd()">Crear</button>
+    </div>`;
+  const vacio=`<div class="muted" style="padding:22px 0;font-size:14px">Este es tu panel personal: cosas que tienes que hacer tú, sin fecha ni personas. Crea una categoría (por ejemplo, "Papeleo") y ve apuntando dentro. Solo lo ves tú.</div>`;
+  return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px">
+      <div class="note" style="margin:0;flex:1;min-width:220px">Tu lista personal, aparte del buzón del equipo. Apunta, marca y a otra cosa. Solo la ves tú.</div>
+      ${alta}
+    </div>
+    ${cats.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;align-items:start">${cats.map(card).join('')}</div>`:vacio}`;
+}
+
+/* ---- acciones ---- */
+function pCatAdd(){
+  const v=(S.pNewCat||'').trim();
+  if(!v){ toast('Escribe el nombre de la categoría'); return; }
+  if(pCatsMias().some(c=>c.nombre.toLowerCase()===v.toLowerCase())){ toast('Ya tienes una categoría con ese nombre'); return; }
+  const c={ id:'P'+Date.now().toString(36)+Math.floor(Math.random()*1000), usuario:S.user.nombre, nombre:v, ts:now() };
+  S.pcats.push(c); S.pNewCat=''; render(); srvPCatInsert(c);
+}
+function pCatRename(id){
+  const c=(S.pcats||[]).find(x=>x.id===id); if(!c) return;
+  const n=prompt('Nuevo nombre de la categoría:', c.nombre);
+  if(n===null) return;
+  const v=(n||'').trim(); if(!v) return;
+  c.nombre=v; render(); srvPCatUpdate(id, c);
+}
+function pCatDel(id){
+  const c=(S.pcats||[]).find(x=>x.id===id); if(!c) return;
+  const n=pItemsDe(id).length;
+  if(!confirm('¿Borrar la categoría "'+c.nombre+'"'+(n?' y sus '+n+' apuntes':'')+'?')) return;
+  S.pcats=(S.pcats||[]).filter(x=>x.id!==id);
+  S.pitems=(S.pitems||[]).filter(x=>x.catId!==id);
+  render(); srvPCatDelete(id);
+}
+function pItemAdd(catId){
+  const v=((S.pDrafts&&S.pDrafts[catId])||'').trim();
+  if(!v){ toast('Escribe qué tienes que hacer'); return; }
+  const i={ id:'P'+Date.now().toString(36)+Math.floor(Math.random()*1000), usuario:S.user.nombre, catId, texto:v, hecho:false, ts:now(), fechaHecha:null };
+  S.pitems.push(i); S.pDrafts[catId]=''; render(); srvPItemInsert(i);
+}
+function pItemToggle(id){
+  const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
+  i.hecho=!i.hecho; i.fechaHecha=i.hecho?todayStr():null;
+  render(); srvPItemUpdate(id, i);
+}
+function pItemDel(id){
+  const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
+  if(!i.hecho && !confirm('¿Quitar "'+i.texto+'" sin marcarla hecha?')) return;
+  S.pitems=(S.pitems||[]).filter(x=>x.id!==id);
+  render(); srvPItemDeleteIds([id]);
+}
+function pCatClearDone(catId){
+  const ids=pItemsDe(catId).filter(i=>i.hecho).map(i=>i.id);
+  if(!ids.length) return;
+  S.pitems=(S.pitems||[]).filter(x=>!ids.includes(x.id));
+  render(); srvPItemDeleteIds(ids);
+}
+/* ===== FIN MI PANEL ===== */
 
 boot();
 
