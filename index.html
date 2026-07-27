@@ -9213,6 +9213,62 @@ function pPriorizarIA(){
 }
 /* ===== FIN IA PERSONAL ===== */
 
+/* ============================================================
+   LUCAI · AVISO DEL ASISTENTE AL ENTRAR EN TAREAS
+   Al abrir el módulo de Tareas, si hay mensajes sin leer en los
+   chats de tareas o tareas vencidas, Lucai salta con una burbuja
+   resumen y accesos directos. Una vez por sesión y por usuario.
+   ============================================================ */
+function lucaiAvisoTareas(){
+  try{
+    if(!S.user || S.module!=='tareas' || S.iaOpen || S.modal) return;
+    const me=S.user.nombre;
+    if(!window._avisoTarShown) window._avisoTarShown={};
+    if(window._avisoTarShown[me]) return;
+    const nMsg=(typeof tarMisNuevos==='function')?tarMisNuevos(me):0;
+    const nTarMsg=(typeof tarTareasConNuevos==='function')?tarTareasConNuevos(me).length:0;
+    const mias=(S.tareas||[]).filter(t=>t.paraQuien===me && tarActiva(t));
+    const venc=tarUniqSerie(mias.filter(t=>t.estado!=='En espera')).filter(tarVencida).length;
+    if(!nMsg && !venc) return;
+    window._avisoTarShown[me]=true;
+    const partes=[];
+    if(nMsg) partes.push(`<strong>${nMsg} mensaje${nMsg===1?'':'s'} sin leer</strong> en ${nTarMsg} tarea${nTarMsg===1?'':'s'}`);
+    if(venc) partes.push(`<strong style="color:#C0392B">${venc} tarea${venc===1?'':'s'} vencida${venc===1?'':'s'}</strong>`);
+    const botones=[];
+    if(nMsg) botones.push(`<button onclick="event.stopPropagation();lucaiAvisoHide();openTarAlert('msg')" style="background:#EAF1D8;color:#3f5400;border:none;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">Ver mensajes</button>`);
+    if(venc) botones.push(`<button onclick="event.stopPropagation();lucaiAvisoHide();openTarAlert('vence')" style="background:#FBEAE8;color:#C0392B;border:none;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer">Ver vencidas</button>`);
+    lucaiSaludoHide(true);
+    const d=document.createElement('div');
+    d.id='lucaiAvisoTar';
+    d.style.cssText='position:fixed;right:18px;bottom:88px;z-index:1190;max-width:min(320px,calc(100vw - 40px));opacity:0;transform:translateY(12px) scale(.9);transition:opacity .38s ease, transform .42s cubic-bezier(.2,.85,.3,1.12);transform-origin:bottom right';
+    d.innerHTML=`<div style="display:flex;gap:9px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:16px 16px 4px 16px;box-shadow:0 12px 34px rgba(51,63,72,.2);padding:11px 12px">
+        <span style="flex:0 0 auto;display:flex">${lucaiAvatar(36)}</span>
+        <div style="font-size:13px;line-height:1.5">
+          ¡${incEsc(me.split(' ')[0])}! Tienes ${partes.join(' y ')}. Intenta ponerte al día 😉
+          ${botones.length?`<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${botones.join('')}</div>`:''}
+        </div>
+        <span onclick="lucaiAvisoHide()" style="color:#8A949B;font-size:18px;line-height:1;flex:0 0 auto;padding:0 2px;cursor:pointer">×</span>
+      </div>`;
+    document.body.appendChild(d);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ d.style.opacity='1'; d.style.transform='translateY(0) scale(1)'; }));
+    clearTimeout(window._avisoTarT);
+    window._avisoTarT=setTimeout(lucaiAvisoHide, 12000);
+  }catch(e){ console.error('lucaiAvisoTareas', e); }
+}
+function lucaiAvisoHide(){
+  clearTimeout(window._avisoTarT);
+  const d=document.getElementById('lucaiAvisoTar');
+  if(!d) return;
+  d.style.opacity='0'; d.style.transform='translateY(8px) scale(.95)';
+  setTimeout(()=>{ const x=document.getElementById('lucaiAvisoTar'); if(x) x.remove(); }, 380);
+}
+const _setModule_avisoTar = setModule;
+setModule = function(id){
+  _setModule_avisoTar(id);
+  if(id==='tareas'){ clearTimeout(window._avisoTarShowT); window._avisoTarShowT=setTimeout(lucaiAvisoTareas, 700); }
+};
+/* ===== FIN AVISO TAREAS ===== */
+
 boot();
 
 </script>
