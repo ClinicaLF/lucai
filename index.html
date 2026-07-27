@@ -3037,8 +3037,9 @@ function homeView(){
     <p class="np-attn">${attn}</p>
     ${mk}
     ${sections}
+    ${(typeof mejHomeBlock==='function')?mejHomeBlock():''}
     <div id="lucaiVerLabel" style="text-align:center;margin-top:34px;font-size:10.5px;color:#9AA0A6;opacity:.7;letter-spacing:.3px">Lucai · ${_lucaiVerLabel}</div>
-  </div></main>`;
+  </div></main>${S.modal?modalContent():''}`;
 }
 
 function setModule(id){
@@ -8482,6 +8483,8 @@ function lucaiTbHTML(){
     sheet = `<div class="lucai-more-ov" onclick="if(event.target===this){S.tbMore=false;lucaiTbPaint();}"><div class="lucai-more"><div class="mo-grab"></div>
       ${items.map(m=>{ const n=tbBadgeOf(m.id); return `<button class="mo-it" onclick="tbMoreGo('${m.id}')"><span class="mo-ic">${TB_IC[m.id]?`<svg viewBox="0 0 24 24">${TB_IC[m.id]}</svg>`:`<b style="font-family:Georgia,serif">${m.ini}</b>`}</span><span>${m.nombre}${m.estado==='pronto'?`<span class="mo-sub">Próximamente</span>`:''}</span>${n?`<span class="mo-n">${n}</span>`:''}</button>`; }).join('')}
       ${(typeof isAdmin==='function'&&isAdmin())?`<button class="mo-it" onclick="S.tbMore=false;lucaiTbPaint();openUsuarios()"><span class="mo-ic"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span>Usuarios</span></button><button class="mo-it" onclick="S.tbMore=false;lucaiTbPaint();openDoctores()"><span class="mo-ic"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span>Doctores</span></button>${(typeof nnSupported==='function'&&nnSupported())?`<button class="mo-it" onclick="nnToggle();setTimeout(lucaiTbPaint,400)"><span class="mo-ic"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span>Avisos del navegador<span class="mo-sub">${(typeof nnEnabled==='function'&&nnEnabled())?'Activados · toca para pausar':'Desactivados · toca para activar'}</span></span></button>`:''}`:''}
+      <button class="mo-it" onclick="S.tbMore=false;lucaiTbPaint();openMejora()"><span class="mo-ic"><svg viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.5 1 2.5h6c0-1 .4-1.9 1-2.5A6 6 0 0 0 12 3z"/></svg></span><span>Mejorar Lucai<span class="mo-sub">Envía una sugerencia o avisa de un fallo</span></span></button>
+      ${(typeof isAdmin==='function'&&isAdmin()&&typeof openMejorasAdmin==='function')?`<button class="mo-it" onclick="S.tbMore=false;lucaiTbPaint();openMejorasAdmin()"><span class="mo-ic"><svg viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6l3.5-7z"/></svg></span><span>Buzón de mejoras</span>${(typeof mejNuevasCount==='function'&&mejNuevasCount())?`<span class="mo-n">${mejNuevasCount()}</span>`:''}</button>`:''}
       <button class="mo-it" onclick="S.tbMore=false;lucaiTbPaint();openCambiarPin()"><span class="mo-ic"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span>Mi contraseña</span></button>
       <button class="mo-it" onclick="S.tbMore=false;logout()" style="color:#C0392B"><span class="mo-ic"><svg viewBox="0 0 24 24" style="stroke:#C0392B"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></span><span>Cerrar sesión</span></button>
     </div></div>`;
@@ -8965,6 +8968,166 @@ function pCatClearDone(catId){
   render(); srvPItemDeleteIds(ids);
 }
 /* ===== FIN MI PANEL ===== */
+
+/* ============================================================
+   LUCAI · MEJORAS DE LA APP (buzón de sugerencias)
+   Cualquier usuario envía sugerencias o avisa de fallos de Lucai
+   desde el inicio o desde el menú "Más". Solo Dirección ve el
+   buzón con todas las solicitudes. Tabla Supabase: lucai_mejoras.
+   ============================================================ */
+if(!Array.isArray(S.mejoras)) S.mejoras=[];
+const MEJ_TIPOS=['Mejora','Fallo','Idea'];
+
+/* ---- persistencia ---- */
+const _loadFromDB_mej = loadFromDB;
+loadFromDB = async function(){
+  const _prev = _loadFromDB_mej();
+  try{
+    const r = await sbc.from('lucai_mejoras').select('*').order('ts',{ascending:false});
+    if(r.error) throw r.error;
+    S.mejoras=(r.data||[]).map(x=>({ id:x.id, usuario:x.usuario, modulo:x.modulo||'General', tipo:x.tipo||'Mejora',
+      texto:x.texto, estado:x.estado||'Nueva', ts:x.ts }));
+  }catch(e){ console.error('loadMejoras', e); }
+  await _prev;
+};
+async function srvMejInsert(m, okMsg){
+  try{ const { error } = await sbc.from('lucai_mejoras').insert({ id:m.id, usuario:m.usuario, modulo:m.modulo, tipo:m.tipo, texto:m.texto, estado:m.estado, ts:m.ts }); if(error) throw error; }
+  catch(e){ console.error('srvMejInsert', e); await syncAll(); toast('No se pudo enviar: '+(e.message||e)); return; }
+  await loadFromDB(); render(); if(okMsg) toast(okMsg);
+}
+async function srvMejUpdate(id, m){
+  try{ const { error } = await sbc.from('lucai_mejoras').update({ estado:m.estado }).eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvMejUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+async function srvMejDelete(id){
+  try{ const { error } = await sbc.from('lucai_mejoras').delete().eq('id', id); if(error) throw error; }
+  catch(e){ console.error('srvMejDelete', e); await syncAll(); toast('No se pudo borrar: '+(e.message||e)); return; }
+  await loadFromDB(); render();
+}
+
+/* ---- helpers ---- */
+function mejNuevasCount(){ return (S.mejoras||[]).filter(m=>m.estado==='Nueva').length; }
+function mejModulos(){
+  const act=(typeof MODULES!=='undefined'?MODULES:[]).filter(m=>m.estado==='activo').map(m=>m.nombre);
+  return ['General (toda la app)'].concat(act);
+}
+function mejTipoChip(t){
+  const c = t==='Fallo' ? ['#C0392B','#FBEAE8'] : (t==='Idea' ? ['#3E7C8F','#E4EFF3'] : ['#6E8E00','#EAF1D8']);
+  return `<span style="font-size:11px;font-weight:700;color:${c[0]};background:${c[1]};border-radius:99px;padding:2px 9px">${incEsc(t)}</span>`;
+}
+
+/* ---- bloque en el inicio ---- */
+function mejHomeBlock(){
+  if(!S.user) return '';
+  const admin=(typeof isAdmin==='function')&&isAdmin();
+  const n=mejNuevasCount();
+  return `<div style="margin-top:30px;background:#fff;border:1px solid #E7E0D4;border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:700;color:#333F48;font-size:14.5px">💡 ¿Algo que mejorar en Lucai?</div>
+      <div class="muted" style="font-size:13px;margin-top:2px">Si ves un fallo o se te ocurre una mejora de la aplicación, cuéntalo aquí. Le llega a Dirección.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="openMejora()">Enviar sugerencia</button>
+      ${admin?`<button class="btn btn-ghost btn-sm" onclick="openMejorasAdmin()">Buzón${n?` <span style="font-size:11px;font-weight:700;color:#fff;background:#C0392B;border-radius:99px;padding:1px 7px;margin-left:2px">${n}</span>`:''}</button>`:''}
+    </div>
+  </div>`;
+}
+
+/* ---- enviar sugerencia (todos) ---- */
+function openMejora(){
+  const modAct=(typeof MODULES!=='undefined'&&S.module)?(MODULES.find(m=>m.id===S.module)||{}).nombre:'';
+  F={type:'mej_nueva', tipo:'Mejora', modulo:modAct||'General (toda la app)', texto:''};
+  S.modal='mej_nueva'; render();
+}
+function mejoraModalContent(){
+  const tipoSel=`<select class="inp" onchange="setSel('tipo',this.value)">${MEJ_TIPOS.map(t=>`<option ${F.tipo===t?'selected':''}>${t}</option>`).join('')}</select>`;
+  const mods=mejModulos(); if(F.modulo && !mods.includes(F.modulo)) mods.unshift(F.modulo);
+  const modSel=`<select class="inp" onchange="setSel('modulo',this.value)">${mods.map(m=>`<option ${F.modulo===m?'selected':''}>${incEsc(m)}</option>`).join('')}</select>`;
+  return `<div class="overlay"><div class="modal">
+    <div class="modal-head"><h2>Mejorar Lucai</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">¿Un fallo, algo incómodo, una idea? Escríbelo tal cual lo piensas: todo ayuda a mejorar la aplicación. Lo recibe Dirección.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="fld" style="flex:0 0 140px;min-width:120px"><label>Qué es</label>${tipoSel}</div>
+        <div class="fld" style="flex:1;min-width:180px"><label>Parte de la app</label>${modSel}</div>
+      </div>
+      <div class="fld"><label>Cuéntalo</label>
+        <textarea class="inp" rows="4" placeholder="Qué pasa, dónde, y cómo te gustaría que funcionara…" oninput="setInp('texto',this.value)">${incEsc(F.texto||'')}</textarea></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="commitMejora()">Enviar</button>
+      </div>
+    </div></div></div>`;
+}
+function commitMejora(){
+  const texto=(F.texto||'').trim();
+  if(!texto){ toast('Escribe qué mejorarías o qué falla'); return; }
+  const m={ id:'MJ'+Date.now().toString(36)+Math.floor(Math.random()*1000), usuario:S.user.nombre,
+    modulo:F.modulo||'General (toda la app)', tipo:F.tipo||'Mejora', texto, estado:'Nueva', ts:now() };
+  S.mejoras.unshift(m); closeModal(); render();
+  srvMejInsert(m, 'Enviado. ¡Gracias por la sugerencia!');
+  try{
+    appUsers().filter(u=>u.admin && u.nombre!==m.usuario).forEach(u=>
+      tgNotify(u.nombre, `💡 ${m.usuario} ha enviado una sugerencia sobre Lucai (${m.tipo} · ${m.modulo}):\n\n${m.texto}\n\nLa tienes en el buzón de mejoras, en Inicio.`));
+  }catch(_){}
+}
+
+/* ---- buzón (solo Dirección) ---- */
+function openMejorasAdmin(){
+  if(!(typeof isAdmin==='function'&&isAdmin())){ toast('Solo Dirección puede ver el buzón'); return; }
+  F={type:'mej_admin'}; S.modal='mej_admin'; render();
+}
+function mejorasAdminModalContent(){
+  const list=(S.mejoras||[]).slice().sort((a,b)=>{ const ra=a.estado==='Nueva'?0:1, rb=b.estado==='Nueva'?0:1; if(ra!==rb) return ra-rb; return String(b.ts||'').localeCompare(String(a.ts||'')); });
+  const verRev=!!S.mejVerRev;
+  const vis=verRev?list:list.filter(m=>m.estado==='Nueva');
+  const nRev=list.length-list.filter(m=>m.estado==='Nueva').length;
+  const row=m=>`<div style="border:1px solid ${m.estado==='Nueva'?'#E7E0D4':'#EFEAE0'};background:${m.estado==='Nueva'?'#fff':'#FBF9F5'};border-radius:10px;padding:11px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px">
+        ${mejTipoChip(m.tipo)}
+        <span class="muted" style="font-size:12px">${incEsc(m.usuario)} · ${incEsc(m.modulo)} · ${incEsc(fmtFecha(m.ts))}</span>
+        ${m.estado!=='Nueva'?`<span class="muted" style="font-size:11px">✔ revisada</span>`:''}
+      </div>
+      <div style="font-size:14px;color:${m.estado==='Nueva'?'#333F48':'#6C757D'};white-space:pre-wrap;word-break:break-word">${incEsc(m.texto)}</div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px">
+        ${m.estado==='Nueva'
+          ?`<button class="btn btn-ghost btn-sm" onclick="mejMarcar('${m.id}','Revisada')">Marcar revisada</button>`
+          :`<button class="btn btn-ghost btn-sm" onclick="mejMarcar('${m.id}','Nueva')">Reabrir</button>`}
+        <button class="btn btn-ghost btn-sm" style="color:#C0392B" onclick="mejBorrar('${m.id}')">Borrar</button>
+      </div>
+    </div>`;
+  return `<div class="overlay"><div class="modal" style="max-width:640px">
+    <div class="modal-head"><h2>Buzón de mejoras</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Sugerencias y fallos de Lucai enviados por el equipo. Marca como revisada lo que ya tengas visto o hecho.</div>
+      ${vis.length?vis.map(row).join(''):`<div class="muted" style="padding:16px;text-align:center">${verRev?'No hay ninguna solicitud.':'No hay solicitudes nuevas. ¡Todo revisado!'}</div>`}
+      ${nRev?`<label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:#6C757D;cursor:pointer;margin-top:6px">
+        <input type="checkbox" ${verRev?'checked':''} onchange="S.mejVerRev=!S.mejVerRev;render()"> Ver también revisadas (${nRev})</label>`:''}
+      <div style="display:flex;justify-content:flex-end;margin-top:12px">
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      </div>
+    </div></div></div>`;
+}
+function mejMarcar(id, estado){
+  const m=(S.mejoras||[]).find(x=>x.id===id); if(!m) return;
+  m.estado=estado; render(); srvMejUpdate(id, m);
+}
+function mejBorrar(id){
+  const m=(S.mejoras||[]).find(x=>x.id===id); if(!m) return;
+  if(!confirm('¿Borrar definitivamente esta solicitud de '+m.usuario+'?')) return;
+  S.mejoras=(S.mejoras||[]).filter(x=>x.id!==id);
+  render(); srvMejDelete(id);
+}
+
+/* ---- enganche del modal (gana la última) ---- */
+const _modalContent_mej = modalContent;
+modalContent = function(){
+  if(F.type==='mej_nueva') return mejoraModalContent();
+  if(F.type==='mej_admin') return mejorasAdminModalContent();
+  return _modalContent_mej();
+};
+/* ===== FIN MEJORAS ===== */
 
 boot();
 
