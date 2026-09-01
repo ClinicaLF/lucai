@@ -9104,6 +9104,32 @@ async function pRenumerar(lista, catId, avisoCat){
   if(avisoCat) toast('Movida a "'+avisoCat+'"');
 }
 function pItemMoverA(id, catId){ pColocar(id, catId, null, false); }
+
+/* ---- convertir un apunte en tarea del equipo ---- */
+function pItemATarea(id){
+  S.pMenu=null;
+  const i=(S.pitems||[]).find(x=>x.id===id); if(!i){ render(); return; }
+  const txt=String(i.texto||'').trim();
+  if(!txt){ render(); return; }
+  const lineas=txt.split(/\r?\n/);
+  const titulo=lineas[0].trim();
+  const descripcion=lineas.slice(1).join('\n').trim();
+  /* Se abre el formulario de tarea ya relleno. El apunte NO se borra aqui:
+     solo desaparece de Mi cerebro cuando la tarea se crea de verdad, para que
+     no se pierda nada si cierras el formulario o le das a cancelar. */
+  openTarea({ titulo:titulo, descripcion:descripcion, paraQuien:S.user.nombre, _pItemId:id });
+}
+const _commitTarea_perso = commitTarea;
+commitTarea = function(){
+  const pid = F._pItemId;
+  _commitTarea_perso();
+  /* si el modal se cerro es que la tarea se creo (la validacion lo deja abierto) */
+  if(pid && !S.modal){
+    S.pitems=(S.pitems||[]).filter(x=>x.id!==pid);
+    render(); srvPItemDeleteIds([pid]);
+    toast('Convertida en tarea y quitada de Mi cerebro');
+  }
+};
 function pItemSubir(id){ pMoverVecino(id,-1); }
 function pItemBajar(id){ pMoverVecino(id, 1); }
 function pMoverVecino(id, d){
@@ -9201,6 +9227,8 @@ function pMenuView(){
   return `<div onclick="pMenuClose()" oncontextmenu="event.preventDefault();pMenuClose()" style="position:fixed;inset:0;z-index:9000"></div>
     <div style="position:fixed;left:${x}px;top:${y}px;transform:translateY(${m.y>H-300?'-100%':'0'});z-index:9001;background:#fff;border:1px solid #E7E0D4;border-radius:11px;box-shadow:0 10px 30px rgba(51,63,72,.20);padding:5px 0;min-width:222px;max-width:260px;max-height:72vh;overflow:auto">
       <div style="padding:7px 13px 8px;font-size:12px;color:#8A949B;border-bottom:1px solid #F0EBE1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(i.texto)}</div>
+      ${op('&#9873; Convertir en tarea', 'pItemATarea('+cita(i.id)+')', '#6E8E00')}
+      ${sep}
       ${k>0?op('&uarr; Subir', 'pItemSubir('+cita(i.id)+')'):''}
       ${(k>=0&&k<l.length-1)?op('&darr; Bajar', 'pItemBajar('+cita(i.id)+')'):''}
       ${sep}${mover}${sep}
