@@ -8940,7 +8940,7 @@ function tarPanelView(){
         style="display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-top:2px solid transparent;border-bottom:1px solid #F5F1E8;-webkit-touch-callout:none">
         <span title="Arrastra para cambiarla de sitio o llevarla a otra categoría" style="flex:0 0 auto;margin-top:1px;color:#C7CED3;font-size:13px;line-height:1.25;letter-spacing:-1px;cursor:grab;user-select:none">&#8942;&#8942;</span>
         <input type="checkbox" ${i.hecho?'checked':''} onchange="pItemToggle('${i.id}')" style="margin-top:3px;cursor:pointer;accent-color:${col}">
-        <div onclick="pItemEdit('${i.id}')" title="Toca para editar el texto" style="flex:1;min-width:0;font-size:13.5px;color:${i.hecho?'#A8B0B6':'#333F48'};${i.hecho?'text-decoration:line-through;':''}word-break:break-word;cursor:pointer">${incEsc(i.texto)}</div>
+        <div onclick="pItemEdit('${i.id}')" title="Toca para editar el texto" style="flex:1;min-width:0;font-size:13.5px;color:${i.hecho?'#A8B0B6':'#333F48'};${i.hecho?'text-decoration:line-through;':''}word-break:break-word;white-space:pre-wrap;cursor:pointer">${incEsc(i.texto)}</div>
         <button type="button" onclick="pItemDel('${i.id}')" title="Quitar" style="width:17px;height:17px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:11px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:3px">×</button>
       </div>`;
     return `<div style="background:#fff;border:1px solid #E7E0D4;border-top:4px solid ${col};border-radius:12px;padding:12px 16px 12px;display:flex;flex-direction:column;height:330px;box-shadow:0 2px 10px rgba(51,63,72,.05)">
@@ -8975,7 +8975,8 @@ function tarPanelView(){
       ${alta}
     </div>
     ${cats.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;align-items:start">${cats.map(card).join('')}</div>`:vacio}
-    ${pMenuView()}`;
+    ${pMenuView()}
+    ${pEditView()}`;
 }
 
 /* ---- acciones ---- */
@@ -9015,10 +9016,45 @@ function pItemToggle(id){
 }
 function pItemEdit(id){
   const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
-  const n=prompt('Editar apunte:', i.texto);
-  if(n===null) return;
-  const v=(n||'').trim(); if(!v || v===i.texto) return;
-  i.texto=v; render(); srvPItemUpdate(id, i);
+  S.pMenu=null;
+  S.pEdit={ id:id, cat:(((S.pcats||[]).find(c=>c.id===i.catId)||{}).nombre)||'' };
+  S.pEditTexto=i.texto;
+  render();
+  /* el cursor, al final del texto, listo para escribir */
+  setTimeout(function(){ const n=el('pEditTa'); if(n){ n.focus(); try{ n.setSelectionRange(n.value.length,n.value.length); }catch(e){} } }, 40);
+}
+function pEditCancel(){ S.pEdit=null; S.pEditTexto=''; render(); }
+function pEditSave(){
+  const e=S.pEdit; if(!e) return;
+  const i=(S.pitems||[]).find(x=>x.id===e.id);
+  if(!i){ pEditCancel(); return; }
+  const v=(S.pEditTexto||'').trim();
+  if(!v){ toast('El apunte no puede quedarse vacío'); return; }
+  S.pEdit=null; S.pEditTexto='';
+  if(v===i.texto){ render(); return; }
+  i.texto=v; render(); srvPItemUpdate(i.id, i);
+}
+function pEditKey(ev){
+  if(ev.key==='Escape'){ ev.preventDefault(); pEditCancel(); return; }
+  if(ev.key==='Enter' && (ev.ctrlKey||ev.metaKey)){ ev.preventDefault(); pEditSave(); }
+}
+function pEditView(){
+  const e=S.pEdit; if(!e) return '';
+  const i=(S.pitems||[]).find(x=>x.id===e.id); if(!i) return '';
+  return `<div class="overlay" style="z-index:9100" onclick="if(event.target===this)pEditCancel()"><div class="modal" style="max-width:540px">
+    <div class="modal-head"><h2>Editar apunte</h2><button class="x" onclick="pEditCancel()">×</button></div>
+    <div class="modal-body">
+      ${e.cat?`<div class="muted" style="font-size:12px;margin:0 0 9px">En <strong>${incEsc(e.cat)}</strong></div>`:''}
+      <textarea id="pEditTa" class="inp" rows="6" onkeydown="pEditKey(event)" oninput="S.pEditTexto=this.value"
+        style="min-height:150px;max-height:46vh;font-size:15px;line-height:1.55;font-family:inherit"
+        placeholder="¿Qué tienes que hacer?">${incEsc(S.pEditTexto||'')}</textarea>
+      ${(window.innerWidth||0)>=720?`<div class="muted" style="font-size:11.5px;margin-top:7px">Ctrl + Intro para guardar · Esc para salir</div>`:''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="pEditCancel()">Cancelar</button>
+      <button class="btn btn-primary" onclick="pEditSave()">Guardar</button>
+    </div>
+  </div></div>`;
 }
 function pItemDel(id){
   const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
@@ -9204,7 +9240,7 @@ function pImprimir(){
       .cat{margin-bottom:26px;break-inside:avoid}
       h2{font-size:16px;border-bottom:1.5px solid #999;padding-bottom:4px;margin:0 0 8px}
       h2 small{font-weight:400;color:#777;font-size:12px;font-family:Arial,sans-serif}
-      .it{font-family:Arial,sans-serif;font-size:13.5px;padding:5px 0 5px 2px;border-bottom:1px dotted #ddd}
+      .it{font-family:Arial,sans-serif;font-size:13.5px;padding:5px 0 5px 2px;border-bottom:1px dotted #ddd;white-space:pre-wrap}
       .it .done{text-decoration:line-through;color:#999}
       .it small{color:#999;font-size:11px}
       @media print{ body{margin:10mm auto} }
