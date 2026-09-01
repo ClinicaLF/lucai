@@ -8939,6 +8939,29 @@ function pAutoOrden(){
     if(tocado && P_ORDEN_OK){ await loadFromDB(); render(); }
   })();
 }
+/* Ancho de pantalla. Si el navegador todavia no lo sabe, se asume ordenador. */
+function pEsOrdenador(){
+  const w = window.innerWidth || document.documentElement.clientWidth || 1024;
+  return w >= 720;
+}
+
+/* Una fila de apunte. La misma en la tarjeta pequena y en la ventana grande
+   (grande=true solo agranda un poco la letra y el espaciado). */
+function pFilaHtml(i, catId, col, grande){
+  const fs = grande ? '15px' : '13.5px';
+  const pv = grande ? '9px' : '6px';
+  return `<div data-pid="${i.id}" draggable="true"
+      ondragstart="pDragStart(event,'${i.id}')" ondragend="pDragEnd(event)"
+      ondragover="pDragOverRow(event,this)" ondragleave="pDragLeaveRow(this)" ondrop="pDropRow(event,this,'${i.id}','${catId}')"
+      oncontextmenu="pMenuOpen(event,'${i.id}')"
+      ontouchstart="pTouchStart(event,'${i.id}')" ontouchend="pTouchEnd()" ontouchmove="pTouchEnd()" ontouchcancel="pTouchEnd()"
+      style="display:flex;align-items:flex-start;gap:${grande?'10px':'7px'};padding:${pv} 0;border-top:2px solid transparent;border-bottom:1px solid #F5F1E8;-webkit-touch-callout:none">
+      <span title="Arrastra para cambiarla de sitio o llevarla a otra categoría" style="flex:0 0 auto;margin-top:1px;color:#C7CED3;font-size:${grande?'15px':'13px'};line-height:1.25;letter-spacing:-1px;cursor:grab;user-select:none">&#8942;&#8942;</span>
+      <input type="checkbox" ${i.hecho?'checked':''} onchange="pItemToggle('${i.id}')" style="margin-top:3px;cursor:pointer;accent-color:${col}">
+      <div onclick="pItemEdit('${i.id}')" title="Toca para editar el texto" style="flex:1;min-width:0;font-size:${fs};color:${i.hecho?'#A8B0B6':'#333F48'};${i.hecho?'text-decoration:line-through;':''}word-break:break-word;white-space:pre-wrap;cursor:pointer">${incEsc(i.texto)}</div>
+      <button type="button" onclick="pItemDel('${i.id}')" title="Quitar" style="width:17px;height:17px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:11px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:3px">×</button>
+    </div>`;
+}
 function tarPanelView(){
   const cats=pCatsMias();
   pAutoOrden();
@@ -8947,20 +8970,10 @@ function tarPanelView(){
     const col=P_COLORS[idx%P_COLORS.length];
     const items=pItemsDe(c.id);
     const pend=items.filter(i=>!i.hecho), hechas=items.filter(i=>i.hecho);
-    const fila=i=>`<div data-pid="${i.id}" draggable="true"
-        ondragstart="pDragStart(event,'${i.id}')" ondragend="pDragEnd(event)"
-        ondragover="pDragOverRow(event,this)" ondragleave="pDragLeaveRow(this)" ondrop="pDropRow(event,this,'${i.id}','${c.id}')"
-        oncontextmenu="pMenuOpen(event,'${i.id}')"
-        ontouchstart="pTouchStart(event,'${i.id}')" ontouchend="pTouchEnd()" ontouchmove="pTouchEnd()" ontouchcancel="pTouchEnd()"
-        style="display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-top:2px solid transparent;border-bottom:1px solid #F5F1E8;-webkit-touch-callout:none">
-        <span title="Arrastra para cambiarla de sitio o llevarla a otra categoría" style="flex:0 0 auto;margin-top:1px;color:#C7CED3;font-size:13px;line-height:1.25;letter-spacing:-1px;cursor:grab;user-select:none">&#8942;&#8942;</span>
-        <input type="checkbox" ${i.hecho?'checked':''} onchange="pItemToggle('${i.id}')" style="margin-top:3px;cursor:pointer;accent-color:${col}">
-        <div onclick="pItemEdit('${i.id}')" title="Toca para editar el texto" style="flex:1;min-width:0;font-size:13.5px;color:${i.hecho?'#A8B0B6':'#333F48'};${i.hecho?'text-decoration:line-through;':''}word-break:break-word;white-space:pre-wrap;cursor:pointer">${incEsc(i.texto)}</div>
-        <button type="button" onclick="pItemDel('${i.id}')" title="Quitar" style="width:17px;height:17px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:11px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:3px">×</button>
-      </div>`;
+    const fila=i=>pFilaHtml(i, c.id, col, false);
     return `<div style="background:#fff;border:1px solid #E7E0D4;border-top:4px solid ${col};border-radius:12px;padding:12px 16px 12px;display:flex;flex-direction:column;height:330px;box-shadow:0 2px 10px rgba(51,63,72,.05)">
       <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <div style="flex:1;min-width:0;font-weight:700;color:#333F48;font-size:14.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${incEsc(c.nombre)} ${pend.length?`<span style="font-size:11.5px;font-weight:700;color:${col};background:${col}1c;border-radius:99px;padding:1px 8px;vertical-align:middle">${pend.length}</span>`:`<span title="Todo hecho" style="font-size:12px;color:${col};vertical-align:middle">✔</span>`}</div>
+        <div onclick="pCatOpen('${c.id}')" title="Verla entera y ordenarla" style="flex:1;min-width:0;font-weight:700;color:#333F48;font-size:14.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${incEsc(c.nombre)} ${pend.length?`<span style="font-size:11.5px;font-weight:700;color:${col};background:${col}1c;border-radius:99px;padding:1px 8px;vertical-align:middle">${pend.length}</span>`:`<span title="Todo hecho" style="font-size:12px;color:${col};vertical-align:middle">✔</span>`}</div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pCatRename('${c.id}')" title="Renombrar" style="padding:2px 8px">✎</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pCatDel('${c.id}')" title="Borrar categoría" style="padding:2px 8px;color:#C0392B">×</button>
       </div>
@@ -8990,11 +9003,52 @@ function tarPanelView(){
       ${alta}
     </div>
     ${cats.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;align-items:start">${cats.map(card).join('')}</div>`:vacio}
+    ${pCatModalView()}
     ${pMenuView()}
     ${pEditView()}`;
 }
 
 /* ---- acciones ---- */
+/* ---- ventana grande de una categoria (verla entera y ordenarla) ---- */
+function pCatOpen(catId){ S.pOpenCat=catId; S.pMenu=null; render(); }
+function pCatClose(){ S.pOpenCat=null; render(); }
+function pCatModalView(){
+  const id=S.pOpenCat; if(!id) return '';
+  const cats=pCatsMias();
+  const idx=cats.findIndex(c=>c.id===id); if(idx<0) return '';
+  const c=cats[idx];
+  const col=P_COLORS[idx%P_COLORS.length];
+  const items=pItemsDe(c.id);
+  const pend=items.filter(i=>!i.hecho), hechas=items.filter(i=>i.hecho);
+  const fila=i=>pFilaHtml(i, c.id, col, true);
+  const cuenta = pend.length
+    ? `<span style="font-size:12px;font-weight:700;color:${col};background:${col}1c;border-radius:99px;padding:2px 11px">${pend.length} pendiente${pend.length===1?'':'s'}</span>`
+    : `<span style="font-size:13px;color:${col}">&#10004; todo hecho</span>`;
+  return `<div class="overlay" onclick="if(event.target===this)pCatClose()"><div class="modal" style="max-width:680px;border-top:4px solid ${col}">
+    <div class="modal-head">
+      <h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${incEsc(c.nombre)} ${cuenta}</h2>
+      <button class="x" onclick="pCatClose()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="muted" style="font-size:12.5px;margin:0 0 10px">${pEsOrdenador()
+        ? `Arrástralos por los puntitos para ponerlos en el orden que quieras: arriba lo primero que vas a hacer. Con el botón derecho tienes también subir, bajar y mover a otra categoría.`
+        : `Deja el dedo pulsado sobre un apunte para subirlo, bajarlo o moverlo a otra categoría. Arriba va lo primero que vas a hacer.`}</div>
+      <div data-pcat="${c.id}" ondragover="pDragOverCat(event,this)" ondragleave="pDragLeaveCat(this)" ondrop="pDropCat(event,this,'${c.id}')"
+           style="max-height:52vh;overflow-y:auto;border-radius:8px;padding-right:3px">
+        ${items.length?pend.map(fila).join('')+hechas.map(fila).join(''):`<div class="muted" style="padding:16px 0;font-size:14px">Nada apuntado todavía.</div>`}
+      </div>
+      <div style="display:flex;gap:9px;align-items:center;margin-top:14px">
+        <input id="pCatAddInp" class="inp" style="flex:1" placeholder="Añadir…" value="${incEsc((S.pDrafts&&S.pDrafts[c.id])||'')}" oninput="pDraftSet('${c.id}',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();pItemAdd('${c.id}');}">
+        <button type="button" class="btn btn-ghost" onclick="pItemAdd('${c.id}')" style="color:${col};border-color:${col}55">Añadir</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      ${hechas.length?`<button class="btn btn-ghost" onclick="pCatClearDone('${c.id}')">Limpiar hechas (${hechas.length})</button>`:''}
+      <button class="btn btn-primary" onclick="pCatClose()">Cerrar</button>
+    </div>
+  </div></div>`;
+}
+
 function pCatAdd(){
   const v=(S.pNewCat||'').trim();
   if(!v){ toast('Escribe el nombre de la categoría'); return; }
@@ -9015,6 +9069,7 @@ function pCatDel(id){
   if(!confirm('¿Borrar la categoría "'+c.nombre+'"'+(n?' y sus '+n+' apuntes':'')+'?')) return;
   S.pcats=(S.pcats||[]).filter(x=>x.id!==id);
   S.pitems=(S.pitems||[]).filter(x=>x.catId!==id);
+  if(S.pOpenCat===id) S.pOpenCat=null;
   render(); srvPCatDelete(id);
 }
 function pItemAdd(catId){
@@ -9023,6 +9078,8 @@ function pItemAdd(catId){
   const _l=pItemsDe(catId);
   const i={ id:'P'+Date.now().toString(36)+Math.floor(Math.random()*1000), usuario:S.user.nombre, catId, texto:v, hecho:false, ts:now(), fechaHecha:null, orden:(_l.length?_l[_l.length-1]._ord+1000:1000) };
   S.pitems.push(i); S.pDrafts[catId]=''; render(); srvPItemInsert(i);
+  /* en la ventana grande, dejar el cursor listo para seguir apuntando */
+  if(S.pOpenCat===catId) setTimeout(function(){ const n=el('pCatAddInp'); if(n) n.focus(); }, 30);
 }
 function pItemToggle(id){
   const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
@@ -9063,7 +9120,7 @@ function pEditView(){
       <textarea id="pEditTa" class="inp" rows="6" onkeydown="pEditKey(event)" oninput="S.pEditTexto=this.value"
         style="min-height:150px;max-height:46vh;font-size:15px;line-height:1.55;font-family:inherit"
         placeholder="¿Qué tienes que hacer?">${incEsc(S.pEditTexto||'')}</textarea>
-      ${(window.innerWidth||0)>=720?`<div class="muted" style="font-size:11.5px;margin-top:7px">Ctrl + Intro para guardar · Esc para salir</div>`:''}
+      ${pEsOrdenador()?`<div class="muted" style="font-size:11.5px;margin-top:7px">Ctrl + Intro para guardar · Esc para salir</div>`:''}
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="pEditCancel()">Cancelar</button>
