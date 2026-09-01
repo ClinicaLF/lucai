@@ -4361,7 +4361,7 @@ function tareasView(){
   const me=S.user.nombre, admin=isAdmin();
   const subs = admin ? ['tar_todas_mias','tar_mias','tar_panel','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_panel','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_resumen'];
   const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
-  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_panel:'Mi panel',tar_ideas:'Ideas'+(typeof ideasPendCount==='function'&&ideasPendCount()?` (${ideasPendCount()})`:''),tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
+  const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_panel:'Mi cerebro',tar_ideas:'Ideas'+(typeof ideasPendCount==='function'&&ideasPendCount()?` (${ideasPendCount()})`:''),tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
@@ -8808,7 +8808,7 @@ function tarChkDelItem(tid, cid){
 /* ===== FIN SUBTAREAS ===== */
 
 /* ============================================================
-   LUCAI · TAREAS · MI PANEL (checklist personal por categorías)
+   LUCAI · TAREAS · MI CEREBRO (antes "Mi panel") · checklist personal por categorías
    Panel personal de cada usuario: categorías con listas de cosas
    por hacer, sin fecha, sin personas y sin chat. No se mezcla con
    el buzón de tareas del equipo.
@@ -8969,7 +8969,7 @@ function tarPanelView(){
       <input class="inp" style="flex:1;min-width:180px;max-width:320px" placeholder="Nueva categoría (Casa, Clínica, Papeleo…)" value="${incEsc(S.pNewCat||'')}" oninput="S.pNewCat=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();pCatAdd();}">
       <button class="btn btn-primary" onclick="pCatAdd()">Crear</button>
     </div>`;
-  const vacio=`<div class="muted" style="padding:22px 0;font-size:14px">Este es tu panel personal: cosas que tienes que hacer tú, sin fecha ni personas. Crea una categoría (por ejemplo, "Papeleo") y ve apuntando dentro. Solo lo ves tú.</div>`;
+  const vacio=`<div class="muted" style="padding:22px 0;font-size:14px">Esto es tu cerebro: cosas que tienes que hacer tú, sin fecha ni personas. Crea una categoría (por ejemplo, "Papeleo") y ve apuntando dentro. Solo lo ves tú.</div>`;
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px">
       <div class="note" style="margin:0;flex:1;min-width:220px">Tu lista personal, aparte del buzón del equipo. Apunta, marca y a otra cosa. Solo la ves tú.</div>
       ${alta}
@@ -9182,8 +9182,8 @@ function pExportXlsx(){
   cats.forEach(c=>{ pItemsDe(c.id).forEach(i=>rows.push([c.nombre, i.texto, i.hecho?'Hecha':'Pendiente', (i.ts||'').slice(0,10), i.fechaHecha||''])); });
   if(rows.length===1){ toast('No hay nada que exportar'); return; }
   const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:22},{wch:56},{wch:11},{wch:12},{wch:12}];
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Mi panel");
-  XLSX.writeFile(wb,`mi_panel_${todayStr()}.xlsx`); toast('Panel descargado en Excel');
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Mi cerebro");
+  XLSX.writeFile(wb,`mi_cerebro_${todayStr()}.xlsx`); toast('Mi cerebro descargado en Excel');
 }
 function pImprimir(){
   const cats=pCatsMias().filter(c=>pItemsDe(c.id).length);
@@ -9196,7 +9196,7 @@ function pImprimir(){
   }).join('');
   const w=window.open('','_blank');
   if(!w){ toast('El navegador ha bloqueado la ventana. Permite las ventanas emergentes.'); return; }
-  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Mi panel · ${incEsc(S.user.nombre)}</title>
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Mi cerebro · ${incEsc(S.user.nombre)}</title>
     <style>
       body{font-family:Georgia,'Times New Roman',serif;color:#222;margin:40px auto;max-width:720px;padding:0 20px}
       h1{font-size:22px;margin:0 0 2px}
@@ -9209,7 +9209,7 @@ function pImprimir(){
       .it small{color:#999;font-size:11px}
       @media print{ body{margin:10mm auto} }
     </style></head><body>
-    <h1>Mi panel</h1>
+    <h1>Mi cerebro</h1>
     <p class="sub">${incEsc(S.user.nombre)} · ${incEsc(fmtFecha(todayStr()))} · Lucai</p>
     ${bloques}
   </body></html>`);
@@ -9379,9 +9379,9 @@ modalContent = function(){
 /* ===== FIN MEJORAS ===== */
 
 /* ============================================================
-   LUCAI · MI PANEL + IDEAS EN EL ASISTENTE DE IA
+   LUCAI · MI CEREBRO + IDEAS EN EL ASISTENTE DE IA
    Añade al contexto del asistente el panel personal y la cartera
-   de ideas del usuario, y un botón en Mi panel para pedirle a la
+   de ideas del usuario, y un botón en Mi cerebro para pedirle a la
    IA un orden de prioridades. Sin datos de pacientes.
    ============================================================ */
 const _iaContexto_perso = iaContexto;
@@ -9391,7 +9391,7 @@ iaContexto = function(pregunta){
     const me=S.user.nombre;
     const lineas=[];
     const cats=(typeof pCatsMias==='function')?pCatsMias():[];
-    lineas.push('\n[MI PANEL PERSONAL] Lista personal de cosas por hacer, sin fecha ni responsable (no son tareas del buzón del equipo). Si piden priorizar o "qué hago primero", tenlas en cuenta junto con las tareas.');
+    lineas.push('\n[MI CEREBRO · LISTA PERSONAL] Lista personal de cosas por hacer, sin fecha ni responsable (no son tareas del buzón del equipo). Si piden priorizar o "qué hago primero", tenlas en cuenta junto con las tareas.');
     if(!cats.length) lineas.push('(sin categorías todavía)');
     cats.forEach(c=>{
       const pend=pItemsDe(c.id).filter(i=>!i.hecho);
@@ -9410,9 +9410,9 @@ iaContexto = function(pregunta){
 
 function pPriorizarIA(){
   const pend=(typeof pCatsMias==='function')?pCatsMias().reduce((s,c)=>s+pItemsDe(c.id).filter(i=>!i.hecho).length,0):0;
-  if(!pend){ toast('No tienes nada pendiente en el panel'); return; }
+  if(!pend){ toast('No tienes nada pendiente en Mi cerebro'); return; }
   if(!S.iaOpen && typeof iaToggle==='function') iaToggle();
-  setTimeout(()=>{ iaSend('Ayúdame a priorizar lo que tengo que hacer. Mira mi panel personal (y, si ayuda, también mis tareas pendientes y mi cartera de ideas) y proponme un orden de ataque concreto: qué haría primero y por qué, qué puede esperar, y si ves algo que convenga delegar como tarea a alguien o descartar. Sé práctico y directo.'); }, 180);
+  setTimeout(()=>{ iaSend('Ayúdame a priorizar lo que tengo que hacer. Mira mi lista personal de Mi cerebro (y, si ayuda, también mis tareas pendientes y mi cartera de ideas) y proponme un orden de ataque concreto: qué haría primero y por qué, qué puede esperar, y si ves algo que convenga delegar como tarea a alguien o descartar. Sé práctico y directo.'); }, 180);
 }
 /* ===== FIN IA PERSONAL ===== */
 
