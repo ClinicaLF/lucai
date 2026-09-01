@@ -4355,12 +4355,26 @@ function tarTopUpSeries(){
   }catch(e){ console.error('tarTopUpSeries', e); }
 }
 
+/* Perfil de control del equipo: cualquier usuario cuyo "Puesto" contenga la
+   palabra Control (no distingue mayusculas ni acentos). Es el unico que ve la
+   pestana "Equipo". Se crea desde Ajustes > Usuarios y permisos. */
+function esControlEquipo(){
+  const rol = String((S.user && S.user.rol) || '');
+  return /control/i.test(rol.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+}
+
 /* ---- vista principal ---- */
 function tareasView(){
   if(!window._tarToppedUp){ window._tarToppedUp=true; setTimeout(tarTopUpSeries, 50); }
   const me=S.user.nombre, admin=isAdmin();
-  const subs = admin ? ['tar_todas_mias','tar_mias','tar_panel','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_todas','tar_resumen'] : ['tar_todas_mias','tar_mias','tar_panel','tar_ideas','tar_recibidas','tar_emitidas','tar_semana','tar_cal','tar_registro','tar_resumen'];
-  const sub = subs.includes(S.sub) ? S.sub : 'tar_todas_mias';
+  /* Orden de las pestanas. 'tar_ideas' (Ideas) y 'tar_cal' (Calendario) estan
+     ocultas de momento: el codigo y los datos siguen intactos, basta con volver
+     a meterlas en esta lista para recuperarlas. */
+  const subs = ['tar_todas_mias','tar_mias','tar_recibidas','tar_emitidas','tar_semana','tar_resumen','tar_registro','tar_panel'];
+  /* 'Equipo' (el control de todo el equipo) solo lo ve el perfil de control,
+     y le sale la primera porque es justo para lo que entra. */
+  if(esControlEquipo()) subs.unshift('tar_todas');
+  const sub = subs.includes(S.sub) ? S.sub : subs[0];
   const lbl = {tar_todas_mias:'Todas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_panel:'Mi cerebro',tar_ideas:'Ideas'+(typeof ideasPendCount==='function'&&ideasPendCount()?` (${ideasPendCount()})`:''),tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
@@ -7285,6 +7299,7 @@ function usuarioEditModalContent(){
         <input class="inp" type="text" value="${incEsc(F.pass||'')}" oninput="setInp('pass',this.value)" placeholder="${F.id!=null?'Escribe una nueva para cambiarla':'Contraseña de acceso'}"></div>
       <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:6px 0 12px;cursor:pointer">
         <input type="checkbox" ${F.admin?'checked':''} onchange="setInp('admin',this.checked); render()"> Acceso total (Dirección): ve y gestiona todo</label>
+      <div class="muted" style="font-size:12px;margin:-6px 0 12px">Si en <strong>Puesto</strong> escribes algo que contenga la palabra <strong>Control</strong>, este usuario verá además la pestaña <strong>Equipo</strong> de Tareas (el control de todo el equipo). Nadie más la ve.</div>
       ${F.admin?'<div class="muted" style="font-size:12px;margin-bottom:8px">Con acceso total entra a todo; no hace falta elegir módulos.</div>'
         : `<div class="fld"><label>Módulos a los que puede acceder</label>${chips}</div>`}
       <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;flex-wrap:wrap">
