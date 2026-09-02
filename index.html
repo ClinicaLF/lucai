@@ -8839,16 +8839,33 @@ loadFromDB = async function(){
   try{
     const c = await sbc.from('tar_perso_cats').select('*').order('ts',{ascending:true});
     if(c.error) throw c.error;
-    S.pcats=(c.data||[]).map(x=>({ id:x.id, usuario:x.usuario, nombre:x.nombre, ts:x.ts }));
+    S.pcats=(c.data||[]).map(x=>({ id:x.id, usuario:x.usuario, nombre:x.nombre, ts:x.ts, orden:(x.orden==null?null:Number(x.orden)) }));
     const i = await sbc.from('tar_perso_items').select('*').order('ts',{ascending:true});
     if(i.error) throw i.error;
     S.pitems=(i.data||[]).map(x=>({ id:x.id, usuario:x.usuario, catId:x.cat_id, texto:x.texto, hecho:!!x.hecho, ts:x.ts, fechaHecha:x.fecha_hecha||null, orden:(x.orden==null?null:Number(x.orden)), archivado:!!x.archivado }));
   }catch(e){ console.error('loadPanel', e); }
   await _prev;
 };
+/* Guarda la posicion de una categoria. Si la columna "orden" todavia no existe
+   en Supabase, no rompe nada: avisa y las categorias se siguen viendo por antiguedad. */
+let P_CATORD_AVISADO=false;
+async function srvPCatOrden(id, orden){
+  try{ const { error } = await sbc.from('tar_perso_cats').update({ orden:orden }).eq('id', id); if(error) throw error; }
+  catch(e){
+    console.error('srvPCatOrden', e);
+    const m=String((e && e.message) || e || '');
+    if(/orden/i.test(m)){ if(!P_CATORD_AVISADO){ P_CATORD_AVISADO=true; toast('Falta ejecutar el SQL en Supabase: el orden de las categorias no se guarda'); } }
+    else toast('No se pudo guardar el orden: '+m);
+  }
+}
 async function srvPCatInsert(c){
-  try{ const { error } = await sbc.from('tar_perso_cats').insert({ id:c.id, usuario:c.usuario, nombre:c.nombre, ts:c.ts }); if(error) throw error; }
-  catch(e){ console.error('srvPCatInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
+  const row={ id:c.id, usuario:c.usuario, nombre:c.nombre, ts:c.ts };
+  if(c.orden!=null) row.orden=c.orden;
+  try{ const { error } = await sbc.from('tar_perso_cats').insert(row); if(error) throw error; }
+  catch(e){
+    if(/orden/i.test(String((e&&e.message)||''))){ delete row.orden; try{ const r2=await sbc.from('tar_perso_cats').insert(row); if(!r2.error){ await loadFromDB(); render(); return; } }catch(e2){} }
+    console.error('srvPCatInsert', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return;
+  }
   await loadFromDB(); render();
 }
 async function srvPCatUpdate(id, c){
@@ -8922,7 +8939,15 @@ async function srvPItemDeleteIds(ids){
 }
 
 /* ---- helpers ---- */
-function pCatsMias(){ const me=S.user&&S.user.nombre; return (S.pcats||[]).filter(c=>c.usuario===me); }
+function pCatsMias(){
+  const me=S.user&&S.user.nombre;
+  const l=(S.pcats||[]).filter(c=>c.usuario===me);
+  l.sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
+  /* si una categoria aun no tiene "orden" guardado, se usa su sitio por antiguedad */
+  l.forEach((c,k)=>{ c._ord = (c.orden!=null)?Number(c.orden):(k+1)*1000; });
+  l.sort((a,b)=> (a._ord-b._ord) || ((a.orden==null?0:1)-(b.orden==null?0:1)) || String(a.ts||'').localeCompare(String(b.ts||'')));
+  return l;
+}
 function pItemsDe(catId){
   const me=S.user&&S.user.nombre;
   const l=(S.pitems||[]).filter(i=>i.usuario===me && i.catId===catId && !i.archivado);
@@ -9004,9 +9029,12 @@ function tarPanelView(){
     const items=pItemsDe(c.id);
     const pend=items.filter(i=>!i.hecho), hechas=items.filter(i=>i.hecho);
     const fila=i=>pFilaHtml(i, c.id, col, false);
-    return `<div style="background:${proy?col+'0f':'#fff'};border:${proy?'1.5px solid '+col+'66':'1px solid #E7E0D4'};border-top:${proy?'7px':'4px'} solid ${col};border-radius:12px;padding:${proy?'8px 16px 12px':'12px 16px 12px'};display:flex;flex-direction:column;height:330px;box-shadow:${proy?'0 4px 16px rgba(51,63,72,.11)':'0 2px 10px rgba(51,63,72,.05)'}">
+    return `<div data-pcatcard="${c.id}" ondragover="pCatDragOver(event,this)" ondragleave="pCatDragLeave(this)" ondrop="pCatDrop(event,this,'${c.id}')"
+      style="background:${proy?col+'0f':'#fff'};border:${proy?'1.5px solid '+col+'66':'1px solid #E7E0D4'};border-top:${proy?'7px':'4px'} solid ${col};border-radius:12px;padding:${proy?'8px 16px 12px':'12px 16px 12px'};display:flex;flex-direction:column;height:330px;box-shadow:${proy?'0 4px 16px rgba(51,63,72,.11)':'0 2px 10px rgba(51,63,72,.05)'}">
       ${proy?`<div style="flex:0 0 auto;font-size:9.5px;font-weight:800;letter-spacing:.14em;color:${col};line-height:1.4">PROYECTO</div>`:''}
-      <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <div draggable="true" ondragstart="pCatDragStart(event,'${c.id}')" ondragend="pCatDragEnd()"
+           style="flex:0 0 auto;display:flex;align-items:center;gap:7px;margin-bottom:4px;cursor:grab">
+        <span title="Arrastra la tarjeta para cambiarla de sitio" style="flex:0 0 auto;color:#C7CED3;font-size:13px;line-height:1.25;letter-spacing:-1px;user-select:none">&#8942;&#8942;</span>
         <div onclick="pCatOpen('${c.id}')" title="Verla entera y ordenarla" style="flex:1;min-width:0;font-weight:700;color:#333F48;font-size:14.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${incEsc(c.nombre)} ${pend.length?`<span style="font-size:11.5px;font-weight:700;color:${col};background:${col}1c;border-radius:99px;padding:1px 8px;vertical-align:middle">${pend.length}</span>`:`<span title="Todo hecho" style="font-size:12px;color:${col};vertical-align:middle">✔</span>`}</div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pCatRename('${c.id}')" title="Renombrar" style="padding:2px 8px">✎</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pCatDel('${c.id}')" title="Borrar categoría" style="padding:2px 8px;color:#C0392B">×</button>
@@ -9045,6 +9073,48 @@ function tarPanelView(){
 }
 
 /* ---- acciones ---- */
+/* ---- arrastrar las tarjetas de categoria para ordenarlas ---- */
+function pCatDragStart(ev, catId){
+  S.pDragCat=catId; S.pDragId=null;
+  try{ ev.dataTransfer.setData('text/plain','CAT:'+catId); ev.dataTransfer.effectAllowed='move'; }catch(e){}
+  const card=ev.currentTarget.closest('[data-pcatcard]');
+  if(card) setTimeout(function(){ card.style.opacity='.5'; },0);
+}
+function pCatDragEnd(){
+  S.pDragCat=null;
+  document.querySelectorAll('[data-pcatcard]').forEach(function(n){ n.style.opacity=''; n.style.outline=''; });
+}
+function pCatDragOver(ev, node){
+  if(!S.pDragCat) return;                       /* si se arrastra un apunte, aqui no pasa nada */
+  ev.preventDefault();
+  try{ ev.dataTransfer.dropEffect='move'; }catch(e){}
+  if(node.dataset.pcatcard===S.pDragCat) return;
+  node.style.outline='2px dashed #8A949B'; node.style.outlineOffset='3px';
+}
+function pCatDragLeave(node){ node.style.outline=''; }
+function pCatDrop(ev, node, destinoId){
+  if(!S.pDragCat) return;
+  ev.preventDefault(); ev.stopPropagation();
+  node.style.outline='';
+  const id=S.pDragCat; S.pDragCat=null;
+  if(!id || id===destinoId){ render(); return; }
+  pCatColocar(id, destinoId);
+}
+/* La tarjeta arrastrada pasa a ocupar el sitio de aquella sobre la que la sueltas. */
+async function pCatColocar(id, destinoId){
+  const l=pCatsMias();
+  const from=l.findIndex(c=>c.id===id), to=l.findIndex(c=>c.id===destinoId);
+  if(from<0 || to<0 || from===to){ render(); return; }
+  const arr=l.slice();
+  const mov=arr.splice(from,1)[0];
+  arr.splice(to,0,mov);
+  const cambiadas=[];
+  arr.forEach(function(c,k){ const nv=(k+1)*1000; if(c.orden!==nv){ c.orden=nv; c._ord=nv; cambiadas.push(c); } });
+  render();
+  for(const c of cambiadas) await srvPCatOrden(c.id, c.orden);
+  await loadFromDB(); render();
+}
+
 /* ---- ventana grande de una categoria (verla entera y ordenarla) ---- */
 function pCatOpen(catId){ S.pOpenCat=catId; S.pMenu=null; render(); }
 function pCatClose(){ S.pOpenCat=null; render(); }
@@ -9093,7 +9163,8 @@ function pCatAdd(){
   const v=(S.pNewCat||'').trim();
   if(!v){ toast('Escribe el nombre de la categoría'); return; }
   if(pCatsMias().some(c=>c.nombre.toLowerCase()===v.toLowerCase())){ toast('Ya tienes una categoría con ese nombre'); return; }
-  const c={ id:'P'+Date.now().toString(36)+Math.floor(Math.random()*1000), usuario:S.user.nombre, nombre:v, ts:now() };
+  const _lc=pCatsMias();
+  const c={ id:'P'+Date.now().toString(36)+Math.floor(Math.random()*1000), usuario:S.user.nombre, nombre:v, ts:now(), orden:(_lc.length?_lc[_lc.length-1]._ord+1000:1000) };
   S.pcats.push(c); S.pNewCat=''; render(); srvPCatInsert(c);
 }
 function pCatRename(id){
@@ -9313,7 +9384,8 @@ function pMoverVecino(id, d){
 
 /* --- arrastrar --- */
 function pDragStart(ev, id){
-  S.pDragId=id;
+  ev.stopPropagation();          /* que no se entere la tarjeta: esto es un apunte */
+  S.pDragId=id; S.pDragCat=null;
   try{ ev.dataTransfer.setData('text/plain', id); ev.dataTransfer.effectAllowed='move'; }catch(e){}
   const n=ev.currentTarget; if(n) setTimeout(function(){ n.style.opacity='.45'; },0);
 }
@@ -9352,7 +9424,8 @@ function pDragOverCat(ev, node){
 }
 function pDragLeaveCat(node){ node.style.background=''; }
 function pDropCat(ev, node, catId){
-  ev.preventDefault(); node.style.background=''; pLimpiarPistas();
+  if(!S.pDragId) return;
+  ev.preventDefault(); ev.stopPropagation(); node.style.background=''; pLimpiarPistas();
   let id=S.pDragId; if(!id){ try{ id=ev.dataTransfer.getData('text/plain'); }catch(e){} }
   S.pDragId=null;
   if(!id) return;
