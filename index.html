@@ -8939,6 +8939,14 @@ function pAutoOrden(){
     if(tocado && P_ORDEN_OK){ await loadFromDB(); render(); }
   })();
 }
+/* Una categoria es un PROYECTO si su nombre empieza por P seguido de un numero:
+   "#P1-CONSULTORIA", "#P2- CUADRO MANDO", "P3 Reforma"... Se deduce del nombre,
+   asi que no hay que guardar nada nuevo. Para que deje de serlo, se le quita el
+   P1 del nombre. Ojo: "#PERSONAL" NO cuenta, hace falta un numero detras de la P. */
+function pEsProyecto(nombre){
+  return /^\s*#?\s*p\s*\d+/i.test(String(nombre||''));
+}
+
 /* Ancho de pantalla. Si el navegador todavia no lo sabe, se asume ordenador. */
 function pEsOrdenador(){
   const w = window.innerWidth || document.documentElement.clientWidth || 1024;
@@ -8968,10 +8976,12 @@ function tarPanelView(){
   if(!S.pDrafts) S.pDrafts={};
   const card=(c,idx)=>{
     const col=P_COLORS[idx%P_COLORS.length];
+    const proy=pEsProyecto(c.nombre);
     const items=pItemsDe(c.id);
     const pend=items.filter(i=>!i.hecho), hechas=items.filter(i=>i.hecho);
     const fila=i=>pFilaHtml(i, c.id, col, false);
-    return `<div style="background:#fff;border:1px solid #E7E0D4;border-top:4px solid ${col};border-radius:12px;padding:12px 16px 12px;display:flex;flex-direction:column;height:330px;box-shadow:0 2px 10px rgba(51,63,72,.05)">
+    return `<div style="background:${proy?col+'0f':'#fff'};border:${proy?'1.5px solid '+col+'66':'1px solid #E7E0D4'};border-top:${proy?'7px':'4px'} solid ${col};border-radius:12px;padding:${proy?'8px 16px 12px':'12px 16px 12px'};display:flex;flex-direction:column;height:330px;box-shadow:${proy?'0 4px 16px rgba(51,63,72,.11)':'0 2px 10px rgba(51,63,72,.05)'}">
+      ${proy?`<div style="flex:0 0 auto;font-size:9.5px;font-weight:800;letter-spacing:.14em;color:${col};line-height:1.4">PROYECTO</div>`:''}
       <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <div onclick="pCatOpen('${c.id}')" title="Verla entera y ordenarla" style="flex:1;min-width:0;font-weight:700;color:#333F48;font-size:14.5px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">${incEsc(c.nombre)} ${pend.length?`<span style="font-size:11.5px;font-weight:700;color:${col};background:${col}1c;border-radius:99px;padding:1px 8px;vertical-align:middle">${pend.length}</span>`:`<span title="Todo hecho" style="font-size:12px;color:${col};vertical-align:middle">✔</span>`}</div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="pCatRename('${c.id}')" title="Renombrar" style="padding:2px 8px">✎</button>
@@ -9018,15 +9028,19 @@ function pCatModalView(){
   const idx=cats.findIndex(c=>c.id===id); if(idx<0) return '';
   const c=cats[idx];
   const col=P_COLORS[idx%P_COLORS.length];
+  const proy=pEsProyecto(c.nombre);
   const items=pItemsDe(c.id);
   const pend=items.filter(i=>!i.hecho), hechas=items.filter(i=>i.hecho);
   const fila=i=>pFilaHtml(i, c.id, col, true);
   const cuenta = pend.length
     ? `<span style="font-size:12px;font-weight:700;color:${col};background:${col}1c;border-radius:99px;padding:2px 11px">${pend.length} pendiente${pend.length===1?'':'s'}</span>`
     : `<span style="font-size:13px;color:${col}">&#10004; todo hecho</span>`;
-  return `<div class="overlay" onclick="if(event.target===this)pCatClose()"><div class="modal" style="max-width:680px;border-top:4px solid ${col}">
+  return `<div class="overlay" onclick="if(event.target===this)pCatClose()"><div class="modal" style="max-width:680px;border-top:${proy?'7px':'4px'} solid ${col}">
     <div class="modal-head">
-      <h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${incEsc(c.nombre)} ${cuenta}</h2>
+      <div style="flex:1;min-width:0">
+        ${proy?`<div style="font-size:9.5px;font-weight:800;letter-spacing:.14em;color:${col};margin-bottom:3px">PROYECTO</div>`:''}
+        <h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${incEsc(c.nombre)} ${cuenta}</h2>
+      </div>
       <button class="x" onclick="pCatClose()">×</button>
     </div>
     <div class="modal-body">
