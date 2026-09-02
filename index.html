@@ -8842,7 +8842,7 @@ loadFromDB = async function(){
     S.pcats=(c.data||[]).map(x=>({ id:x.id, usuario:x.usuario, nombre:x.nombre, ts:x.ts }));
     const i = await sbc.from('tar_perso_items').select('*').order('ts',{ascending:true});
     if(i.error) throw i.error;
-    S.pitems=(i.data||[]).map(x=>({ id:x.id, usuario:x.usuario, catId:x.cat_id, texto:x.texto, hecho:!!x.hecho, ts:x.ts, fechaHecha:x.fecha_hecha||null, orden:(x.orden==null?null:Number(x.orden)) }));
+    S.pitems=(i.data||[]).map(x=>({ id:x.id, usuario:x.usuario, catId:x.cat_id, texto:x.texto, hecho:!!x.hecho, ts:x.ts, fechaHecha:x.fecha_hecha||null, orden:(x.orden==null?null:Number(x.orden)), archivado:!!x.archivado }));
   }catch(e){ console.error('loadPanel', e); }
   await _prev;
 };
@@ -8892,6 +8892,23 @@ async function srvPItemOrden(id, catId, orden){
   }
 }
 async function srvPItemMove(id, catId, orden){ await srvPItemOrden(id, catId, orden); await loadFromDB(); render(); }
+/* Archivar = mover a "Hechas". NO borra: solo marca la columna archivado.
+   Si la columna todavia no existe en Supabase, no se toca nada y se avisa. */
+async function srvPItemArchivar(ids, valor){
+  if(!ids || !ids.length) return;
+  try{
+    const { error } = await sbc.from('tar_perso_items').update({ archivado: !!valor }).in('id', ids);
+    if(error) throw error;
+  }catch(e){
+    console.error('srvPItemArchivar', e);
+    const m = String((e && e.message) || e || '');
+    if(/archivado/i.test(m)) toast('Falta ejecutar el SQL en Supabase: no se ha archivado nada');
+    else toast('No se pudo archivar: '+m);
+    await loadFromDB(); render();   /* deja las cosas como estaban */
+    return;
+  }
+  await loadFromDB(); render();
+}
 async function srvPItemUpdate(id, i){
   try{ const { error } = await sbc.from('tar_perso_items').update({ texto:i.texto, hecho:!!i.hecho, fecha_hecha:i.fechaHecha||null }).eq('id', id); if(error) throw error; }
   catch(e){ console.error('srvPItemUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
@@ -8908,7 +8925,7 @@ async function srvPItemDeleteIds(ids){
 function pCatsMias(){ const me=S.user&&S.user.nombre; return (S.pcats||[]).filter(c=>c.usuario===me); }
 function pItemsDe(catId){
   const me=S.user&&S.user.nombre;
-  const l=(S.pitems||[]).filter(i=>i.usuario===me && i.catId===catId);
+  const l=(S.pitems||[]).filter(i=>i.usuario===me && i.catId===catId && !i.archivado);
   l.sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||'')));
   /* _ord = orden efectivo. Si el apunte aun no tiene "orden" guardado
      (columna nueva), se usa su sitio por antiguedad, como hasta ahora. */
@@ -8917,6 +8934,13 @@ function pItemsDe(catId){
   return l;
 }
 function pDraftSet(catId, v){ if(!S.pDrafts) S.pDrafts={}; S.pDrafts[catId]=v; }
+
+/* apuntes guardados en "Hechas", del mas reciente al mas antiguo */
+function pArchivadasMias(){
+  const me=S.user&&S.user.nombre;
+  return (S.pitems||[]).filter(i=>i.usuario===me && i.archivado)
+    .sort((a,b)=> String((b.fechaHecha||b.ts||'')).localeCompare(String((a.fechaHecha||a.ts||''))));
+}
 
 /* ---- vista ---- */
 const P_COLORS=['#6E8E00','#3E7C8F','#C56A45','#7D5BA6','#C99A2E','#4A6FA5','#C05B4D','#5A7D2A'];
@@ -9002,6 +9026,7 @@ function tarPanelView(){
   };
   const alta=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="btn btn-ghost" onclick="pPriorizarIA()" title="El asistente te propone por dónde empezar" style="white-space:nowrap">✨ Priorizar con IA</button>
+      ${pArchivadasMias().length?`<button class="btn btn-ghost" onclick="pArchOpen()" title="Lo que ya has hecho y has limpiado" style="white-space:nowrap">Hechas (${pArchivadasMias().length})</button>`:''}
       <button class="btn btn-ghost" onclick="pImprimir()" title="Versión en limpio para imprimir" style="white-space:nowrap">Imprimir</button>
       <button class="btn btn-ghost" onclick="pExportXlsx()" title="Descargar todo en Excel" style="white-space:nowrap">Excel</button>
       <input class="inp" style="flex:1;min-width:180px;max-width:320px" placeholder="Nueva categoría (Casa, Clínica, Papeleo…)" value="${incEsc(S.pNewCat||'')}" oninput="S.pNewCat=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();pCatAdd();}">
@@ -9014,6 +9039,7 @@ function tarPanelView(){
     </div>
     ${cats.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;align-items:start">${cats.map(card).join('')}</div>`:vacio}
     ${pCatModalView()}
+    ${pArchView()}
     ${pMenuView()}
     ${pEditView()}`;
 }
@@ -9148,11 +9174,70 @@ function pItemDel(id){
   S.pitems=(S.pitems||[]).filter(x=>x.id!==id);
   render(); srvPItemDeleteIds([id]);
 }
+/* Guarda las hechas en "Hechas". NO las borra: se pueden ver y recuperar. */
 function pCatClearDone(catId){
   const ids=pItemsDe(catId).filter(i=>i.hecho).map(i=>i.id);
   if(!ids.length) return;
-  S.pitems=(S.pitems||[]).filter(x=>!ids.includes(x.id));
+  (S.pitems||[]).forEach(x=>{ if(ids.indexOf(x.id)>=0) x.archivado=true; });
+  render(); srvPItemArchivar(ids, true);
+  toast(ids.length===1 ? '1 apunte guardado en Hechas' : ids.length+' apuntes guardados en Hechas');
+}
+
+/* ---- ventana de "Hechas" (lo archivado) ---- */
+function pArchOpen(){ S.pArch=true; S.pMenu=null; S.pOpenCat=null; render(); }
+function pArchClose(){ S.pArch=false; render(); }
+function pArchRecuperar(id){
+  const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
+  i.archivado=false; render(); srvPItemArchivar([id], false);
+  toast('Recuperada: vuelve a su categoria');
+}
+function pArchBorrar(id){
+  const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
+  if(!confirm('\u00bfBorrar definitivamente "'+i.texto+'"?\n\nEsto ya no se puede deshacer.')) return;
+  S.pitems=(S.pitems||[]).filter(x=>x.id!==id);
+  render(); srvPItemDeleteIds([id]);
+}
+function pArchVaciar(){
+  const l=pArchivadasMias(); if(!l.length) return;
+  if(!confirm('\u00bfBorrar definitivamente los '+l.length+' apuntes de Hechas?\n\nEsto ya no se puede deshacer.')) return;
+  const ids=l.map(i=>i.id);
+  S.pitems=(S.pitems||[]).filter(x=>ids.indexOf(x.id)<0);
   render(); srvPItemDeleteIds(ids);
+}
+function pArchView(){
+  if(!S.pArch) return '';
+  const l=pArchivadasMias();
+  const cats=pCatsMias();
+  const nombreDe=cid=>{ const c=cats.find(x=>x.id===cid); return c?c.nombre:'Sin categor\u00eda'; };
+  const colDe=cid=>{ const k=cats.findIndex(x=>x.id===cid); return P_COLORS[(k<0?0:k)%P_COLORS.length]; };
+  const grupos={};
+  l.forEach(i=>{ (grupos[i.catId]=grupos[i.catId]||[]).push(i); });
+  const bloques=Object.keys(grupos).map(cid=>{
+    const col=colDe(cid);
+    const filas=grupos[cid].map(i=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #F5F1E8">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;color:#5A6770;word-break:break-word;white-space:pre-wrap">${incEsc(i.texto)}</div>
+          <div class="muted" style="font-size:11.5px;margin-top:2px">${i.fechaHecha?'Hecha el '+incEsc(fmtFecha(i.fechaHecha)):'Sin fecha'}</div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="pArchRecuperar('${i.id}')" title="Devolverla a su categor\u00eda" style="flex:0 0 auto;white-space:nowrap">Recuperar</button>
+        <button type="button" onclick="pArchBorrar('${i.id}')" title="Borrar para siempre" style="flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:#F4F0E9;color:#C0392B;border:none;font-size:13px;line-height:1;cursor:pointer;margin-top:3px">\u00d7</button>
+      </div>`).join('');
+    return `<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.06em;color:${col};text-transform:uppercase;margin-bottom:4px">${incEsc(nombreDe(cid))} \u00b7 ${grupos[cid].length}</div>
+      ${filas}</div>`;
+  }).join('');
+  return `<div class="overlay" style="z-index:9050" onclick="if(event.target===this)pArchClose()"><div class="modal" style="max-width:640px">
+    <div class="modal-head"><h2>Hechas${l.length?' \u00b7 '+l.length:''}</h2><button class="x" onclick="pArchClose()">\u00d7</button></div>
+    <div class="modal-body">
+      <div class="muted" style="font-size:12.5px;margin:0 0 12px">Lo que has ido limpiando de tus categor\u00edas. No se ha borrado: aqu\u00ed lo tienes por si quieres consultarlo o devolverlo a su sitio.</div>
+      ${l.length?`<div style="max-height:52vh;overflow-y:auto;padding-right:3px">${bloques}</div>`
+                : `<div class="muted" style="padding:16px 0;font-size:14px">Todav\u00eda no has guardado nada aqu\u00ed. Cuando marques apuntes como hechos y le des a \u201cLimpiar hechas\u201d, ir\u00e1n a parar a esta ventana.</div>`}
+    </div>
+    <div class="modal-foot">
+      ${l.length?`<button class="btn btn-ghost" style="color:#C0392B;border-color:#C0392B" onclick="pArchVaciar()">Vaciar</button>`:''}
+      <button class="btn btn-primary" onclick="pArchClose()">Cerrar</button>
+    </div>
+  </div></div>`;
 }
 
 
@@ -9330,6 +9415,11 @@ function pExportXlsx(){
   const cats=pCatsMias();
   const rows=[["Categoría","Qué hacer","Estado","Apuntado el","Hecho el"]];
   cats.forEach(c=>{ pItemsDe(c.id).forEach(i=>rows.push([c.nombre, i.texto, i.hecho?'Hecha':'Pendiente', (i.ts||'').slice(0,10), i.fechaHecha||''])); });
+  /* las guardadas en "Hechas" tambien van al Excel: es el registro de lo hecho */
+  pArchivadasMias().forEach(i=>{
+    const c=(S.pcats||[]).find(x=>x.id===i.catId);
+    rows.push([c?c.nombre:'Sin categor\u00eda', i.texto, 'Hecha (en Hechas)', (i.ts||'').slice(0,10), i.fechaHecha||'']);
+  });
   if(rows.length===1){ toast('No hay nada que exportar'); return; }
   const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[{wch:22},{wch:56},{wch:11},{wch:12},{wch:12}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Mi cerebro");
