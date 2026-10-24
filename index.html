@@ -10606,6 +10606,25 @@ function juntaSinReunionGuardar(){
 }
 
 /* ---- dictar tareas: se dicta (micrófono del teclado o Win+H) y la IA lo convierte en tareas para revisar ---- */
+const JUNTA_SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let _juntaRec = null;
+function juntaMicParar(){ try{ if(_juntaRec){ _juntaRec._parar=true; _juntaRec.stop(); } }catch(_){ } }
+function juntaMic(){
+  if(!JUNTA_SR){ toast('Este navegador no permite dictar con el botón. Usa el micrófono del teclado o Win + H.'); return; }
+  if(_juntaRec){ juntaMicParar(); return; }
+  const rec = new JUNTA_SR(); _juntaRec = rec;
+  rec.lang='es-ES'; rec.continuous=true; rec.interimResults=true;
+  const base = (F.texto||'').trim(); let fin='';
+  rec.onresult = function(ev){
+    let interino='';
+    for(let i=ev.resultIndex;i<ev.results.length;i++){ const r=ev.results[i]; if(r.isFinal) fin+=r[0].transcript+' '; else interino+=r[0].transcript; }
+    F.texto = ((base?base+' ':'')+fin+interino).replace(/\s+/g,' ').trim();
+    const ta=el('jtDictado'); if(ta){ ta.value=F.texto; ta.scrollTop=ta.scrollHeight; }
+  };
+  rec.onerror = function(e){ if(e && (e.error==='not-allowed' || e.error==='service-not-allowed')) toast('Permite el micrófono en el navegador para dictar.'); else if(e && e.error==='no-speech') toast('No te he oído. Pulsa 🎤 y habla.'); };
+  rec.onend = function(){ if(_juntaRec===rec) _juntaRec=null; if(S.modal==='junta_dictar') render(); };
+  try{ rec.start(); render(); }catch(e){ _juntaRec=null; toast('No se ha podido abrir el micrófono.'); }
+}
 function juntaDictarAbrir(actaId){ F={type:'junta_dictar', texto:'', items:null, busy:false, _acta:(actaId||null)}; S.modal='junta_dictar'; render(); setTimeout(()=>{ const e=el('jtDictado'); if(e) e.focus(); }, 60); }
 function juntaNorm(x){ return String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
 function juntaCasarPersona(nombre){
@@ -10617,6 +10636,7 @@ function juntaCasarPersona(nombre){
   return p.length===1 ? p[0] : '';
 }
 async function juntaDictarConvertir(){
+  juntaMicParar();
   const txt=(F.texto||'').trim(); if(!txt){ toast('Dicta o escribe las tareas primero'); return; }
   F.busy=true; render();
   const hoy=todayStr(); const dias=[]; for(let i=0;i<15;i++){ const d=juntaMasDias(hoy,i); dias.push(JUNTA_DIAS[tarDow(d)]+' '+d+(i===0?' (hoy)':(i===1?' (mañana)':''))); }
@@ -10640,7 +10660,9 @@ function juntaDictarModal(){
   const us=tarUsers();
   let cuerpo;
   if(!F.items){
-    cuerpo=`<div class="note" style="margin-top:0">Dicta con el micrófono del teclado (en el móvil) o con <strong>Win + H</strong> (en el ordenador), o escríbelo. Di para cada tarea quién la hace, qué y para cuándo. <strong>Sin nombres de pacientes</strong> (nº de ficha sí).</div>
+    const oye=!!_juntaRec;
+    cuerpo=`<div class="note" style="margin-top:0">${JUNTA_SR?'Pulsa <strong>🎤 Hablar</strong> y di para cada tarea quién la hace, qué y para cuándo. Al terminar, vuelve a pulsar.':'Dicta con el micrófono del teclado (en el móvil) o con <strong>Win + H</strong> (en el ordenador), o escríbelo. Di para cada tarea quién la hace, qué y para cuándo.'} <strong>Sin nombres de pacientes</strong> (nº de ficha sí): la voz la pasa a texto el navegador (Google, Microsoft o Apple).</div>
+      ${JUNTA_SR?`<button type="button" class="btn ${oye?'':'btn-ghost'}" onclick="juntaMic()" style="width:100%;justify-content:center;margin-bottom:10px;padding:12px;font-size:15px;${oye?'background:#C0392B;border-color:#C0392B;color:#fff':''}">${oye?'● Escuchando… pulsa para parar':'🎤 Hablar'}</button>`:''}
       <textarea id="jtDictado" class="inp" rows="6" style="font-family:inherit" oninput="F.texto=this.value" placeholder="Hemos quedado en tres tareas. Encarna llama a la gestoría mañana. Noemí prepara la lista de pacientes sin cita para el jueves…">${incEsc(F.texto||'')}</textarea>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="juntaDictarConvertir()" ${F.busy?'disabled':''}>${F.busy?'Convirtiendo…':'Convertir en tareas'}</button></div>`;
   } else {
@@ -10683,6 +10705,8 @@ appView = function(){
   if(S.module==='junta'){ if(!canAccess('junta')){ S.module=null; return homeView(); } return juntaView(); }
   return _appView_junta();
 };
+const _closeModal_junta = closeModal;
+closeModal = function(){ if(F && F.type==='junta_dictar') juntaMicParar(); return _closeModal_junta.apply(this, arguments); };
 const _modalContent_junta = modalContent;
 modalContent = function(){
   if(F.type==='junta_asunto') return juntaAsuntoModal();
