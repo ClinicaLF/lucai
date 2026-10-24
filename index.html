@@ -883,7 +883,9 @@ async function doLogin(){
     }
     if(!ok){ S.loginBusy=false; S.loginErr='Usuario o contraseña incorrectos.'; render(); return; }
     S.loginBusy=false; S.loginErr=''; S.loginName='';
+    const debeCambiar = !!(u.cambiarPass || (u.pin && pass===u.pin));   // PIN antiguo o código provisional
     S.user=u; S.pinUser=null; S.pin=''; S.module=null; S.alert=''; S.iaOpen=false;
+    if(debeCambiar){ F={type:'cambiar_pin', actual:pass, nuevo:'', nuevo2:'', obligado:true}; S.modal='cambiar_pin'; }
     if(typeof iaWarmup==='function') iaWarmup();
     clearTimeout(window._iaSaludoShow); window._iaSaludoShow=setTimeout(()=>{ if(typeof lucaiSaludoShow==='function') lucaiSaludoShow(); }, 600);
     render(); resetIdle();
@@ -4067,7 +4069,7 @@ const TAR_PRIOS   = ['Alta','Media','Baja'];
 const TAR_ESTADOS = ['Pendiente','En curso','En espera','Hecha'];
 const TAR_AREAS   = ['General','Personal','Agenda','Contabilidad','Mantenimiento','Clínica','Marketing'];
 const TAR_DOW     = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-const tarUsers    = () => USERS.map(u=>u.nombre);
+const tarUsers    = () => appUsers().map(u=>u.nombre);   // usuarios de Ajustes › Usuarios (antes, la lista fija USERS)
 /* --- participantes (varias personas en una misma tarea) --- */
 function tarPartList(t){ return Array.isArray(t&&t.participantes) ? t.participantes : []; }
 function tarInvolucra(t, who){ return !!t && (t.deQuien===who || t.paraQuien===who || tarPartList(t).includes(who)); }
@@ -7286,7 +7288,7 @@ function usuariosModalContent(){
       <span class="avatar">${initials(u.nombre)}</span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:600">${incEsc(u.nombre)}${u.admin?' <span style="font-size:11px;font-weight:700;background:#333F48;color:#fff;border-radius:10px;padding:1px 7px;margin-left:4px">Dirección</span>':''}</div>
-        <div class="muted" style="font-size:12px">${incEsc(u.rol||'')} · usuario <strong>${incEsc(userLoginName(u))}</strong> · ${mods}</div>
+        <div class="muted" style="font-size:12px">${incEsc(u.rol||'')} · usuario <strong>${incEsc(userLoginName(u))}</strong> · ${mods}${(u.pin||u.cambiarPass)?' · <span style="color:#B7791F;font-weight:700">aún no ha puesto su contraseña</span>':''}</div>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="openUsuarioEdit(${u.id})">Editar</button>
     </div>`;
@@ -7297,6 +7299,7 @@ function usuariosModalContent(){
       <div class="note" style="margin-top:0">Crea usuarios, dales un <strong>usuario y una contraseña</strong> y elige a qué módulos accede cada uno. Si alguien olvida su contraseña, edítalo y ponle una nueva.</div>
       ${filas}
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btn-ghost" onclick="openUsuariosLote()">Alta de varios</button>
         <button class="btn btn-primary" onclick="openUsuarioEdit(null)">Crear usuario</button>
         <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
       </div>
@@ -7349,9 +7352,10 @@ async function commitUsuario(){
   if(pass){ passSalt=_newSalt(); passHash=await lucaiHash(pass, passSalt); if(!passHash){ toast('No se pudo cifrar la contraseña'); return; } }
   let list=appUsers().slice();
   if(F.id!=null){
-    list=list.map(u=> u.id===F.id ? {...u, nombre, rol, usuario, admin:!!F.admin, permisos: F.admin?[]:(F.permisos||[]).slice(), ...(pass?{passHash, passSalt, pin:undefined}:{}) } : u);
+    const ajena = !(S.user && S.user.id===F.id);   // si se la pone Dirección a otro, es provisional
+    list=list.map(u=> u.id===F.id ? {...u, nombre, rol, usuario, admin:!!F.admin, permisos: F.admin?[]:(F.permisos||[]).slice(), ...(pass?{passHash, passSalt, pin:undefined, cambiarPass:ajena?true:undefined}:{}) } : u);
   } else {
-    list.push({ id:_nextUserId(), nombre, rol, usuario, admin:!!F.admin, permisos: F.admin?[]:(F.permisos||[]).slice(), passHash, passSalt });
+    list.push({ id:_nextUserId(), nombre, rol, usuario, admin:!!F.admin, permisos: F.admin?[]:(F.permisos||[]).slice(), passHash, passSalt, cambiarPass:true });
   }
   S.usuarios=list; _usuariosPersist();
   if(S.user && S.user.id===F.id){ const me=list.find(u=>u.id===F.id); if(me) S.user=me; }
@@ -7368,13 +7372,14 @@ function usuarioDelete(id){
 function openCambiarPin(){ F={type:'cambiar_pin', actual:'', nuevo:'', nuevo2:''}; S.modal='cambiar_pin'; render(); }
 function cambiarPinModalContent(){
   return `<div class="overlay"><div class="modal">
-    <div class="modal-head"><h2>Cambiar mi contraseña</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-head"><h2>${F.obligado?'Elige tu contraseña':'Cambiar mi contraseña'}</h2>${F.obligado?'':'<button class="x" onclick="closeModal()">×</button>'}</div>
     <div class="modal-body">
-      <div class="note" style="margin-top:0">Tu contraseña es personal. Si la olvidas, Dirección puede ponerte una nueva.</div>
-      <div class="fld"><label>Contraseña actual</label><input class="inp" type="password" value="${incEsc(F.actual||'')}" oninput="setInp('actual',this.value)"></div>
+      ${F.obligado?'<div class="note" style="margin-top:0">Antes de seguir, pon una contraseña <strong>solo tuya</strong> (al menos 8 caracteres). No se la digas a nadie: si la olvidas, Dirección te pone una nueva.</div>'
+        :'<div class="note" style="margin-top:0">Tu contraseña es personal. Si la olvidas, Dirección puede ponerte una nueva.</div>'}
+      ${F.obligado?'':`<div class="fld"><label>Contraseña actual</label><input class="inp" type="password" value="${incEsc(F.actual||'')}" oninput="setInp('actual',this.value)"></div>`}
       <div class="fld"><label>Contraseña nueva</label><input class="inp" type="password" value="${incEsc(F.nuevo||'')}" oninput="setInp('nuevo',this.value)"></div>
       <div class="fld"><label>Repite la contraseña nueva</label><input class="inp" type="password" value="${incEsc(F.nuevo2||'')}" oninput="setInp('nuevo2',this.value)"></div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="commitCambiarPin()">Guardar</button></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">${F.obligado?'':'<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="commitCambiarPin()">Guardar</button></div>
     </div></div></div>`;
 }
 async function commitCambiarPin(){
@@ -7386,11 +7391,12 @@ async function commitCambiarPin(){
   if(!okActual){ toast('La contraseña actual no es correcta'); return; }
   if((F.nuevo||'').length<8){ toast('La nueva debe tener al menos 8 caracteres'); return; }
   if(me.pin && F.nuevo===me.pin){ toast('La nueva no puede ser tu PIN antiguo'); return; }
+  if(F.obligado && F.nuevo===F.actual){ toast('Pon una distinta de la que te han dado'); return; }
   if(F.nuevo!==F.nuevo2){ toast('Las dos contraseñas nuevas no coinciden'); return; }
   const salt=_newSalt(); const hash=await lucaiHash(F.nuevo, salt);
   if(!hash){ toast('No se pudo cifrar la contraseña'); return; }
-  S.usuarios=appUsers().map(u=> u.id===me.id ? {...u, passHash:hash, passSalt:salt, pin:undefined} : u);
-  if(S.user){ S.user.passHash=hash; S.user.passSalt=salt; S.user.pin=undefined; }
+  S.usuarios=appUsers().map(u=> u.id===me.id ? {...u, passHash:hash, passSalt:salt, pin:undefined, cambiarPass:undefined} : u);
+  if(S.user){ S.user.passHash=hash; S.user.passSalt=salt; S.user.pin=undefined; S.user.cambiarPass=undefined; }
   _usuariosPersist(); closeModal(); toast('Contraseña actualizada');
 }
 
@@ -7401,6 +7407,7 @@ modalContent = function(){
   if(F.type==='doctores') return doctoresModalContent();
   if(F.type==='usuario_edit') return usuarioEditModalContent();
   if(F.type==='cambiar_pin') return cambiarPinModalContent();
+  if(F.type==='usuarios_lote') return usuariosLoteModalContent();
   return _modalContent_usr();
 };
 const _homeView_usr = homeView;
@@ -7409,6 +7416,80 @@ homeView = function(){
   try{ if(S.modal && html.indexOf('class="overlay"')===-1) html += modalContent(); }catch(e){ console.error('home modal', e); }
   return html;
 };
+/* --- alta de varios usuarios a la vez (Dirección, 24/10/2026) ---
+   Se pega una lista «Nombre; usuario; puesto» (una persona por línea). La app crea a los que no existen, con los
+   módulos a la vista, y genera para cada uno un código provisional que solo se enseña una vez: al entrar con él,
+   la persona elige su contraseña. Nadie más la conoce. */
+const LOTE_PERMS = ['tareas','material','junta','incidencias','equipos','asistente'];
+function _loteNorm(s){ return (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/([a-z])\1+/g,'$1').replace(/\s+/g,' ').trim(); }
+function _loteCodigo(){ const A='abcdefghjkmnpqrstuvwxyz23456789'; const b=new Uint32Array(8); crypto.getRandomValues(b); return Array.from(b, x=>A[x%A.length]).join(''); }
+function openUsuariosLote(){ if(!isAdmin()){ toast('Solo Dirección'); return; } F={type:'usuarios_lote', texto:'', filas:null, hechos:null, busy:false}; S.modal='usuarios_lote'; render(); }
+function usuariosLoteRevisar(){
+  const usados = new Set(appUsers().map(u=>(u.usuario||userLoginName(u)).toLowerCase()));
+  const filas=[];
+  (F.texto||'').split(/\r?\n/).forEach(l=>{
+    const p=l.split(/[;\t]/).map(x=>x.trim()); const nombre=p[0]; if(!nombre || nombre.startsWith('#')) return;
+    const n=_loteNorm(nombre);
+    const ya=appUsers().find(u=>{ const un=_loteNorm(u.nombre); return un===n || (n.indexOf(' ')<0 && un.split(' ')[0]===n); });
+    let usuario=(p[1]||_slug(nombre.split(' ')[0])||'usuario').toLowerCase().replace(/[^a-z0-9._-]/g,'');
+    if(ya){ filas.push({nombre, rol:p[2]||'', usuario:ya.usuario||userLoginName(ya), ya:ya.nombre}); return; }
+    let k=usuario, i=2; while(usados.has(k) || filas.some(f=>!f.ya && f.usuario===k)){ k=usuario+i; i++; }
+    filas.push({nombre, rol:p[2]||'', usuario:k, ya:null});
+  });
+  if(!filas.length){ toast('Pega la lista: una persona por línea'); return; }
+  F.filas=filas; render();
+}
+async function usuariosLoteCrear(){
+  const nuevas=(F.filas||[]).filter(f=>!f.ya); if(!nuevas.length){ toast('No hay nadie nuevo que crear'); return; }
+  if(!confirm('Se van a crear '+nuevas.length+' usuarios. Después verás sus códigos provisionales UNA sola vez. ¿Seguimos?')) return;
+  F.busy=true; render();
+  const antes=appUsers().slice(); const list=antes.slice(); const hechos=[]; let id=_nextUserId();
+  for(const f of nuevas){
+    const codigo=_loteCodigo(); const passSalt=_newSalt(); const passHash=await lucaiHash(codigo, passSalt);
+    if(!passHash){ F.busy=false; render(); toast('No se pudo cifrar'); return; }
+    list.push({ id:id++, nombre:f.nombre, rol:f.rol, usuario:f.usuario, admin:false, permisos:LOTE_PERMS.slice(), passHash, passSalt, cambiarPass:true });
+    hechos.push({nombre:f.nombre, usuario:f.usuario, codigo});
+  }
+  S.usuarios=list;
+  let ok=false;
+  try{
+    await persistNow();
+    const { data } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
+    const enBase=(data && data.data && Array.isArray(data.data.usuarios)) ? data.data.usuarios : [];
+    ok = hechos.every(h=>enBase.some(u=>u.usuario===h.usuario));
+  }catch(_){ ok=false; }
+  if(!ok){ S.usuarios=antes; F.busy=false; render(); toast('No se pudo guardar en la base. No se ha creado nadie: inténtalo de nuevo.'); return; }
+  F.busy=false; F.hechos=hechos; F.filas=null; render();
+}
+function usuariosLoteImprimir(){
+  const filas=(F.hechos||[]).map(h=>`<tr><td>${incEsc(h.nombre)}</td><td><b>${incEsc(h.usuario)}</b></td><td style="font-family:monospace;font-size:16px">${incEsc(h.codigo)}</td></tr>`).join('');
+  const w=window.open('','_blank'); if(!w){ toast('El navegador ha bloqueado la ventana'); return; }
+  w.document.write(`<html><head><title>Lucai · códigos provisionales</title><style>body{font-family:Arial,sans-serif;padding:24px;line-height:1.4}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:10px 12px;text-align:left}p{margin:0 0 14px}</style></head><body>
+    <h2>Lucai · usuarios nuevos</h2><p>Entra en Lucai con tu <b>usuario</b> y este <b>código</b>. La app te pedirá que pongas tu propia contraseña (al menos 8 caracteres). El código solo sirve una vez.</p>
+    <table><tr><th>Nombre</th><th>Usuario</th><th>Código provisional</th></tr>${filas}</table>
+    <p style="margin-top:18px;color:#666">Recorta y entrega a cada persona su línea. Después, destruye esta hoja.</p></body></html>`);
+  w.document.close(); w.focus(); w.print();
+}
+function usuariosLoteModalContent(){
+  let cuerpo;
+  if(F.hechos){
+    cuerpo=`<div class="note" style="margin-top:0;border-color:#B7791F">Estos códigos <strong>solo se ven ahora</strong>. Imprímelos o apúntalos antes de cerrar. Si alguien pierde el suyo: Editar → contraseña nueva.</div>
+      ${F.hechos.map(h=>`<div style="display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:7px 10px;margin-bottom:6px"><span style="flex:1;min-width:0">${incEsc(h.nombre)} · <strong>${incEsc(h.usuario)}</strong></span><span style="font-family:monospace;font-size:15px">${incEsc(h.codigo)}</span></div>`).join('')}
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-primary" onclick="usuariosLoteImprimir()">Imprimir</button><button class="btn btn-ghost" onclick="if(confirm('¿Ya los tienes apuntados o impresos? Después no se pueden volver a ver.')) openUsuarios()">Hecho</button></div>`;
+  } else if(F.filas){
+    const nuevas=F.filas.filter(f=>!f.ya);
+    cuerpo=`<div class="note" style="margin-top:0">Se crean <strong>${nuevas.length}</strong> usuarios con acceso a los módulos a la vista (cada uno ve lo suyo). Los que ya existen no se tocan.</div>
+      ${F.filas.map(f=>`<div style="display:flex;gap:10px;border:1px solid var(--line);border-radius:9px;padding:7px 10px;margin-bottom:6px;${f.ya?'opacity:.55':''}"><span style="flex:1;min-width:0">${incEsc(f.nombre)}${f.rol?' · <span class="muted">'+incEsc(f.rol)+'</span>':''}</span><span>${f.ya?'ya existe ('+incEsc(f.ya)+')':'usuario <strong>'+incEsc(f.usuario)+'</strong>'}</span></div>`).join('')}
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-ghost" onclick="F.filas=null;render()">Volver</button><button class="btn btn-primary" ${F.busy?'disabled':''} onclick="usuariosLoteCrear()">${F.busy?'Creando…':'Crear y ver los códigos'}</button></div>`;
+  } else {
+    cuerpo=`<div class="note" style="margin-top:0">Pega una persona por línea: <strong>Nombre; usuario; puesto</strong> (usuario y puesto, opcionales). La app genera un código provisional para cada una; al entrar con él, cada persona elige su contraseña.</div>
+      <textarea class="inp" style="width:100%;min-height:220px;font-family:monospace;font-size:13px" placeholder="Rocío; rocio; Recepción" oninput="F.texto=this.value">${incEsc(F.texto||'')}</textarea>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-ghost" onclick="openUsuarios()">Cancelar</button><button class="btn btn-primary" onclick="usuariosLoteRevisar()">Revisar</button></div>`;
+  }
+  return `<div class="overlay"><div class="modal" style="max-width:620px">
+    <div class="modal-head"><h2>Alta de varios usuarios</h2>${F.hechos?'':'<button class="x" onclick="openUsuarios()">×</button>'}</div>
+    <div class="modal-body">${cuerpo}</div></div></div>`;
+}
 /* ===== FIN USUARIOS ===== */
 
 
