@@ -11474,6 +11474,51 @@ tarDescPrevHtml=function(t){
   return `<span class="lx-dprev" title="${incEsc(d)}">${d?incEsc(d):'&nbsp;'}</span>`;
 };
 
+/* ============================================================
+   LUCAI · VENTANA PROPIA PARA CONFIRMAR (24/10/2026, David: «quiero otro tipo de ventana»)
+   lxConfirm(opciones) sustituye al aviso del navegador al marcar una tarea como hecha
+   (botón ✓, «Marcar hecha» y el desplegable de estado). Vive fuera de #app: un render no la borra.
+   ============================================================ */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css7">
+.lx-cf-ov{position:fixed;inset:0;z-index:2000;background:rgba(16,24,40,.45);display:flex;align-items:center;justify-content:center;padding:16px;animation:lxFade .12s ease-out}
+.lx-cf{background:var(--white);color:var(--ink);border-radius:16px;width:100%;max-width:400px;padding:22px 22px 18px;box-shadow:0 20px 48px rgba(16,24,40,.25);animation:lxPop .14s ease-out}
+.lx-cf .ic{width:44px;height:44px;border-radius:50%;background:var(--lx-verde-s);color:var(--lx-verde);display:grid;place-items:center;margin-bottom:14px}
+.lx-cf .ic svg{width:22px;height:22px}
+.lx-cf h3{font-size:17px;font-weight:800;margin:0 0 6px}
+.lx-cf p{font-size:14px;color:var(--grey);margin:0;line-height:1.45}
+.lx-cf .tt{margin-top:12px;padding:10px 12px;background:var(--arena-1);border:1px solid var(--line);border-radius:10px;font-size:14px;font-weight:700;color:var(--ink);word-break:break-word}
+.lx-cf .bt{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.lx-cf .bt .btn{min-width:110px;justify-content:center}
+.lx-cf .ok{background:#16A34A;color:#fff}
+.lx-cf .ok:hover{background:#15803D}
+@keyframes lxFade{from{opacity:0}to{opacity:1}}
+@keyframes lxPop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+@media(max-width:720px){ .lx-cf-ov{align-items:flex-end;padding:0} .lx-cf{max-width:none;border-radius:20px 20px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom))} .lx-cf .bt .btn{flex:1} }
+</style>`);
+function lxConfirm(o){
+  const prev=document.getElementById('lxConfirm'); if(prev) prev.remove();
+  const ov=document.createElement('div'); ov.id='lxConfirm'; ov.className='lx-cf-ov';
+  ov.innerHTML=`<div class="lx-cf" role="dialog" aria-modal="true"><div class="ic">${LX_IC_CHECK}</div><h3>${incEsc(o.titulo||'¿Seguro?')}</h3>${o.texto?`<p>${incEsc(o.texto)}</p>`:''}${o.detalle?`<div class="tt">${incEsc(o.detalle)}</div>`:''}
+    <div class="bt"><button class="btn btn-ghost" data-k="no">${incEsc(o.no||'Cancelar')}</button><button class="btn ok" data-k="si">${incEsc(o.si||'Aceptar')}</button></div></div>`;
+  const cerrar=(si)=>{ document.removeEventListener('keydown',tecla,true); ov.remove(); if(si){ if(o.onSi) o.onSi(); } else if(o.onNo) o.onNo(); };
+  const tecla=(e)=>{ if(e.key==='Escape'){ e.preventDefault(); cerrar(false); } else if(e.key==='Enter'){ e.preventDefault(); cerrar(true); } };
+  ov.addEventListener('click',e=>{ if(e.target===ov) cerrar(false); const b=e.target.closest('[data-k]'); if(b) cerrar(b.getAttribute('data-k')==='si'); });
+  document.addEventListener('keydown',tecla,true);
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const b=ov.querySelector('[data-k="si"]'); if(b) b.focus(); },20);
+}
+function lxConfirmarHecha(t, onSi, onNo){
+  lxConfirm({titulo:'¿Marcar como hecha?', texto:'Se archiva; la seguirás viendo con «Ver hechas».', detalle:tarCap(t.titulo||''), si:'Sí, está hecha', no:'Cancelar', onSi, onNo});
+}
+tarMarcarHecha=function(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  lxConfirmarHecha(t, ()=>tarMarcar(id,'Hecha'));
+};
+tarCambiarEstado=function(id, v){
+  if(v==='Hecha'){ const t=(S.tareas||[]).find(x=>x.id===id); if(t){ lxConfirmarHecha(t, ()=>tarMarcar(id,'Hecha'), ()=>render()); return; } }
+  tarMarcar(id, v);
+};
+
 boot();
 
 </script>
