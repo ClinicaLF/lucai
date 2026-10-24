@@ -11770,6 +11770,83 @@ function lxCodAuto(){
   return c;
 }
 
+/* ============================================================
+   LUCAI · VENTANAS DE ALMACÉN COMPACTAS (24/10/2026, David: «todo de dentro es muy grande, hay que hacer scroll»)
+   Editar artículo en una ventana más ancha y en rejilla (mismos campos y mismas funciones de guardar).
+   Las demás ventanas de Almacén (nuevo artículo, salida, entrada, baja, pedido, recepción) con letra y huecos menores.
+   ============================================================ */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css15">
+.modal.lx-mc{max-width:640px}
+.modal.lx-mc.lx-wide{max-width:780px}
+.lx-mc .modal-head{padding:14px 20px 2px}
+.lx-mc .modal-head h2{font-family:var(--sans);font-weight:800;font-size:17px}
+.lx-mc .modal-body{padding:4px 20px 12px}
+.lx-mc .fld{margin-top:10px}
+.lx-mc .fld>label{margin-bottom:4px;font-size:10.5px;letter-spacing:.05em}
+.lx-mc .inp{padding:7px 10px;font-size:14px;border-radius:9px}
+.lx-mc select.inp{background-position:right 10px center}
+.lx-mc textarea.inp{min-height:52px;line-height:1.35}
+.lx-mc .grid2{gap:10px}
+.lx-mc .note{padding:8px 12px;font-size:12.5px;margin-bottom:4px}
+.lx-mc .hint{font-size:11.5px;line-height:1.4;margin-top:3px}
+.lx-mc .chip-sel{padding:6px 11px;font-size:13px;border-radius:9px}
+.lx-mc .chips{gap:6px}
+.lx-mc .req-note{margin-top:8px}
+.lx-mc .modal-foot{padding:10px 20px 14px;gap:8px}
+.lx-mc .modal-foot .btn{padding:9px 14px}
+.lx-g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.lx-g3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
+.lx-mc .lx-g4>.fld,.lx-mc .lx-g3>.fld{margin-top:10px;min-width:0}
+.lx-rec{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--arena-1);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:10px;font-size:13px}
+.lx-rec .inp{max-width:130px}
+.lx-rec .lx-rec-t{flex:1;min-width:180px;color:var(--grey)}
+.lx-rec .lx-rec-t b{color:var(--ink)}
+@media(max-width:720px){ .lx-g4{grid-template-columns:1fr 1fr} .lx-g3{grid-template-columns:1fr} }
+</style>`);
+(function(){
+  const MAT=['articulo','editart','salida','entrada','merma','pedido','recepcion'];
+  const _mc=modalContent;
+  modalContent=function(){
+    let h=_mc.apply(this, arguments);
+    if(F && MAT.includes(F.type) && typeof h==='string') h=h.replace('<div class="modal">','<div class="modal lx-mc'+(F.type==='editart'?' lx-wide':'')+'">');
+    return h;
+  };
+})();
+editArticleModalContent=function(){
+  const a=art(F.cod);
+  const conMovs=(a.stock||0)>0 || (S.movimientos||[]).some(m=>String(m.cod)===String(a.cod));
+  return `<div class="overlay"><div class="modal">
+    <div class="modal-head"><h2>Editar · ${incEsc(a.cod)}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="lx-g3">
+        <div class="fld"><label>Nombre</label><input class="inp" value="${incEsc(F.enombre)}" oninput="setInp('enombre',this.value)"></div>
+        <div class="fld"><label>Familia</label><select class="inp" onchange="if(this.value==='__nueva__'){almCatNueva('ecat')}else{setSel('ecat',this.value)}">${CATEGORIAS.map(c=>`<option ${F.ecat===c?'selected':''}>${incEsc(c)}</option>`).join('')}${(F.ecat && !CATEGORIAS.includes(F.ecat))?`<option selected>${incEsc(F.ecat)}</option>`:''}<option value="__nueva__">＋ Nueva familia…</option></select></div>
+        <div class="fld"><label>Proveedor</label><select class="inp" onchange="setInp('eprov',this.value)"><option value="">Sin proveedor</option>${S.proveedores.map(p=>`<option ${F.eprov===p?'selected':''}>${incEsc(p)}</option>`).join('')}</select></div>
+      </div>
+      <div class="lx-g4">
+        <div class="fld"><label>Mínimo de aviso</label><input class="inp" type="number" min="0" value="${F.emin}" oninput="setInp('emin',this.value)"></div>
+        <div class="fld"><label>Precio ref. (€)</label><input class="inp" type="number" min="0" step="0.01" value="${F.eprecio}" oninput="setInp('eprecio',this.value)"></div>
+        <div class="fld"><label>Caduca</label><input class="inp" type="date" value="${F.ecaduca||''}" oninput="setInp('ecaduca',this.value)" title="Vacía = no caduca. Con fecha, avisamos ${CAD_DIAS} días antes."></div>
+        <div class="fld"><label>Estado</label><select class="inp" onchange="setToggle('eactivo',this.value==='1')"><option value="1" ${F.eactivo?'selected':''}>Activo</option><option value="0" ${!F.eactivo?'selected':''}>Dado de baja</option></select></div>
+      </div>
+      <div class="fld"><label>Salida</label><div class="chips">
+        <button class="chip-sel ${F.etraz?'on':''}" onclick="setToggle('etraz',true)">Con paciente y doctor</button>
+        <button class="chip-sel ${!F.etraz?'on':''}" onclick="setToggle('etraz',false)">Genérico (−1 rápido)</button></div></div>
+      <div class="fld"><label>Descripción (opcional)</label><textarea class="inp" rows="2" placeholder="Referencia, medidas, marca, dónde se usa…" oninput="setInp('edesc',this.value)">${incEsc(F.edesc||'')}</textarea></div>
+      <div class="lx-rec">
+        <span class="lx-rec-t">Recuento · en la app: <b>${a.stock} ud.</b> · coste medio ${eur(a.cost||0)}/ud.</span>
+        <input class="inp" type="number" min="0" inputmode="numeric" placeholder="Unidades reales" value="${F.eajuste!==undefined?F.eajuste:''}" oninput="setInp('eajuste',this.value)">
+        <button class="btn btn-ghost btn-sm" onclick="commitAjuste()">Aplicar</button>
+      </div>
+      ${conMovs?`<div class="hint" style="text-align:left">Con stock o movimientos no se puede eliminar; si ya no se usa, ponlo «Dado de baja».</div>`:''}
+    </div>
+    <div class="modal-foot">
+      ${!conMovs?`<button class="btn btn-ghost" style="color:var(--t-fg-C0392B);margin-right:auto" title="Eliminar definitivamente" onclick="artDelete('${a.cod}')">Eliminar</button>`:''}
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="commitEdit()">Guardar</button></div>
+  </div></div>`;
+};
+
 boot();
 
 </script>
