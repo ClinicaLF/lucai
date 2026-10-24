@@ -1129,9 +1129,9 @@ function provSave(){
   S.provEdit=null; render();
   srvProveedorFull(nombre, info, esNuevo?'Proveedor añadido':'Ficha guardada');
 }
-function provDelByName(nombre){
+async function provDelByName(nombre){
   if(nombre==null) return;
-  if(!confirm('¿Borrar el proveedor "'+nombre+'"?\n\nNo afecta a los artículos que ya lo tengan asignado.')) return;
+  if(!await lxPregunta('¿Borrar el proveedor "'+nombre+'"?\n\nNo afecta a los artículos que ya lo tengan asignado.')) return;
   S.proveedores=(S.proveedores||[]).filter(p=>p!==nombre);
   if(S.proveedoresInfo) delete S.proveedoresInfo[nombre];
   if(S.provEdit===nombre) S.provEdit=null;
@@ -2263,14 +2263,14 @@ function artDupCheck(){
   else if(nom){ const byNom=(S.articulos||[]).find(a=>norm(a.nombre)===norm(nom)); if(byNom){ msg=`<span style="color:var(--t-fg-8A5A00);font-weight:600">Ojo: ya hay un artículo con ese nombre (${incEsc(byNom.cod)}). Comprueba que no lo estás duplicando.</span>`; } }
   e.innerHTML = msg;
 }
-function commitArticulo(){
+async function commitArticulo(){
   const cod=(F.acod||'').trim().toUpperCase();
   const nombre=(F.anombre||'').trim();
   if(!cod||!nombre||!F.acat){ toast('Código, nombre y categoría son obligatorios'); return; }
   if(art(cod)){ toast('Ese código ya existe. Cambia el código.'); return; }
   const _norm=s=>(s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
   const dupNom=(S.articulos||[]).find(a=>_norm(a.nombre)===_norm(nombre));
-  if(dupNom && !confirm('Ya existe un artículo con ese nombre ('+dupNom.cod+'). ¿Crearlo de todas formas?')) return;
+  if(dupNom && !await lxPregunta('Ya existe un artículo con ese nombre ('+dupNom.cod+'). ¿Crearlo de todas formas?')) return;
   const prov=(F.aprov==='__nuevo__'?(F.aprovNuevo||''):(F.aprov||'')).trim();
   if(prov && !S.proveedores.includes(prov)) S.proveedores.push(prov);
   const precio=parseFloat(String(F.aprecio).replace(',','.'))||0;
@@ -2288,7 +2288,7 @@ async function artDelete(cod){
   const a=art(cod); if(!a) return;
   if((a.stock||0)>0){ toast('No se puede eliminar: tiene '+a.stock+' ud. en stock.'); return; }
   if((S.movimientos||[]).some(m=>String(m.cod)===String(cod))){ toast('No se puede eliminar: ya tiene movimientos. Mejor dale de baja.'); return; }
-  if(!confirm('¿Eliminar definitivamente el artículo "'+a.nombre+'" ('+cod+')?\n\nNo se puede deshacer.')) return;
+  if(!await lxPregunta('¿Eliminar definitivamente el artículo "'+a.nombre+'" ('+cod+')?\n\nNo se puede deshacer.')) return;
   const ok=await srvArticuloDel(cod); if(!ok) return;
   S.articulos = (S.articulos||[]).filter(x=>String(x.cod)!==String(cod));
   closeModal(); render(); toast('Artículo eliminado');
@@ -2862,10 +2862,10 @@ async function srvIncidenciaUpdate(id, o, okMsg){
   }catch(e){ console.error('srvIncidenciaUpdate', e); await syncAll(); toast('Error al guardar: '+(e.message||e)); return; }
   await loadFromDB(); render(); if(okMsg) toast(okMsg);
 }
-function incEliminar(id){
+async function incEliminar(id){
   const o=(S.incidencias||[]).find(x=>x.id===id); if(!o) return;
   if(!(isAdmin() || o.reporta===S.user.nombre)){ toast('Solo Dirección o quien la creó puede eliminarla'); return; }
-  if(!confirm('¿Eliminar esta incidencia por completo?\n\nSe borra para todos y no se puede deshacer.')) return;
+  if(!await lxPregunta('¿Eliminar esta incidencia por completo?\n\nSe borra para todos y no se puede deshacer.')) return;
   S.incidencias=(S.incidencias||[]).filter(x=>x.id!==id);
   closeModal(); render(); srvIncidenciaDelete(id); toast('Incidencia eliminada');
 }
@@ -4634,14 +4634,16 @@ function commitReunion(){
   toast('Reunión creada');
   _reuNotify(r, null);
 }
-function reuDelete(id){
+async function reuDelete(id){
   const r=(S.reuniones||[]).find(x=>x.id===id); if(!r) return;
   if(r.serieId){
     const cuantas=(S.reuniones||[]).filter(x=>x.serieId===r.serieId).length;
-    const todas=confirm('Esta reunión se repite ('+cuantas+' fechas).\n\nAceptar = borrar TODA la serie.\nCancelar = borrar solo esta.');
+    const op=await lxDialogo({titulo:'Esta reunión se repite ('+cuantas+' fechas)', texto:'¿Qué quieres borrar?', tipo:'peligro', botones:[{k:null,label:'Cancelar'},{k:'una',label:'Solo esta'},{k:'todas',label:'Toda la serie',cls:'peligro'}]});
+    if(!op) return;
+    const todas=op==='todas';
     S.reuniones = todas ? S.reuniones.filter(x=>x.serieId!==r.serieId) : S.reuniones.filter(x=>x.id!==id);
   } else {
-    if(!confirm('¿Borrar esta reunión?')) return;
+    if(!await lxPregunta('¿Borrar esta reunión?')) return;
     S.reuniones=S.reuniones.filter(x=>x.id!==id);
   }
   closeModal(); render(); if(typeof persistNow==='function') persistNow(); toast('Reunión borrada');
@@ -4727,7 +4729,7 @@ async function regAdd(){
   else toast('Tiempo registrado');
 }
 async function regDel(id){
-  if(!confirm('¿Borrar este registro de tiempo?')) return;
+  if(!await lxPregunta('¿Borrar este registro de tiempo?')) return;
   const ok=await srvRegDel(id); if(!ok) return;
   S.registros=(S.registros||[]).filter(x=>x.id!==id); render(); toast('Registro borrado');
 }
@@ -5203,13 +5205,13 @@ function tarSetFecha(id, val){
   t.fechaLimite = val||''; render(); srvTarUpdate(id, t, val?`Fecha cambiada a ${fmtFecha(val)}`:'Fecha quitada');
 }
 
-function tarCambiarEstado(id, v){
-  if(v==='Hecha'){ const t=(S.tareas||[]).find(x=>x.id===id); if(t && !confirm('¿Seguro que quieres marcar esta tarea como realizada?\n\n"'+(t.titulo||'')+'"')){ render(); return; } }
+async function tarCambiarEstado(id, v){
+  if(v==='Hecha'){ const t=(S.tareas||[]).find(x=>x.id===id); if(t && !await lxPregunta('¿Seguro que quieres marcar esta tarea como realizada?\n\n"'+(t.titulo||'')+'"')){ render(); return; } }
   tarMarcar(id, v);
 }
-function tarMarcarHecha(id){
+async function tarMarcarHecha(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
-  if(!confirm('¿Seguro que quieres marcar esta tarea como realizada?\n\n"'+(t.titulo||'')+'"')) return;
+  if(!await lxPregunta('¿Seguro que quieres marcar esta tarea como realizada?\n\n"'+(t.titulo||'')+'"')) return;
   tarMarcar(id,'Hecha');
 }
 function tarMarcar(id,estado){
@@ -5821,11 +5823,11 @@ function tarMsgEditSave(tarId, ts){
   F.msgEdit=null; F.msgEditDraft=null; render();
   tarMsgMutate(tarId, arr=>arr.map(x=> String(x.ts)===String(ts) ? Object.assign({}, x, {texto:nuevo, editado:true}) : x), 'Mensaje editado');
 }
-function tarMsgDel(tarId, ts){
+async function tarMsgDel(tarId, ts){
   const t=(S.tareas||[]).find(x=>x.id===tarId); if(!t) return;
   const m=(t.mensajes||[]).find(x=>String(x.ts)===String(ts)); if(!m) return;
   if(!(m.de===S.user.nombre || isAdmin())){ toast('Solo puedes borrar tus propios mensajes'); return; }
-  if(!confirm('¿Borrar este mensaje?\n\nNo se puede deshacer.')) return;
+  if(!await lxPregunta('¿Borrar este mensaje?\n\nNo se puede deshacer.')) return;
   t.mensajes=(t.mensajes||[]).filter(x=>String(x.ts)!==String(ts));
   if(F.msgReplyTo && String(F.msgReplyTo.ts)===String(ts)) F.msgReplyTo=null;
   render();
@@ -7455,7 +7457,7 @@ function usuariosLoteRevisar(){
 }
 async function usuariosLoteCrear(){
   const nuevas=(F.filas||[]).filter(f=>!f.ya); if(!nuevas.length){ toast('No hay nadie nuevo que crear'); return; }
-  if(!confirm('Se van a crear '+nuevas.length+' usuarios. Después verás sus códigos provisionales UNA sola vez. ¿Seguimos?')) return;
+  if(!await lxPregunta('Se van a crear '+nuevas.length+' usuarios. Después verás sus códigos provisionales UNA sola vez. ¿Seguimos?')) return;
   F.busy=true; render();
   const antes=appUsers().slice(); const list=antes.slice(); const hechos=[]; let id=_nextUserId();
   for(const f of nuevas){
@@ -7489,7 +7491,7 @@ function usuariosLoteModalContent(){
   if(F.hechos){
     cuerpo=`<div class="note" style="margin-top:0;border-color:var(--t-bd-B7791F)">Estos códigos <strong>solo se ven ahora</strong>. Imprímelos o apúntalos antes de cerrar. Si alguien pierde el suyo: Editar → contraseña nueva.</div>
       ${F.hechos.map(h=>`<div style="display:flex;gap:10px;align-items:center;border:1px solid var(--t-bd-line);border-radius:9px;padding:7px 10px;margin-bottom:6px"><span style="flex:1;min-width:0">${incEsc(h.nombre)} · <strong>${incEsc(h.usuario)}</strong></span><span style="font-family:monospace;font-size:15px">${incEsc(h.codigo)}</span></div>`).join('')}
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-primary" onclick="usuariosLoteImprimir()">Imprimir</button><button class="btn btn-ghost" onclick="if(confirm('¿Ya los tienes apuntados o impresos? Después no se pueden volver a ver.')) openUsuarios()">Hecho</button></div>`;
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn btn-primary" onclick="usuariosLoteImprimir()">Imprimir</button><button class="btn btn-ghost" onclick="lxPregunta('¿Ya los tienes apuntados o impresos?\n\nDespués no se pueden volver a ver.').then(ok=>{ if(ok) openUsuarios(); })">Hecho</button></div>`;
   } else if(F.filas){
     const nuevas=F.filas.filter(f=>!f.ya);
     cuerpo=`<div class="note" style="margin-top:0">Se crean <strong>${nuevas.length}</strong> usuarios con acceso a los módulos a la vista (cada uno ve lo suyo). Los que ya existen no se tocan.</div>
@@ -8134,20 +8136,20 @@ function temaToggleFijar(id){
     t.fijadoPor.push(me); render(); srvTemaUpdate(id,t); toast('Tema fijado arriba');
   }
 }
-function temaEliminar(id){
+async function temaEliminar(id){
   if(!isAdmin()){ toast('Solo Dirección puede eliminar un tema'); return; }
   const t=temaById(id); if(!t) return;
-  if(!confirm('¿Eliminar el tema "'+(t.titulo||'')+'" por completo?\n\nSe borrará el hilo entero con todos sus mensajes. Esta acción NO se puede deshacer.')) return;
+  if(!await lxPregunta('¿Eliminar el tema "'+(t.titulo||'')+'" por completo?\n\nSe borrará el hilo entero con todos sus mensajes. Esta acción NO se puede deshacer.')) return;
   S.temas=(S.temas||[]).filter(x=>String(x.id)!==String(id));
   if(String(S.temaOpen)===String(id)) S.temaOpen=null;
   render(); srvTemaDelete(id); toast('Tema eliminado');
 }
-function temaDelMsg(id, idx){
+async function temaDelMsg(id, idx){
   const t=temaById(id); if(!t) return;
   const m=(t.mensajes||[])[idx]; if(!m) return;
   const me=S.user.nombre;
   if(!(m.de===me || isAdmin())){ toast('Solo puedes borrar tus propios mensajes'); return; }
-  if(!confirm('¿Eliminar este mensaje?')) return;
+  if(!await lxPregunta('¿Eliminar este mensaje?')) return;
   t.mensajes.splice(idx,1); render(); srvTemaUpdate(id, t); toast('Mensaje eliminado');
 }
 function temaNoLeido(t){ const me=S.user&&S.user.nombre; if(!me) return false; const last=(t.vistos&&t.vistos[me])||''; const msgs=Array.isArray(t.mensajes)?t.mensajes:[]; return msgs.some(m=> m.de!==me && String(m.ts||'')>String(last)); }
@@ -8649,8 +8651,8 @@ function lucaiTbPaint(){
    2) Ajuste de stock por recuento desde la ficha del artículo.
    3) Borrar seguimientos (autor o Dirección).
    ============================================================ */
-function almCatNueva(campo){
-  const n = prompt('Nombre de la nueva familia de artículos:');
+async function almCatNueva(campo){
+  const n = await lxPedir('Nombre de la nueva familia de artículos:');
   if(n===null){ render(); return; }               // canceló: repinta para deshacer la selección del select
   const nombre=(n||'').trim();
   if(!nombre){ render(); return; }
@@ -8662,13 +8664,13 @@ function almCatNueva(campo){
   if(typeof _persistSoon==='function') _persistSoon();
   toast('Familia añadida: '+nombre);
 }
-function commitAjuste(){
+async function commitAjuste(){
   const a=art(F.cod); if(!a) return;
   const real=parseInt(F.eajuste);
   if(isNaN(real) || real<0){ toast('Escribe las unidades reales contadas'); return; }
   const dif = real-(a.stock||0);
   if(dif===0){ toast('El stock ya coincide: '+real+' ud.'); return; }
-  if(!confirm('Stock en la app: '+a.stock+' ud.\nRecuento real: '+real+' ud.\n\nSe registrará un ajuste de '+(dif>0?'+':'')+dif+' ud. ¿Continuar?')) return;
+  if(!await lxPregunta('Stock en la app: '+a.stock+' ud.\nRecuento real: '+real+' ud.\n\nSe registrará un ajuste de '+(dif>0?'+':'')+dif+' ud. ¿Continuar?')) return;
   if(dif>0){
     a.stock+=dif;
     const mov={id:uid(),ts:tsFrom(todayStr()),tipo:"entrada",user:S.user.nombre,cod:a.cod,nombre:a.nombre,cant:dif,precio:0,motivo:"Ajuste de recuento (inventario)",pac:null};
@@ -8684,7 +8686,7 @@ function commitAjuste(){
 }
 async function seguiDel(id){
   const s=(S.seguimientos||[]).find(x=>String(x.id)===String(id)); if(!s) return;
-  if(!confirm('¿Borrar este seguimiento del '+fmtFecha(s.ts)+' ('+(s.nombre||'General')+')?')) return;
+  if(!await lxPregunta('¿Borrar este seguimiento del '+fmtFecha(s.ts)+' ('+(s.nombre||'General')+')?')) return;
   try{ const { error } = await sbc.from('lucai_seguimientos').delete().eq('id', String(id)); if(error) throw error; }
   catch(e){ console.error('seguiDel', e); toast('No se pudo borrar: '+(e.message||e)); return; }
   S.seguimientos=(S.seguimientos||[]).filter(x=>String(x.id)!==String(id));
@@ -8847,9 +8849,9 @@ function ideaRecuperar(id){
   i.estado='Pendiente'; i.fechaResuelta=null;
   render(); srvIdeaUpdate(id, i, 'Idea recuperada');
 }
-function ideaBorrar(id){
+async function ideaBorrar(id){
   const i=(S.ideas||[]).find(x=>x.id===id); if(!i) return;
-  if(!confirm('¿Borrar definitivamente la idea "'+i.titulo+'"?')) return;
+  if(!await lxPregunta('¿Borrar definitivamente la idea "'+i.titulo+'"?')) return;
   S.ideas=(S.ideas||[]).filter(x=>x.id!==id);
   render(); srvIdeaDelete(id, 'Idea borrada');
 }
@@ -8947,10 +8949,10 @@ function tarChkSetFecha(tid, cid, v){
   if(v) c.fecha=v; else delete c.fecha;
   render(); srvTarUpdate(tid, t);
 }
-function tarChkDelItem(tid, cid){
+async function tarChkDelItem(tid, cid){
   const t=(S.tareas||[]).find(x=>x.id===tid); if(!t||!Array.isArray(t.checklist)) return;
   const c=t.checklist.find(x=>x&&x.id===cid); if(!c) return;
-  if(!confirm('¿Quitar la subtarea "'+c.texto+'"?')) return;
+  if(!await lxPregunta('¿Quitar la subtarea "'+c.texto+'"?')) return;
   t.checklist=t.checklist.filter(x=>x.id!==cid);
   render(); srvTarUpdate(tid, t);
 }
@@ -9301,17 +9303,17 @@ function pCatAdd(){
   const c={ id:'P'+Date.now().toString(36)+Math.floor(Math.random()*1000), usuario:S.user.nombre, nombre:v, ts:now(), orden:(_lc.length?_lc[_lc.length-1]._ord+1000:1000) };
   S.pcats.push(c); S.pNewCat=''; render(); srvPCatInsert(c);
 }
-function pCatRename(id){
+async function pCatRename(id){
   const c=(S.pcats||[]).find(x=>x.id===id); if(!c) return;
-  const n=prompt('Nuevo nombre de la categoría:', c.nombre);
+  const n=await lxPedir('Nuevo nombre de la categoría:', c.nombre);
   if(n===null) return;
   const v=(n||'').trim(); if(!v) return;
   c.nombre=v; render(); srvPCatUpdate(id, c);
 }
-function pCatDel(id){
+async function pCatDel(id){
   const c=(S.pcats||[]).find(x=>x.id===id); if(!c) return;
   const n=pItemsDe(id).length;
-  if(!confirm('¿Borrar la categoría "'+c.nombre+'"'+(n?' y sus '+n+' apuntes':'')+'?')) return;
+  if(!await lxPregunta('¿Borrar la categoría "'+c.nombre+'"'+(n?' y sus '+n+' apuntes':'')+'?')) return;
   S.pcats=(S.pcats||[]).filter(x=>x.id!==id);
   S.pitems=(S.pitems||[]).filter(x=>x.catId!==id);
   if(S.pOpenCat===id) S.pOpenCat=null;
@@ -9373,9 +9375,9 @@ function pEditView(){
     </div>
   </div></div>`;
 }
-function pItemDel(id){
+async function pItemDel(id){
   const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
-  if(!i.hecho && !confirm('¿Quitar "'+i.texto+'" sin marcarla hecha?')) return;
+  if(!i.hecho && !await lxPregunta('¿Quitar "'+i.texto+'" sin marcarla hecha?')) return;
   S.pitems=(S.pitems||[]).filter(x=>x.id!==id);
   render(); srvPItemDeleteIds([id]);
 }
@@ -9396,15 +9398,15 @@ function pArchRecuperar(id){
   i.archivado=false; render(); srvPItemArchivar([id], false);
   toast('Recuperada: vuelve a su categoria');
 }
-function pArchBorrar(id){
+async function pArchBorrar(id){
   const i=(S.pitems||[]).find(x=>x.id===id); if(!i) return;
-  if(!confirm('\u00bfBorrar definitivamente "'+i.texto+'"?\n\nEsto ya no se puede deshacer.')) return;
+  if(!await lxPregunta('\u00bfBorrar definitivamente "'+i.texto+'"?\n\nEsto ya no se puede deshacer.')) return;
   S.pitems=(S.pitems||[]).filter(x=>x.id!==id);
   render(); srvPItemDeleteIds([id]);
 }
-function pArchVaciar(){
+async function pArchVaciar(){
   const l=pArchivadasMias(); if(!l.length) return;
-  if(!confirm('\u00bfBorrar definitivamente los '+l.length+' apuntes de Hechas?\n\nEsto ya no se puede deshacer.')) return;
+  if(!await lxPregunta('\u00bfBorrar definitivamente los '+l.length+' apuntes de Hechas?\n\nEsto ya no se puede deshacer.')) return;
   const ids=l.map(i=>i.id);
   S.pitems=(S.pitems||[]).filter(x=>ids.indexOf(x.id)<0);
   render(); srvPItemDeleteIds(ids);
@@ -9809,9 +9811,9 @@ function mejMarcar(id, estado){
   const m=(S.mejoras||[]).find(x=>x.id===id); if(!m) return;
   m.estado=estado; render(); srvMejUpdate(id, m);
 }
-function mejBorrar(id){
+async function mejBorrar(id){
   const m=(S.mejoras||[]).find(x=>x.id===id); if(!m) return;
-  if(!confirm('¿Borrar definitivamente esta solicitud de '+m.usuario+'?')) return;
+  if(!await lxPregunta('¿Borrar definitivamente esta solicitud de '+m.usuario+'?')) return;
   S.mejoras=(S.mejoras||[]).filter(x=>x.id!==id);
   render(); srvMejDelete(id);
 }
@@ -10100,9 +10102,9 @@ function juntaPrioVincular(tid){
   const p={ id:juntaId('P'), tareaId:tid, titulo:t.titulo, trim, ts:now(), autor:S.user.nombre };
   S.juntaPrios.push(p); closeModal(); render(); juntaToca(p); toast('Prioridad añadida');
 }
-function juntaPrioQuitar(id){
+async function juntaPrioQuitar(id){
   const p=(S.juntaPrios||[]).find(x=>x.id===id); if(!p) return;
-  if(!confirm('¿Quitar "'+(p.titulo||'esta prioridad')+'" de las prioridades del trimestre?\n\nLa tarea y sus pasos no se borran: siguen en Tareas.')) return;
+  if(!await lxPregunta('¿Quitar "'+(p.titulo||'esta prioridad')+'" de las prioridades del trimestre?\n\nLa tarea y sus pasos no se borran: siguen en Tareas.')) return;
   p.borrado=true; render(); juntaToca(p); toast('Quitada de las prioridades');
 }
 function juntaMarcar(prioId, marca){
@@ -10153,10 +10155,10 @@ function juntaAsuntoMover(id, dir){
   ab.forEach((x,k)=>{ const o=(k+1)*1000; if(x.orden!==o){ x.orden=o; x.upd=juntaUpd(); } });
   render(); juntaGuardar();
 }
-function juntaAsuntoBorrar(id){
+async function juntaAsuntoBorrar(id){
   const a=(S.juntaAsuntos||[]).find(x=>x.id===id); if(!a) return;
   if(!(a.autor===S.user.nombre || isAdmin())){ toast('Solo quien lo apuntó o Dirección puede quitarlo'); return; }
-  if(!confirm('¿Quitar el asunto "'+a.titulo+'" de la lista?')) return;
+  if(!await lxPregunta('¿Quitar el asunto "'+a.titulo+'" de la lista?')) return;
   a.borrado=true; render(); juntaToca(a); toast('Asunto quitado');
 }
 function juntaAsuntoReabrir(id){ const a=(S.juntaAsuntos||[]).find(x=>x.id===id); if(!a) return; a.estado='abierto'; a.orden=juntaOrdenUltimo(); render(); juntaToca(a); toast('Asunto reabierto'); }
@@ -10231,15 +10233,15 @@ function juntaNotaSet(i, v){ const a=juntaActaEnCurso(); if(!a) return; const n=
 function juntaAsistToggle(i){ const a=juntaActaEnCurso(); if(!a) return; const n=juntaPosibles()[i]; if(!n) return; const as=a.asistentes||(a.asistentes=[]); const k=as.indexOf(n); if(k>=0) as.splice(k,1); else as.push(n); render(); juntaToca(a); }
 function juntaPosibles(){ const m=juntaMiembros(); const base=m.length?m.slice():[S.user.nombre]; const a=juntaActaEnCurso(); ((a&&a.asistentes)||[]).forEach(n=>{ if(!base.includes(n)) base.push(n); }); return base; }
 function juntaNotaMedia(a){ const v=Object.values((a&&a.notas)||{}).map(Number).filter(x=>x>=1&&x<=10); return v.length ? Math.round(v.reduce((s,x)=>s+x,0)/v.length*10)/10 : null; }
-function juntaTerminar(){
+async function juntaTerminar(){
   const a=juntaActaEnCurso(); if(!a) return;
-  if(!confirm('¿Terminar la reunión y guardar el acta?')) return;
+  if(!await lxPregunta('¿Terminar la reunión y guardar el acta?')) return;
   juntaAcumular(a); a.cerrada=true; a.fin=now(); a.parteDesde=null;
   S.juntaTab='actas'; S.juntaVerActa=a.id; render(); juntaToca(a); toast('Reunión terminada. Acta guardada.');
 }
-function juntaCancelarReunion(){
+async function juntaCancelarReunion(){
   const a=juntaActaEnCurso(); if(!a) return;
-  if(!confirm('¿Descartar la reunión empezada?\n\nSe quita su acta. Los asuntos resueltos y las tareas creadas se quedan como están.')) return;
+  if(!await lxPregunta('¿Descartar la reunión empezada?\n\nSe quita su acta. Los asuntos resueltos y las tareas creadas se quedan como están.')) return;
   a.borrado=true; render(); juntaToca(a); toast('Reunión descartada');
 }
 /* reloj de la parte en curso: solo cambia el texto, no repinta la pantalla */
@@ -10284,7 +10286,7 @@ function juntaNumGuardar(){
   n.nombre=nombre; n.duena=F.duena||''; n.objetivo=(F.objetivo||'').trim(); n.sentido=F.sentido||'min';
   closeModal(); render(); juntaToca(cfg);
 }
-function juntaNumQuitar(){ const n=((S.juntaCfg&&S.juntaCfg.numeros)||[]).find(x=>x.id===F.id); if(!n) return; if(!confirm('¿Quitar "'+n.nombre+'" de los números de la reunión? Lo apuntado en actas anteriores se conserva.')) return; n.borrado=true; closeModal(); render(); juntaToca(S.juntaCfg); }
+async function juntaNumQuitar(){ const n=((S.juntaCfg&&S.juntaCfg.numeros)||[]).find(x=>x.id===F.id); if(!n) return; if(!await lxPregunta('¿Quitar "'+n.nombre+'" de los números de la reunión? Lo apuntado en actas anteriores se conserva.')) return; n.borrado=true; closeModal(); render(); juntaToca(S.juntaCfg); }
 function juntaNumerosHtml(a, editable){
   const ns=juntaNumeros();
   if(!ns.length) return `<div class="muted" style="padding:6px 2px 10px;font-size:13.5px">Aún no hay números. Añade los que el equipo quiere mirar cada semana (cada uno con su responsable y su objetivo).</div>`;
@@ -10599,9 +10601,9 @@ function juntaActaDetalle(a){
     ${sec('Decisiones', c.dec.length?c.dec.map(x=>`<div class="jt-row"><div style="flex:1;min-width:0"><div class="jt-tit" style="font-size:14px">${incEsc(x.titulo)}</div><div class="jt-sub">→ ${incEsc(x.decision||'')}</div></div></div>`).join(''):vacio)}
     ${sec('Tareas', juntaTareasHtml(a))}`;
 }
-function juntaActaBorrar(id){
+async function juntaActaBorrar(id){
   if(!isAdmin()) return; const a=(S.juntaActas||[]).find(x=>x.id===id); if(!a) return;
-  if(!confirm('¿Quitar esta acta de la lista?')) return;
+  if(!await lxPregunta('¿Quitar esta acta de la lista?')) return;
   a.borrado=true; S.juntaVerActa=null; render(); juntaToca(a);
 }
 function juntaActaImprimir(id){
@@ -10900,7 +10902,7 @@ function manElegirArchivo(){
 async function manSubir(m){
   if(!m || !Array.isArray(m.docs) || !m.docs.length || !m.docs.every(d=>d && d.id && d.tipo && d.titulo!=null)){ toast('Ese archivo no es un manual'); return; }
   const ap=m.docs.filter(d=>d.estado==='aprobado').length;
-  if(!confirm(`Cargar el manual de «${m.clinica||''}» (generado el ${m.generado||'?'}): ${m.docs.length} documentos, ${ap} aprobados.\n\nSustituye al manual que haya ahora en Lucai.`)) return;
+  if(!await lxPregunta(`Cargar el manual de «${m.clinica||''}» (generado el ${m.generado||'?'}): ${m.docs.length} documentos, ${ap} aprobados.\n\nSustituye al manual que haya ahora en Lucai.`)) return;
   MAN.subiendo=true; render();
   try{
     const ahora=new Date().toISOString();
@@ -11529,6 +11531,68 @@ tarCambiarEstado=function(id, v){
   if(v==='Hecha'){ const t=(S.tareas||[]).find(x=>x.id===id); if(t){ lxConfirmarHecha(t, ()=>{ lxCerrarDetSi(id); tarMarcar(id,'Hecha'); }, ()=>render()); return; } }
   tarMarcar(id, v);
 };
+
+/* ============================================================
+   LUCAI · VENTANAS PROPIAS EN TODA LA APP (24/10/2026, David: «revísalo en todos lados»)
+   lxDialogo() es la ventana común; lxPregunta() sustituye a confirm() y lxPedir() a prompt().
+   Las de borrar/eliminar/quitar/descartar salen en rojo. Esc o tocar fuera = cancelar; Intro = el botón principal.
+   ============================================================ */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css10">
+.lx-cf .ic.peligro{background:var(--lx-rojo-s);color:var(--lx-rojo)}
+.lx-cf .ic.pregunta{background:var(--lx-azul-s);color:var(--lx-azul)}
+.lx-cf .peligro.btn{background:#D92D20;color:#fff}
+.lx-cf .peligro.btn:hover{background:#B42318}
+.lx-cf .azul.btn{background:var(--lx-acc);color:#fff}
+.lx-cf .azul.btn:hover{background:var(--lx-acc2)}
+.lx-cf p{white-space:pre-line}
+.lx-cf .inp{width:100%;margin-top:12px}
+.lx-cf .bt{flex-wrap:wrap}
+</style>`);
+const LX_IC_TRASH='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg>';
+const LX_IC_PREG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5"/><path d="M12 18h.01"/></svg>';
+/* o: {titulo, texto, detalle, tipo:'ok'|'peligro'|'pregunta', botones:[{k,label,cls}], input:{valor,placeholder}}
+   devuelve una promesa con la k del botón pulsado (o el texto escrito si hay input) o null si se cancela */
+function lxDialogo(o){
+  return new Promise(resolve=>{
+    const prev=document.getElementById('lxConfirm'); if(prev){ prev.remove(); }
+    const tipo=o.tipo||'pregunta';
+    const ic=tipo==='peligro'?LX_IC_TRASH:(tipo==='ok'?LX_IC_CHECK:LX_IC_PREG);
+    const bts=o.botones||[{k:null,label:'Cancelar'},{k:true,label:'Aceptar',cls:tipo==='peligro'?'peligro':(tipo==='ok'?'ok':'azul')}];
+    const ov=document.createElement('div'); ov.id='lxConfirm'; ov.className='lx-cf-ov';
+    ov.innerHTML=`<div class="lx-cf" role="dialog" aria-modal="true"><div class="ic ${tipo}">${ic}</div><h3>${incEsc(o.titulo||'¿Seguro?')}</h3>${o.texto?`<p>${incEsc(o.texto)}</p>`:''}${o.detalle?`<div class="tt">${incEsc(o.detalle)}</div>`:''}
+      ${o.input?`<input class="inp" id="lxCfIn" value="${incEsc(o.input.valor||'')}" placeholder="${incEsc(o.input.placeholder||'')}">`:''}
+      <div class="bt">${bts.map((b,i)=>`<button class="btn ${b.cls||'btn-ghost'}" data-i="${i}">${incEsc(b.label)}</button>`).join('')}</div></div>`;
+    const principal=bts.length-1;
+    const fin=(i)=>{ document.removeEventListener('keydown',tecla,true); ov.remove();
+      if(i===null || bts[i].k===null || bts[i].k===undefined){ resolve(null); return; }
+      if(o.input){ const v=(ov.querySelector('#lxCfIn')||{}).value; resolve(v==null?'':v); return; }
+      resolve(bts[i].k); };
+    const tecla=(e)=>{ if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); fin(null); } else if(e.key==='Enter'){ e.preventDefault(); e.stopPropagation(); fin(principal); } };
+    ov.addEventListener('click',e=>{ if(e.target===ov){ fin(null); return; } const b=e.target.closest('[data-i]'); if(b) fin(+b.getAttribute('data-i')); });
+    document.addEventListener('keydown',tecla,true);
+    document.body.appendChild(ov);
+    setTimeout(()=>{ const inp=ov.querySelector('#lxCfIn'); if(inp){ inp.focus(); inp.select(); } else { const b=ov.querySelector(`[data-i="${principal}"]`); if(b) b.focus(); } },20);
+  });
+}
+/* la ventana de «hecha» usa la misma base */
+function lxConfirm(o){
+  lxDialogo({titulo:o.titulo, texto:o.texto, detalle:o.detalle, tipo:'ok', botones:[{k:null,label:o.no||'Cancelar'},{k:true,label:o.si||'Aceptar',cls:'ok'}]})
+    .then(r=>{ if(r){ if(o.onSi) o.onSi(); } else if(o.onNo) o.onNo(); });
+}
+/* sustituto de confirm(): el texto de siempre se reparte en título (la pregunta) y explicación */
+function lxPregunta(msg){
+  const partes=String(msg||'').split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
+  let ti=partes.findIndex(x=>x.includes('?')); if(ti<0) ti=0;
+  const titulo=partes[ti]||'¿Seguro?'; const texto=partes.filter((_,i)=>i!==ti).join('\n\n');
+  const verbo=(titulo.match(/(borrar|eliminar|quitar|descartar)/i)||[])[1];
+  const peligro=!!verbo || /no se puede deshacer/i.test(msg);
+  const lbl=verbo ? (verbo.charAt(0).toUpperCase()+verbo.slice(1).toLowerCase()) : 'Aceptar';
+  return lxDialogo({titulo, texto, tipo:peligro?'peligro':'pregunta', botones:[{k:null,label:'Cancelar'},{k:true,label:peligro?('Sí, '+lbl.toLowerCase()):lbl,cls:peligro?'peligro':'azul'}]}).then(r=>!!r);
+}
+/* sustituto de prompt(): devuelve el texto o null si se cancela */
+function lxPedir(msg, valor){
+  return lxDialogo({titulo:String(msg||'').replace(/:\s*$/,''), tipo:'pregunta', input:{valor:valor||''}, botones:[{k:null,label:'Cancelar'},{k:true,label:'Guardar',cls:'azul'}]});
+}
 
 boot();
 
