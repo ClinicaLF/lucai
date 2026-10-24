@@ -966,7 +966,7 @@ function resetIdle(){
 const APP_VERSION = 'v2026.06.11-13';  // fallback; el pie real se sella solo desde la fecha del archivo subido (ver lucaiStampVersion)
 var _lucaiVerLabel = APP_VERSION;      // versión que ESTE equipo está ejecutando (se congela al cargar)
 const MODULES = [
-  {id:'material', nombre:'Control de material', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
+  {id:'material', nombre:'Almacén', ini:'M', desc:'Almacén único de toda la clínica: stock, avisos de pedido, proveedores, movimientos y valor almacenado.', estado:'activo'},
   {id:'tareas', nombre:'Tareas', ini:'T', desc:'Tareas que van surgiendo en la clínica: qué hay que hacer, quién es responsable, estado y seguimiento.', estado:'pronto'},
   {id:'documentos', nombre:'Documentos', ini:'D', desc:'Consentimientos, dosieres y documentos para entregar al paciente. Descarga e impresión directa.', estado:'pronto'},
   {id:'equipos', nombre:'Mantenimiento de equipos', ini:'E', desc:'Averías y reparaciones por equipo: histórico, nº de incidencias y estado.', estado:'pronto'},
@@ -1037,7 +1037,7 @@ function materialView(){
       <button class="btn btn-ghost" onclick="openModal('entrada')">Entrada directa</button>
       <button class="btn btn-ghost" onclick="openModal('merma')">Pérdida / baja</button>
     </div>`;
-  return `${moduleHeader('Control de material', true)}
+  return `${moduleHeader('Almacén', true)}
   <main><div class="wrap">
     <div class="toolbar" style="margin-bottom:14px">
       <div><div class="section-title">Almacén</div>
@@ -1163,6 +1163,7 @@ function stockView(){
   const totalArt=activeArts().length;
   const pedir=lowItems().length;
   const valor=activeArts().reduce((s,a)=>s+a.stock*(a.cost||0),0);
+  const lxHayCad=activeArts().some(a=>a.caduca);
   const catSel=`<select class="fh" onchange="setStockCat(this.value)"><option value="">Todas las categorías</option>${cats.map(c=>`<option ${S.stockCat===c?'selected':''}>${c}</option>`).join('')}</select>`;
   const rows = list.length ? list.map(a=>{
     const est=estadoOf(a);
@@ -1175,11 +1176,9 @@ function stockView(){
     return `<tr>
       <td data-label="Artículo"><strong>${a.nombre}</strong> <span class="muted mono">${a.cod}</span>${a.trazable?' <span class="tag" style="background:var(--t-bg-5A6770);color:var(--t-fg-FFFFFF)">paciente</span>':''}</td>
       <td data-label="Categoría">${a.categoria}</td>
-      <td data-label="Proveedor">${a.proveedor||'<span class="muted">—</span>'}</td>
-      <td data-label="Stock" class="mono" style="font-weight:700">${a.stock}</td>
+      <td data-label="Stock" class="mono${(est==='SIN STOCK'||est==='PEDIR')?' lx-rojo':''}" style="font-weight:700">${a.stock}</td>
       <td data-label="Mínimo" class="mono muted">${a.min}</td>
-      <td data-label="Caduca">${cadCell}</td>
-      <td data-label="Estado">${est==='Sin aviso'?'<span class="muted">Sin aviso</span>':`<span class="tag ${cls}">${est}</span>`}</td>
+      ${lxHayCad?`<td data-label="Caduca">${cadCell}</td>`:''}
       <td data-label="Salida">${a.trazable
         ? `<button class="btn btn-ghost btn-sm" onclick="openSalida('${a.cod}')" ${a.stock<=0?'disabled':''}>Salida</button>`
         : `<button class="btn btn-ghost btn-sm" onclick="quickOut('${a.cod}')" ${a.stock<=0?'disabled':''} title="Descontar 1 (genérico)">−1</button>`}<button class="lx-ed" onclick="openEdit('${a.cod}')" title="Editar artículo">${LX_IC_EDIT}</button></td>
@@ -1217,12 +1216,12 @@ function stockView(){
         <input id="stkQ" class="fh" style="min-width:200px" placeholder="Buscar artículo o código…" value="${S.stockQuery}" oninput="setStockQuery(this.value)">
         ${catSel}
         <button class="lx-pill${S.stockPedir?' on':''}${pedir?' rojo':''}" onclick="toggleStockPedir()" title="Ver solo lo que hay que pedir"><b>${pedir}</b>por pedir</button>
-        <span class="lx-mres">${totalArt} artículos${isAdmin()?' · '+eur(valor):''}</span>
+        <span class="lx-mres">${totalArt} artículos</span>
       </div>
       
     </div>
     <div class="matrix alm-desk"><table>
-      <thead><tr><th>Artículo</th><th>Categoría</th><th>Proveedor</th><th>Stock</th><th>Mínimo</th><th>Caduca</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>Artículo</th><th>Categoría</th><th>Stock</th><th>Mínimo</th>${lxHayCad?'<th>Caduca</th>':''}<th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div class="alm-cards">${cards}</div>`;
@@ -1700,13 +1699,13 @@ function commitArticulo(){
   closeModal(); S.sub='arts'; render(); toast('Artículo creado');
 }
 function articleModalContent(){
-  const valid=(F.acod||'').trim() && (F.anombre||'').trim() && F.acat;
+  const valid=(F.anombre||'').trim() && F.acat;
   return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Nuevo artículo</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="note" style="margin-top:0">Una sola ficha para cualquier tipo de material. El stock se cuenta en unidades (si una caja la tratas como 1, la registras como 1).</div>
       <div class="grid2">
-        <div class="fld" style="margin-top:0"><label>Código</label><input class="inp" placeholder="Ej. FUN-010" value="${F.acod}" oninput="setInp('acod',this.value);artDupCheck()"></div>
+        <div class="fld" style="margin-top:0"><label>Código</label><input class="inp" placeholder="Vacío = se pone solo (A001…)" value="${F.acod}" oninput="setInp('acod',this.value);artDupCheck()"></div>
         <div class="fld" style="margin-top:0"><label>Categoría</label><select class="inp" onchange="if(this.value==='__nueva__'){almCatNueva('acat')}else{setSel('acat',this.value)}">${catOptions(F.acat)}<option value="__nueva__">＋ Nueva familia…</option></select></div>
       </div>
       <div class="fld"><label>Nombre</label><input class="inp" placeholder="Nombre del artículo" value="${F.anombre}" oninput="setInp('anombre',this.value);artDupCheck()"></div>
@@ -1729,7 +1728,7 @@ function articleModalContent(){
         <button class="chip-sel ${F.atraz?'on':''}" onclick="setToggle('atraz',true)">Importante · con paciente y doctor</button>
         <button class="chip-sel ${!F.atraz?'on':''}" onclick="setToggle('atraz',false)">Genérico · descuento rápido (−1)</button>
         <div class="hint" style="text-align:left">Importante (implantes, blanqueamientos, RMR, férulas…): la salida pide paciente y doctor. Genérico (fungible): se descuenta con un toque desde el stock.</div></div>
-      <div class="req-note ${valid?'okk':''}">${valid?'✓ Listo para crear.':'! Código, nombre y categoría son obligatorios.'}</div>
+      <div class="req-note ${valid?'okk':''}">${valid?'✓ Listo para crear.':'! Nombre y categoría son obligatorios (el código se pone solo si lo dejas vacío).'}</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" ${valid?'':'disabled'} onclick="commitArticulo()">Crear artículo</button></div>
@@ -1914,7 +1913,7 @@ function stockMoveModal(){
         <span>Registrando como <strong>${S.user.nombre}</strong></span></div>
       <div class="grid2" style="grid-template-columns:1fr 110px;margin-top:0">
         <div class="fld" style="margin-top:0"><label>Artículo</label>
-          <select class="inp" onchange="setSel('cod',this.value)">${artOptions(F.cod, F.type!=='entrada')}</select></div>
+          ${lxArtPicker(F.type!=='entrada')}</div>
         <div class="fld" style="margin-top:0"><label>Cantidad</label><input class="inp" type="number" min="1" value="${F.cant}" oninput="setInp('cant',this.value)"></div>
       </div>
       ${a?`<div class="hint" style="text-align:left;margin-top:6px">En stock ahora: ${a.stock} ud.</div>`:''}
@@ -2261,7 +2260,7 @@ function artDupCheck(){
   e.innerHTML = msg;
 }
 async function commitArticulo(){
-  const cod=(F.acod||'').trim().toUpperCase();
+  const cod=(F.acod||'').trim().toUpperCase()||lxCodAuto();
   const nombre=(F.anombre||'').trim();
   if(!cod||!nombre||!F.acat){ toast('Código, nombre y categoría son obligatorios'); return; }
   if(art(cod)){ toast('Ese código ya existe. Cambia el código.'); return; }
@@ -11306,7 +11305,7 @@ function lxHomeTop(){
   const ring=`<div class="lx-ring" title="Hechas hoy / para hoy"><svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${R}" fill="none" stroke="var(--arena-2)" stroke-width="5"/><circle cx="28" cy="28" r="${R}" fill="none" stroke="#16A34A" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/></svg><span>${tot?`${hechasHoy}/${tot}`:'✓'}</span></div>`;
   const tiles=[];
   const tile=(id,lbl,txt,rojo)=>{ const ic=(typeof TB_IC==='object'&&TB_IC[id])?`<svg viewBox="0 0 24 24">${TB_IC[id]}</svg>`:''; return `<button class="lx-tile" onclick="setModule('${id}')"><span class="ic">${ic}</span><span><b>${lbl}</b><small class="${rojo?'rojo':''}">${txt}</small></span></button>`; };
-  try{ if(canAccess('material')){ const n=lowItems().length; tiles.push(tile('material','Material', n?`${n} bajo mínimo`:'Todo en orden', n>0)); } }catch(_){}
+  try{ if(canAccess('material')){ const n=lowItems().length; tiles.push(tile('material','Almacén', n?`${n} bajo mínimo`:'Todo en orden', n>0)); } }catch(_){}
   try{ if(canAccess('incidencias')){ const n=(S.incidencias||[]).filter(x=>!x.revisada).length; tiles.push(tile('incidencias','Incidencias', n?`${n} sin revisar`:'Nada pendiente', n>0)); } }catch(_){}
   try{ if(canAccess('equipos')){ const n=(S.partes||[]).filter(eqAbierto).length; tiles.push(tile('equipos','Equipos', n?`${n} parte${n===1?'':'s'} abierto${n===1?'':'s'}`:'Sin partes abiertos', false)); } }catch(_){}
   try{ if(canAccess('junta')){ const d=juntaProxima(); const f=d?new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'}).replace('.',''):''; tiles.push(tile('junta','Reunión', f?`${f} · ${(S.juntaCfg&&S.juntaCfg.hora)||''}`:'Sin fecha', false)); } }catch(_){}
@@ -11321,7 +11320,7 @@ function lxHomeTop(){
 /* ---------- menú lateral (ordenador) ---------- */
 function lxRailHTML(){
   const ids=['tareas','material','junta','incidencias','equipos','manual'].filter(id=>{ try{ return canAccess(id) && MODULES.some(m=>m.id===id && m.estado!=='pronto'); }catch(_){ return false; } });
-  const LBL={tareas:'Tareas',material:'Material',junta:'Reunión',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
+  const LBL={tareas:'Tareas',material:'Almacén',junta:'Reunión',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
   const it=(lbl,ic,on,click,b)=>`<button class="lx-it${on?' on':''}" onclick="${click}" title="${lbl}">${b?`<span class="lx-b">${b>99?'99+':b}</span>`:''}<svg viewBox="0 0 24 24">${ic||''}</svg>${lbl}</button>`;
   let h=`<button class="lx-logo" onclick="S.tbMore=false;goHome()" title="Inicio">L</button>`;
   h+=it('Inicio',TB_IC.inicio,!S.module,'S.tbMore=false;goHome()',0);
@@ -11663,10 +11662,10 @@ materialView=function(){
       <button class="btn btn-ghost" onclick="openModal('merma')">Baja</button>
       <div class="lx-masw"><button class="btn btn-ghost lx-masb" onclick="S.lxMas=!S.lxMas;S.lxEnt=false;render()" title="Más opciones">⋯</button>${S.lxMas?`<div class="lx-menu-ov" onclick="S.lxMas=false;render()"></div><div class="lx-menu" onclick="S.lxMas=false"><button onclick="openModal('articulo')">＋ Nuevo artículo</button><button onclick="exportStock()">Exportar a Excel</button></div>`:''}</div>
     </div>`;
-  return `${moduleHeader('Control de material', true)}
+  return `${moduleHeader('Almacén', true)}
   <main class="lx-tar lx-mat"><div class="wrap">
     <div class="toolbar" style="margin-bottom:14px">
-      <div><div class="section-title">Material</div></div>
+      <div><div class="section-title">Almacén</div></div>
       ${acts}
     </div>
     ${seg}
@@ -11708,6 +11707,68 @@ document.head.insertAdjacentHTML('beforeend', `<style id="lx-css12">
 }
 .lx-mat .wrap{max-width:1440px}
 </style>`);
+
+/* ============================================================
+   LUCAI · ALMACÉN MÁS SENCILLO (24/10/2026, David eligió los puntos 1 a 7)
+   1) Ya no salta la ventana «Pendiente de pedir» al entrar (quedan la campana y la píldora «por pedir»).
+   2) Un solo nombre: Almacén.  3) Sin columna Estado: el stock sale en rojo cuando hay que pedir.
+   4) Sin columna Proveedor (está en la ficha); Caduca solo si algún artículo tiene fecha.
+   5) El valor del almacén, solo en Informes.  6) Buscador para elegir el artículo en Salida, Entrada y Baja.
+   7) Código automático (A001, A002…) si se deja vacío al crear un artículo.
+   ============================================================ */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css13">
+.lx-mat .alm-desk th,.lx-mat .alm-desk td{text-align:left}
+.lx-mat .alm-desk th:nth-child(2),.lx-mat .alm-desk td:nth-child(2){width:18%}
+.lx-mat .alm-desk th:nth-child(3),.lx-mat .alm-desk td:nth-child(3){width:70px;text-align:right;color:var(--ink);font-size:13px}
+.lx-mat .alm-desk th:nth-child(4),.lx-mat .alm-desk td:nth-child(4){width:70px;text-align:right}
+.lx-mat .alm-desk th:nth-child(5),.lx-mat .alm-desk td:nth-child(5){width:130px}
+.lx-mat .alm-desk th:last-child,.lx-mat .alm-desk td:last-child{width:118px;text-align:right}
+.lx-mat .alm-desk td.lx-rojo{color:var(--alert) !important}
+.lx-pick-sel{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--arena-1);min-width:0}
+.lx-pick-sel b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lx-pick-list{margin-top:6px;max-height:230px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;background:var(--white)}
+.lx-pick-list button{display:flex;justify-content:space-between;gap:10px;width:100%;border:none;border-bottom:1px solid var(--line);background:none;padding:8px 10px;text-align:left;cursor:pointer;font-family:inherit;font-size:13px;color:var(--ink)}
+.lx-pick-list button:last-child{border-bottom:none}
+.lx-pick-list button:hover,.lx-pick-list button.lx-pf{background:var(--lx-accs)}
+.lx-pick-list button b{font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lx-pick-list button span{color:var(--grey-2);white-space:nowrap;font-size:12px}
+.lx-pick-none{padding:10px;color:var(--grey-2);font-size:13px}
+.modal .grid2>.fld{min-width:0}
+.lx-pick-list button b{flex:1 1 auto}
+.lx-pick-list button span{flex:0 0 auto}
+#lxPickQ{width:100%}
+@media(max-width:720px){ .modal .grid2[style*="1fr 110px"]{grid-template-columns:1fr !important} }
+</style>`);
+/* 1) sin ventana automática de «Pendiente de pedir» al entrar */
+(function(){
+  const _sm=setModule;
+  setModule=function(id){ _sm.apply(this, arguments); if(id==='material' && S.alert==='pedir'){ S.alert=''; render(); } };
+})();
+/* 6) elegir artículo escribiendo */
+function lxNormTxt(s){ return (s||'').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function lxArtPicker(soloConStock){
+  const a=F.cod?art(F.cod):null;
+  if(a) return `<div class="lx-pick-sel"><b title="${incEsc(a.nombre)}">${incEsc(a.nombre)}</b><span class="muted mono" style="font-size:12px">${incEsc(a.cod)}</span><button type="button" class="btn btn-ghost btn-sm" onclick="F.cod='';render();setTimeout(function(){var i=document.getElementById('lxPickQ'); if(i) i.focus();},30)">Cambiar</button></div>`;
+  let xs=activeArts(); if(soloConStock) xs=xs.filter(x=>x.stock>0);
+  xs=xs.slice().sort((x,y)=>String(x.nombre).localeCompare(String(y.nombre),'es'));
+  const items=xs.map(x=>`<button type="button" data-c="${incEsc(x.cod)}" data-q="${incEsc(lxNormTxt(x.nombre+' '+x.cod+' '+x.categoria))}" onclick="setSel('cod',this.dataset.c)"><b>${incEsc(x.nombre)}</b><span>${incEsc(x.cod)} · ${x.stock} ud.</span></button>`).join('');
+  return `<input id="lxPickQ" class="inp" placeholder="Escribe nombre o código…" autocomplete="off" oninput="lxPickFiltra(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();var b=document.querySelector('#lxPickL button.lx-pf');if(b)b.click();}">
+    <div class="lx-pick-list" id="lxPickL">${items||'<div class="lx-pick-none">No hay artículos'+(soloConStock?' con stock':'')+'.</div>'}</div>`;
+}
+function lxPickFiltra(q){
+  q=lxNormTxt(q).trim(); let n=0, first=null;
+  document.querySelectorAll('#lxPickL button').forEach(b=>{ const ok=!q||q.split(/\s+/).every(p=>b.dataset.q.includes(p)); b.style.display=ok?'':'none'; b.classList.remove('lx-pf'); if(ok){ n++; if(!first) first=b; } });
+  if(first && q) first.classList.add('lx-pf');
+  let none=document.getElementById('lxPickNone');
+  if(!n){ if(!none){ none=document.createElement('div'); none.id='lxPickNone'; none.className='lx-pick-none'; none.textContent='Nada coincide con lo escrito.'; const l=document.getElementById('lxPickL'); if(l) l.appendChild(none); } }
+  else if(none) none.remove();
+}
+/* 7) código automático */
+function lxCodAuto(){
+  let max=0; (S.articulos||[]).forEach(a=>{ const m=/^A(\d+)$/.exec(String(a.cod||'')); if(m) max=Math.max(max,parseInt(m[1],10)); });
+  let n=max+1, c; do { c='A'+String(n).padStart(3,'0'); n++; } while(art(c));
+  return c;
+}
 
 boot();
 
