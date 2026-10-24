@@ -769,7 +769,8 @@ async function persistNow(){
   // mezclo lo que ya hay en BD con los campos que sí gestionamos desde aquí,
   // para no sobreescribir nada que viva en lucai_estado y no esté en ESTADO_FIELDS.
   try {
-    const { data: prev } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
+    const { data: prev, error: errPrev } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
+    if (errPrev) throw errPrev;
     const base = (prev && prev.data) ? prev.data : {};
     const payload = Object.assign({}, base);
     ESTADO_FIELDS.forEach(f=>{ if(S[f]!==undefined) payload[f] = S[f]; });
@@ -8750,13 +8751,14 @@ function tarFormChecklistHtml(){
   const chk=Array.isArray(F.checklist)?F.checklist:[];
   const filas=chk.map((c,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
       <span style="color:#B8A88F">•</span>
-      <span style="flex:1;font-size:13.5px;color:#333F48">${incEsc(c.texto)}</span>
+      <span style="flex:1;font-size:13.5px;color:#333F48">${incEsc(c.texto)}${c.fecha?` <span class="muted" style="font-size:12px">· ${incEsc(fmtFecha(c.fecha))}</span>`:''}</span>
       <button type="button" onclick="tarFormChkDel(${i})" title="Quitar" style="width:18px;height:18px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:12px;line-height:1;cursor:pointer">×</button>
     </div>`).join('');
   return `<div class="fld"><label>Subtareas <span class="muted" style="font-weight:400">(opcional · puntos para marcar dentro de la tarea)</span></label>
     ${filas}
-    <div style="display:flex;gap:8px;align-items:center${chk.length?';margin-top:4px':''}">
-      <input class="inp" style="flex:1" placeholder="Añadir subtarea…" value="${incEsc(F.chkDraft||'')}" oninput="setInp('chkDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarFormChkAdd();}">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap${chk.length?';margin-top:4px':''}">
+      <input class="inp" style="flex:1;min-width:180px" placeholder="Añadir subtarea…" value="${incEsc(F.chkDraft||'')}" oninput="setInp('chkDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarFormChkAdd();}">
+      <input class="inp" type="date" title="Fecha (opcional)" style="width:150px;flex:0 0 auto" value="${incEsc(F.chkFecha||'')}" oninput="setInp('chkFecha',this.value)">
       <button type="button" class="btn btn-ghost btn-sm" onclick="tarFormChkAdd()">Añadir</button>
     </div>
   </div>`;
@@ -8765,8 +8767,9 @@ function tarFormChkAdd(){
   const v=(F.chkDraft||'').trim();
   if(!v){ toast('Escribe la subtarea'); return; }
   if(!Array.isArray(F.checklist)) F.checklist=[];
-  F.checklist.push({ id:uid(), texto:v, hecho:false });
-  F.chkDraft=''; render();
+  const it={ id:uid(), texto:v, hecho:false }; if(F.chkFecha) it.fecha=F.chkFecha;
+  F.checklist.push(it);
+  F.chkDraft=''; F.chkFecha=''; render();
 }
 function tarFormChkDel(i){
   if(!Array.isArray(F.checklist)) return;
@@ -8789,11 +8792,13 @@ function tarChecklistHtml(t){
         <div style="font-size:14px;color:${c.hecho?'#8A949B':'#333F48'};${c.hecho?'text-decoration:line-through;':''}word-break:break-word">${incEsc(c.texto)}</div>
         ${c.hecho&&c.por?`<div class="muted" style="font-size:11px;margin-top:1px">✔ ${incEsc(c.por)} · ${incEsc(fmtFecha(c.ts||''))}</div>`:''}
       </div>
+      ${puede&&!c.hecho?`<input type="date" class="inp" title="Fecha del paso (opcional)" value="${incEsc(c.fecha||'')}" onchange="tarChkSetFecha('${t.id}','${c.id}',this.value)" style="flex:0 0 auto;width:138px;padding:3px 6px;font-size:12.5px${c.fecha&&c.fecha<todayStr()?';color:#C0392B;border-color:#C0392B':''}">`:(c.fecha?`<span class="muted" style="flex:0 0 auto;font-size:12px;margin-top:3px">${incEsc(fmtFecha(c.fecha))}</span>`:'')}
       ${puede?`<button type="button" onclick="tarChkDelItem('${t.id}','${c.id}')" title="Quitar" style="width:18px;height:18px;border-radius:50%;background:#F4F0E9;color:#8A949B;border:none;font-size:12px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:3px">×</button>`:''}
     </div>`).join('');
   const vacio=`<div class="muted" style="padding:14px 2px;font-size:13.5px">Esta tarea no tiene subtareas. Añade puntos concretos para ir marcándolos según avances.</div>`;
-  const alta = puede ? `<div style="display:flex;gap:8px;align-items:center;margin-top:12px">
-      <input class="inp" style="flex:1" placeholder="Añadir subtarea…" value="${incEsc(F.chkDraft||'')}" oninput="setInp('chkDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarChkAdd('${t.id}');}">
+  const alta = puede ? `<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+      <input class="inp" style="flex:1;min-width:180px" placeholder="Añadir subtarea…" value="${incEsc(F.chkDraft||'')}" oninput="setInp('chkDraft',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();tarChkAdd('${t.id}');}">
+      <input class="inp" type="date" title="Fecha (opcional)" style="width:150px;flex:0 0 auto" value="${incEsc(F.chkFecha||'')}" oninput="setInp('chkFecha',this.value)">
       <button type="button" class="btn btn-ghost btn-sm" onclick="tarChkAdd('${t.id}')">Añadir</button>
     </div>` : '';
   return `<div style="padding:2px 2px 6px">${barra}${chk.length?filas:vacio}${alta}</div>`;
@@ -8810,8 +8815,15 @@ function tarChkAdd(tid){
   const v=(F.chkDraft||'').trim();
   if(!v){ toast('Escribe la subtarea'); return; }
   if(!Array.isArray(t.checklist)) t.checklist=[];
-  t.checklist.push({ id:uid(), texto:v, hecho:false });
-  F.chkDraft=''; render(); srvTarUpdate(tid, t);
+  const it={ id:uid(), texto:v, hecho:false }; if(F.chkFecha) it.fecha=F.chkFecha;
+  t.checklist.push(it);
+  F.chkDraft=''; F.chkFecha=''; render(); srvTarUpdate(tid, t);
+}
+function tarChkSetFecha(tid, cid, v){
+  const t=(S.tareas||[]).find(x=>x.id===tid); if(!t||!Array.isArray(t.checklist)) return;
+  const c=t.checklist.find(x=>x&&x.id===cid); if(!c) return;
+  if(v) c.fecha=v; else delete c.fecha;
+  render(); srvTarUpdate(tid, t);
 }
 function tarChkDelItem(tid, cid){
   const t=(S.tareas||[]).find(x=>x.id===tid); if(!t||!Array.isArray(t.checklist)) return;
@@ -9784,6 +9796,712 @@ setModule = function(id){
   if(id==='tareas'){ clearTimeout(window._avisoTarShowT); window._avisoTarShowT=setTimeout(lucaiAvisoTareas, 700); }
 };
 /* ===== FIN AVISO TAREAS ===== */
+
+/* ============================================================
+   LUCAI · REUNIÓN SEMANAL (equipo de dirección)
+   Prioridades del trimestre, asuntos pendientes, tareas que salen
+   de la reunión y acta. Sin SQL: se guarda en lucai_estado
+   (juntaCfg, juntaPrios, juntaAsuntos, juntaActas). Antes de guardar
+   se relee la fila y se fusiona elemento a elemento (gana el más
+   reciente), para no pisar lo que haya apuntado otra persona.
+   Nunca se borra nada: lo quitado queda marcado (borrado:true).
+   Las prioridades y las tareas que salen son tareas normales.
+   ============================================================ */
+const JUNTA_PARTES=[
+  {id:'buenas', nombre:'Buenas noticias o aprendizajes', corto:'Buenas noticias', min:5},
+  {id:'numeros', nombre:'Números', corto:'Números', min:5},
+  {id:'prios', nombre:'Prioridades', corto:'Prioridades', min:5},
+  {id:'titulares', nombre:'Titulares', corto:'Titulares', min:5},
+  {id:'tareas', nombre:'Tareas de la semana anterior', corto:'Tareas', min:5},
+  {id:'asuntos', nombre:'Asuntos pendientes', corto:'Asuntos', min:60},
+  {id:'cierre', nombre:'Cierre', corto:'Cierre', min:5}
+];
+const JUNTA_KEYS=['juntaPrios','juntaAsuntos','juntaActas'];
+const JUNTA_DIAS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+/* estado semanal de cada prioridad: verde avanza, amarillo con cuidado, rojo bloqueada (pasa a asuntos) */
+const JUNTA_MARCAS={ verde:{txt:'Avanza', col:'#6E8E00', bg:'#EAF1D8', fg:'#3f5400'}, amarillo:{txt:'Con cuidado', col:'#D4A017', bg:'#FBF0D2', fg:'#7A5B00'}, rojo:{txt:'Bloqueada', col:'#C0392B', bg:'#F8E1DE', fg:'#9B2C20'} };
+function juntaMarcaNorm(m){ return m==='bien' ? 'amarillo' : (m==='mal' ? 'rojo' : m); }
+if(!S.juntaCfg || typeof S.juntaCfg!=='object') S.juntaCfg={miembros:[], dia:3, hora:'12:00', numeros:[]};
+JUNTA_KEYS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
+
+(function(){
+  if(!MODULES.find(x=>x.id==='junta')){
+    MODULES.push({ id:'junta', ini:'R', nombre:'Reunión semanal',
+      desc:'La reunión del equipo de dirección: prioridades del trimestre, asuntos pendientes, tareas que salen y acta.',
+      estado:'activo' });
+  }
+})();
+function juntaMiembros(){ return (S.juntaCfg && Array.isArray(S.juntaCfg.miembros)) ? S.juntaCfg.miembros : []; }
+function juntaEsMiembro(){ return !!(S.user && juntaMiembros().includes(S.user.nombre)); }
+const _canAccess_junta = canAccess;
+canAccess = function(id){ if(id==='junta') return !!S.user && (juntaEsMiembro() || _canAccess_junta(id)); return _canAccess_junta(id); };
+
+/* ---- persistencia (lucai_estado, fusionando) ---- */
+function juntaUpd(){ return new Date().toISOString(); }
+function juntaId(p){ return p+Date.now().toString(36)+Math.floor(Math.random()*1000); }
+function juntaMerge(loc, rem){
+  const m=new Map();
+  (Array.isArray(rem)?rem:[]).forEach(x=>{ if(x&&x.id) m.set(x.id,x); });
+  (Array.isArray(loc)?loc:[]).forEach(x=>{ if(!x||!x.id) return; const r=m.get(x.id); if(!r || String(x.upd||'')>String(r.upd||'')) m.set(x.id,x); });
+  return [...m.values()];
+}
+function juntaAplicar(d){
+  if(!d) return;
+  if(d.juntaCfg && typeof d.juntaCfg==='object' && String(d.juntaCfg.upd||'')>String(S.juntaCfg.upd||'')) S.juntaCfg=d.juntaCfg;
+  JUNTA_KEYS.forEach(k=>{ S[k]=juntaMerge(S[k], d[k]); });
+}
+function juntaFirma(){ try{ return JSON.stringify([S.juntaCfg].concat(JUNTA_KEYS.map(k=>S[k]))); }catch(_){ return ''; } }
+async function juntaCargar(){
+  try{
+    const { data, error } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
+    if(error) throw error;
+    juntaAplicar(data && data.data); S.juntaOk=true;
+  }catch(e){ console.error('juntaCargar', e); }
+}
+const _loadFromDB_junta = loadFromDB;
+loadFromDB = async function(){
+  await _loadFromDB_junta();
+  if(!S.juntaOk || S.module==='junta') await juntaCargar();
+};
+let _juntaCola = Promise.resolve();
+function juntaGuardar(){ _juntaCola = _juntaCola.then(juntaGuardarYa, juntaGuardarYa); return _juntaCola; }
+async function juntaGuardarYa(){
+  if(!DEVICE) return;
+  const antes=juntaFirma();
+  try{
+    const { data: prev, error: e1 } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
+    if(e1) throw e1;
+    // si no se puede leer la fila (sin sesión, sin conexión) no se escribe nada: así nunca se pisa lo que hay
+    if(!prev || !prev.data || typeof prev.data!=='object') throw new Error('no se pudo leer lo guardado');
+    juntaAplicar(prev.data);
+    const payload = Object.assign({}, prev.data, { juntaCfg:S.juntaCfg });
+    JUNTA_KEYS.forEach(k=>{ payload[k]=S[k]; });
+    const { error } = await sbc.from('lucai_estado').upsert({ clinica: CLINICA, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'clinica' });
+    if(error) throw error;
+    S.juntaError=false;
+  }catch(e){
+    console.error('juntaGuardar', e); S.juntaError=true;
+    toast('No se ha podido guardar en la reunión. Revisa la conexión y vuelve a intentarlo.');
+  }
+  if(juntaFirma()!==antes || S.juntaError) render();
+}
+function juntaToca(o){ if(o) o.upd=juntaUpd(); juntaGuardar(); }
+
+/* ---- fechas y trimestres ---- */
+function juntaTrim(iso){ const d=tarDParse(iso||todayStr()); return d.getFullYear()+'-T'+(Math.floor(d.getMonth()/3)+1); }
+function juntaTrimLbl(k){ const p=String(k).split('-T'); return (['','1er','2º','3er','4º'][+p[1]]||'')+' trimestre '+p[0]; }
+function juntaTrimFin(k){ const p=String(k).split('-T').map(Number); return tarIso(new Date(p[0], p[1]*3, 0)); }
+function juntaTrimMover(dir){ let p=String(S.juntaTrim||juntaTrim()).split('-T').map(Number); let y=p[0], q=p[1]+dir; if(q<1){q=4;y--;} if(q>4){q=1;y++;} S.juntaTrim=y+'-T'+q; render(); }
+function juntaProxima(){ const dia=(S.juntaCfg && S.juntaCfg.dia!=null) ? +S.juntaCfg.dia : 3; let d=todayStr(); for(let i=0;i<7;i++){ if(tarDow(d)===dia) return d; d=tarAddDias(d,1); } return todayStr(); }
+function juntaFechaLarga(iso){ try{ const t=new Date(iso+'T00:00:00').toLocaleDateString('es-ES',{weekday:'long', day:'numeric', month:'long'}); return t.charAt(0).toUpperCase()+t.slice(1); }catch(_){ return fmtFecha(iso); } }
+/* nombre corto: el nombre de pila, con la inicial del apellido si hay otra persona que se llama igual */
+function juntaCorto(n, lista){ const p=String(n||'').trim().split(/\s+/); const igual=(lista||[]).filter(x=>x!==n && String(x||'').trim().split(/\s+/)[0]===p[0]).length; return igual && p[1] ? p[0]+' '+p[1].charAt(0)+'.' : p[0]; }
+function juntaMinSeg(s){ s=Math.max(0,Math.round(s)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+
+/* ---- prioridades (cada una, una tarea con sus pasos = subtareas con fecha) ---- */
+function juntaTarea(id){ return (S.tareas||[]).find(x=>x.id===id) || null; }
+function juntaPriosDe(trim){ return (S.juntaPrios||[]).filter(p=>!p.borrado && p.trim===trim).sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||''))); }
+function juntaPasos(t){
+  const chk=Array.isArray(t && t.checklist) ? t.checklist.filter(Boolean) : [];
+  const hoy=todayStr(); const pend=chk.filter(c=>!c.hecho);
+  return { total:chk.length, hechos:chk.length-pend.length,
+    venc:pend.filter(c=>c.fecha && c.fecha<hoy),
+    prox:pend.slice().sort((a,b)=>String(a.fecha||'9999').localeCompare(String(b.fecha||'9999')))[0] || null };
+}
+function juntaUltimaMarca(prioId){
+  const actas=(S.juntaActas||[]).filter(a=>!a.borrado && a.prioMarcas && a.prioMarcas[prioId]).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  return actas.length ? { marca:actas[0].prioMarcas[prioId], fecha:actas[0].fecha } : null;
+}
+function juntaPrioHtml(p, acta){
+  const t=juntaTarea(p.tareaId);
+  if(!t) return `<div class="jt-row"><div style="flex:1;min-width:0"><div class="jt-tit" style="color:#8A949B">${incEsc(p.titulo||'Prioridad')}</div><div class="jt-sub">La tarea de esta prioridad ya no existe.</div></div><button class="btn btn-ghost btn-sm" onclick="juntaPrioQuitar('${p.id}')">Quitar</button></div>`;
+  const k=juntaPasos(t); const hecha=t.estado==='Hecha';
+  let sub=`<strong style="color:#46525B">${incEsc(t.paraQuien||'—')}</strong>`;
+  if(hecha) sub+=` · <span style="color:#6E8E00;font-weight:700">hecha</span>`;
+  else if(k.prox) sub+=` · siguiente paso: ${incEsc(k.prox.texto)}${k.prox.fecha?` (${incEsc(fmtFecha(k.prox.fecha).slice(0,5))})`:''}`;
+  else sub+=` · <span style="color:#8A949B">sin pasos pendientes apuntados</span>`;
+  const venc = (!hecha && k.venc.length) ? `<div class="jt-sub" style="color:#C0392B;font-weight:600">${k.venc.length} paso${k.venc.length===1?'':'s'} con fecha pasada: ${incEsc(k.venc.map(c=>c.texto).join(' · '))}</div>` : '';
+  const barra = '';
+  let derecha='';
+  if(acta){
+    const m=juntaMarcaNorm((acta.prioMarcas||{})[p.id]);
+    derecha=`<div class="jt-marca">${Object.keys(JUNTA_MARCAS).map(c=>{ const M=JUNTA_MARCAS[c]; const on=m===c; return `<button class="btn btn-sm ${on?'':'btn-ghost'}" style="${on?`background:${M.col};color:#fff;border-color:${M.col}`:''}" onclick="juntaMarcar('${p.id}','${c}')"><span class="jt-dot" style="background:${on?'#fff':M.col}"></span>${M.txt}</button>`; }).join('')}</div>`;
+  } else {
+    const u=juntaUltimaMarca(p.id); const M=u&&JUNTA_MARCAS[juntaMarcaNorm(u.marca)];
+    derecha = M ? `<span class="jt-chip" style="background:${M.bg};color:${M.fg}" title="Última reunión: ${incEsc(fmtFecha(u.fecha))}">${M.txt} · ${incEsc(fmtFecha(u.fecha).slice(0,5))}</span>` : '';
+    derecha += `<button class="btn btn-ghost btn-sm" onclick="juntaPrioQuitar('${p.id}')" title="Quitar de las prioridades (la tarea no se borra)">Quitar</button>`;
+  }
+  return `<div class="jt-row">
+    <div style="flex:1;min-width:0;cursor:pointer" onclick="openTarDet('${t.id}')">
+      <div class="jt-tit">${incEsc(t.titulo)}</div>
+      <div class="jt-sub">${sub}</div>${venc}${barra}
+      <div class="jt-sub" style="color:#8A949B">Hecho para el ${incEsc(fmtFecha(t.fechaLimite||''))} · toca para ver o añadir pasos</div>
+    </div>
+    <div class="jt-der">${derecha}</div></div>`;
+}
+function juntaHistorialHtml(trim){
+  const ps=juntaPriosDe(trim); if(!ps.length) return '';
+  const fin=juntaTrimFin(trim); const p0=String(trim).split('-T').map(Number); const ini=tarIso(new Date(p0[0], (p0[1]-1)*3, 1));
+  const actas=juntaActasVivas().filter(a=>a.fecha>=ini && a.fecha<=fin).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)) || String(a.inicio||'').localeCompare(String(b.inicio||'')));
+  if(!actas.length) return `<div class="jt-card"><h3>Semana a semana</h3><div class="muted" style="font-size:13px;padding:2px 0 8px">Aquí saldrá el color de cada prioridad en cada reunión del trimestre.</div></div>`;
+  const th=actas.map((a,i)=>`<th title="${incEsc(juntaFechaLarga(a.fecha))}">S${i+1}<br><span>${incEsc(fmtFecha(a.fecha).slice(0,5))}</span></th>`).join('');
+  const filas=ps.map(p=>{ const t=juntaTarea(p.tareaId);
+    const celdas=actas.map(a=>{ const M=JUNTA_MARCAS[juntaMarcaNorm((a.prioMarcas||{})[p.id])]; return `<td>${M?`<span class="jt-circ" style="background:${M.col}" title="${M.txt}"></span>`:''}</td>`; }).join('');
+    return `<tr><td class="jt-hp">${incEsc((t&&t.titulo)||p.titulo||'')}</td><td class="jt-hr">${incEsc((t&&t.paraQuien)||'')}</td>${celdas}</tr>`; }).join('');
+  return `<div class="jt-card"><h3>Semana a semana</h3>
+    <div class="jt-hwrap"><table class="jt-hist"><thead><tr><th class="jt-hp">Prioridad</th><th class="jt-hr">Responsable</th>${th}</tr></thead><tbody>${filas}</tbody></table></div>
+    <div class="muted" style="font-size:12px;margin:8px 0 4px">${Object.keys(JUNTA_MARCAS).map(c=>`<span class="jt-circ" style="background:${JUNTA_MARCAS[c].col};width:10px;height:10px;vertical-align:-1px"></span> ${JUNTA_MARCAS[c].txt}`).join(' &nbsp; ')} · vacío = no se marcó</div></div>`;
+}
+function juntaNuevaPrio(){
+  const trim=S.juntaTrim||juntaTrim();
+  openTarea({ titulo:'', descripcion:'Hecho = ', prioridad:'Alta', fechaLimite:juntaTrimFin(trim), _juntaPrio:trim });
+}
+function juntaPrioVincularAbrir(){ F={type:'junta_vincular', q:''}; S.modal='junta_vincular'; render(); }
+function juntaVincularModal(){
+  const usados=new Set((S.juntaPrios||[]).filter(p=>!p.borrado && p.trim===(S.juntaTrim||juntaTrim())).map(p=>p.tareaId));
+  const q=(F.q||'').trim().toLowerCase();
+  const lista=tarUniqSerie((S.tareas||[]).filter(t=>tarActiva(t) && !usados.has(t.id))).filter(t=>!q || [t.titulo,t.paraQuien].join(' ').toLowerCase().includes(q)).slice(0,60);
+  const filas = lista.length ? lista.map(t=>`<button type="button" class="jt-pick" onclick="juntaPrioVincular('${t.id}')"><strong>${incEsc(t.titulo)}</strong><span>${incEsc(t.paraQuien||'')} · ${incEsc(fmtFecha(t.fechaLimite||''))}</span></button>`).join('') : `<div class="muted" style="padding:10px 2px;font-size:13px">No hay tareas abiertas que coincidan.</div>`;
+  return `<div class="overlay"><div class="modal" style="max-width:600px">
+    <div class="modal-head"><h2>Usar una tarea que ya existe</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="note" style="margin-top:0">Elige la tarea que será esta prioridad del ${incEsc(juntaTrimLbl(S.juntaTrim||juntaTrim()))}. La tarea no cambia: solo pasa a seguirse en la reunión.</div>
+      <input id="juntaVincQ" class="inp" placeholder="Buscar por título o persona…" value="${incEsc(F.q||'')}" oninput="F.q=this.value;render();const e=el('juntaVincQ');if(e){e.focus();e.setSelectionRange(e.value.length,e.value.length);}" style="margin-bottom:10px">
+      <div style="max-height:52vh;overflow:auto">${filas}</div>
+    </div></div></div>`;
+}
+function juntaPrioVincular(tid){
+  const t=juntaTarea(tid); if(!t) return;
+  const trim=S.juntaTrim||juntaTrim();
+  if((S.juntaPrios||[]).some(p=>!p.borrado && p.trim===trim && p.tareaId===tid)){ toast('Esa tarea ya es una prioridad de este trimestre'); return; }
+  const p={ id:juntaId('P'), tareaId:tid, titulo:t.titulo, trim, ts:now(), autor:S.user.nombre };
+  S.juntaPrios.push(p); closeModal(); render(); juntaToca(p); toast('Prioridad añadida');
+}
+function juntaPrioQuitar(id){
+  const p=(S.juntaPrios||[]).find(x=>x.id===id); if(!p) return;
+  if(!confirm('¿Quitar "'+(p.titulo||'esta prioridad')+'" de las prioridades del trimestre?\n\nLa tarea y sus pasos no se borran: siguen en Tareas.')) return;
+  p.borrado=true; render(); juntaToca(p); toast('Quitada de las prioridades');
+}
+function juntaMarcar(prioId, marca){
+  const a=juntaActaEnCurso(); if(!a) return;
+  if(!a.prioMarcas) a.prioMarcas={};
+  a.prioMarcas[prioId] = (a.prioMarcas[prioId]===marca) ? null : marca;
+  if(a.prioMarcas[prioId]==='rojo'){
+    const p=(S.juntaPrios||[]).find(x=>x.id===prioId); const t=p && juntaTarea(p.tareaId);
+    const ya=(S.juntaAsuntos||[]).some(x=>!x.borrado && x.estado!=='resuelto' && x.origen && x.origen.prio===prioId);
+    if(!ya){
+      const k=t ? juntaPasos(t) : null;
+      const s={ id:juntaId('A'), titulo:'Bloqueada: '+((t&&t.titulo)||(p&&p.titulo)||'prioridad'), detalle:(t?`${t.paraQuien||''}${k.venc.length?` · ${k.venc.length} paso${k.venc.length===1?'':'s'} con fecha pasada`:''}`:''),
+        autor:S.user.nombre, ts:now(), orden:juntaOrdenPrimero(), estado:'abierto', origen:{prio:prioId}, upd:juntaUpd() };
+      S.juntaAsuntos.push(s); toast('Pasa a asuntos pendientes, arriba del todo');
+    }
+  }
+  render(); juntaToca(a);
+}
+
+/* ---- asuntos pendientes ---- */
+function juntaAsuntosAbiertos(){ return (S.juntaAsuntos||[]).filter(a=>!a.borrado && a.estado!=='resuelto').sort((a,b)=>((a.orden||0)-(b.orden||0)) || String(a.ts||'').localeCompare(String(b.ts||''))); }
+function juntaAsuntosResueltos(){ return (S.juntaAsuntos||[]).filter(a=>!a.borrado && a.estado==='resuelto').sort((a,b)=>String(b.resueltoTs||'').localeCompare(String(a.resueltoTs||''))); }
+function juntaOrdenPrimero(){ const ab=juntaAsuntosAbiertos(); return ab.length ? (ab[0].orden||0)-1000 : 1000; }
+function juntaOrdenUltimo(){ const ab=juntaAsuntosAbiertos(); return ab.length ? (ab[ab.length-1].orden||0)+1000 : 1000; }
+function juntaAsuntoNuevo(){ F={type:'junta_asunto', id:null, titulo:'', detalle:''}; S.modal='junta_asunto'; render(); setTimeout(()=>{ const e=el('juntaAsTit'); if(e) e.focus(); }, 30); }
+function juntaAsuntoEditar(id){ const a=(S.juntaAsuntos||[]).find(x=>x.id===id); if(!a) return; F={type:'junta_asunto', id, titulo:a.titulo||'', detalle:a.detalle||''}; S.modal='junta_asunto'; render(); }
+function juntaAsuntoModal(){
+  return `<div class="overlay"><div class="modal" style="max-width:560px">
+    <div class="modal-head"><h2>${F.id?'Editar asunto':'Apuntar asunto'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${F.id?'':`<div class="note" style="margin-top:0;margin-bottom:12px">Asuntos = lo que nos afecta a todos. Si es cosa de dos personas, mejor una tarea.</div>`}
+      <div class="fld" style="margin-top:0"><label>Asunto</label><input id="juntaAsTit" class="inp" value="${incEsc(F.titulo||'')}" oninput="setInp('titulo',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();juntaAsuntoGuardar();}" placeholder="Qué hay que tratar, en una frase"></div>
+      <div class="fld"><label>Detalle <span class="muted" style="font-weight:400">(opcional)</span></label><textarea style="font-family:inherit" class="inp" rows="3" oninput="setInp('detalle',this.value)" placeholder="Datos, a quién afecta, qué se ha probado ya">${incEsc(F.detalle||'')}</textarea></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="juntaAsuntoGuardar()">Guardar</button></div>
+    </div></div></div>`;
+}
+function juntaAsuntoGuardar(){
+  const titulo=(F.titulo||'').trim(); if(!titulo){ toast('Escribe el asunto'); return; }
+  let a;
+  if(F.id){ a=(S.juntaAsuntos||[]).find(x=>x.id===F.id); if(!a){ closeModal(); return; } a.titulo=titulo; a.detalle=(F.detalle||'').trim(); }
+  else { a={ id:juntaId('A'), titulo, detalle:(F.detalle||'').trim(), autor:S.user.nombre, ts:now(), orden:juntaOrdenUltimo(), estado:'abierto' }; S.juntaAsuntos.push(a); }
+  closeModal(); render(); juntaToca(a); toast(F.id?'Asunto guardado':'Asunto apuntado');
+}
+function juntaAsuntoMover(id, dir){
+  const ab=juntaAsuntosAbiertos(); const i=ab.findIndex(x=>x.id===id); const j=i+dir;
+  if(i<0 || j<0 || j>=ab.length) return;
+  ab.splice(j, 0, ab.splice(i,1)[0]);
+  ab.forEach((x,k)=>{ const o=(k+1)*1000; if(x.orden!==o){ x.orden=o; x.upd=juntaUpd(); } });
+  render(); juntaGuardar();
+}
+function juntaAsuntoBorrar(id){
+  const a=(S.juntaAsuntos||[]).find(x=>x.id===id); if(!a) return;
+  if(!(a.autor===S.user.nombre || isAdmin())){ toast('Solo quien lo apuntó o Dirección puede quitarlo'); return; }
+  if(!confirm('¿Quitar el asunto "'+a.titulo+'" de la lista?')) return;
+  a.borrado=true; render(); juntaToca(a); toast('Asunto quitado');
+}
+function juntaAsuntoReabrir(id){ const a=(S.juntaAsuntos||[]).find(x=>x.id===id); if(!a) return; a.estado='abierto'; a.orden=juntaOrdenUltimo(); render(); juntaToca(a); toast('Asunto reabierto'); }
+function juntaResolverAbrir(id){ const a=(S.juntaAsuntos||[]).find(x=>x.id===id); if(!a) return; F={type:'junta_resolver', id, decision:'', crearTarea:true}; S.modal='junta_resolver'; render(); setTimeout(()=>{ const e=el('juntaDec'); if(e) e.focus(); }, 30); }
+function juntaResolverModal(){
+  const a=(S.juntaAsuntos||[]).find(x=>x.id===F.id)||{};
+  return `<div class="overlay"><div class="modal" style="max-width:580px">
+    <div class="modal-head"><h2>Resolver asunto</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div style="font-weight:700;color:#333F48;margin-bottom:2px">${incEsc(a.titulo||'')}</div>
+      ${a.detalle?`<div class="muted" style="font-size:13px;white-space:pre-wrap">${incEsc(a.detalle)}</div>`:''}
+      <div class="fld"><label>Qué se decide</label><textarea style="font-family:inherit" id="juntaDec" class="inp" rows="3" oninput="setInp('decision',this.value)" placeholder="La decisión, en una o dos frases">${incEsc(F.decision||'')}</textarea></div>
+      <label style="display:flex;align-items:center;gap:9px;font-size:14px;margin-top:10px;cursor:pointer"><input type="checkbox" ${F.crearTarea?'checked':''} onchange="F.crearTarea=this.checked" style="width:17px;height:17px"> Sale una tarea (con responsable y fecha)</label>
+      <div class="muted" style="font-size:12px;margin-top:4px">Se abre «Nueva tarea» con todo relleno; elige a quién y para cuándo. Es una tarea normal de Lucai.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="juntaResolverGuardar()">Resolver</button></div>
+    </div></div></div>`;
+}
+function juntaResolverGuardar(){
+  const a=(S.juntaAsuntos||[]).find(x=>x.id===F.id); if(!a){ closeModal(); return; }
+  const dec=(F.decision||'').trim(); if(!dec){ toast('Escribe qué se decide'); return; }
+  const acta=juntaActaEnCurso();
+  a.estado='resuelto'; a.decision=dec; a.resueltoTs=now(); a.resueltoPor=S.user.nombre; a.actaId=acta?acta.id:null;
+  const crear=!!F.crearTarea;
+  closeModal(); render(); juntaToca(a); toast('Asunto resuelto');
+  if(crear) openTarea({ titulo:a.titulo.replace(/^(No va|Bloqueada|Sin hacer):\s*/,''), descripcion:'Decidido en la reunión del '+fmtFecha(todayStr())+': '+dec, _juntaAsunto:a.id, _juntaActa:acta?acta.id:null });
+}
+function juntaAsuntoFila(a, i, n, enReunion){
+  const flechas=`<div class="jt-flechas"><button onclick="juntaAsuntoMover('${a.id}',-1)" ${i===0?'disabled':''} title="Subir">▲</button><button onclick="juntaAsuntoMover('${a.id}',1)" ${i===n-1?'disabled':''} title="Bajar">▼</button></div>`;
+  return `<div class="jt-row jt-asunto">
+    ${flechas}
+    <div class="jt-num">${i+1}</div>
+    <div style="flex:1;min-width:0">
+      <div class="jt-tit">${incEsc(a.titulo)}</div>
+      ${a.detalle?`<div class="jt-sub" style="white-space:pre-wrap">${incEsc(a.detalle)}</div>`:''}
+      <div class="jt-sub" style="color:#8A949B">${incEsc(a.autor||'')} · ${incEsc(fmtFecha(a.ts||'').slice(0,5))}${a.origen&&a.origen.prio?' · viene de una prioridad':''}</div>
+    </div>
+    <div class="jt-der">
+      <button class="btn btn-sm ${enReunion&&i===0?'btn-primary':'btn-ghost'}" onclick="juntaResolverAbrir('${a.id}')">Resolver</button>
+      <button class="btn btn-ghost btn-sm" onclick="juntaAsuntoEditar('${a.id}')" title="Editar">✎</button>
+      <button class="btn btn-ghost btn-sm" onclick="juntaAsuntoBorrar('${a.id}')" title="Quitar" style="color:#C0392B">×</button>
+    </div></div>`;
+}
+function juntaAsuntosLista(enReunion){
+  const ab=juntaAsuntosAbiertos();
+  if(!ab.length) return `<div class="muted" style="padding:14px 2px;font-size:13.5px">No hay asuntos pendientes. Cualquiera del equipo puede apuntar uno durante la semana.</div>`;
+  return ab.map((a,i)=>juntaAsuntoFila(a,i,ab.length,enReunion)).join('');
+}
+
+/* ---- acta y reunión en curso ---- */
+function juntaActasVivas(){ return (S.juntaActas||[]).filter(a=>!a.borrado).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)) || String(b.inicio||'').localeCompare(String(a.inicio||''))); }
+function juntaActaEnCurso(){ return juntaActasVivas().find(a=>!a.cerrada) || null; }
+function juntaEmpezar(){
+  if(juntaActaEnCurso()){ S.juntaTab='reunion'; render(); return; }
+  const m=juntaMiembros();
+  const a={ id:juntaId('R'), fecha:todayStr(), inicio:now(), autor:S.user.nombre, asistentes:[],
+    buenas:'', titulares:'', numeros:{}, prioMarcas:{}, notas:{}, tareaIds:[], parte:'buenas', parteDesde:Date.now(), tiempos:{}, cerrada:false };
+  S.juntaActas.push(a); S.juntaTab='reunion'; render(); juntaToca(a);
+}
+function juntaAcumular(a){ if(!a || !a.parte || !a.parteDesde) return; if(!a.tiempos) a.tiempos={}; a.tiempos[a.parte]=(a.tiempos[a.parte]||0)+Math.max(0,(Date.now()-a.parteDesde)/1000); a.parteDesde=Date.now(); }
+function juntaIrParte(id){ const a=juntaActaEnCurso(); if(!a || a.parte===id) return; juntaAcumular(a); a.parte=id; a.parteDesde=Date.now(); render(); juntaToca(a); window.scrollTo(0,0); }
+function juntaSiguiente(){ const a=juntaActaEnCurso(); if(!a) return; const i=JUNTA_PARTES.findIndex(p=>p.id===a.parte); if(i>=0 && i<JUNTA_PARTES.length-1) juntaIrParte(JUNTA_PARTES[i+1].id); }
+function juntaSegParte(a, pid){ let s=(a.tiempos&&a.tiempos[pid])||0; if(a.parte===pid && a.parteDesde) s+=(Date.now()-a.parteDesde)/1000; return s; }
+function juntaActaSet(campo, v){ const a=juntaActaEnCurso(); if(!a) return; a[campo]=v; juntaToca(a); }
+function juntaNumSet(nid, v){ const a=juntaActaEnCurso(); if(!a) return; if(!a.numeros) a.numeros={}; a.numeros[nid]=v; render(); juntaToca(a); }
+function juntaNotaSet(i, v){ const a=juntaActaEnCurso(); if(!a) return; const n=(a.asistentes||[])[i]; if(!n) return; if(!a.notas) a.notas={}; if(v==='') delete a.notas[n]; else a.notas[n]=+v; render(); juntaToca(a); }
+function juntaAsistToggle(i){ const a=juntaActaEnCurso(); if(!a) return; const n=juntaPosibles()[i]; if(!n) return; const as=a.asistentes||(a.asistentes=[]); const k=as.indexOf(n); if(k>=0) as.splice(k,1); else as.push(n); render(); juntaToca(a); }
+function juntaPosibles(){ const m=juntaMiembros(); const base=m.length?m.slice():[S.user.nombre]; const a=juntaActaEnCurso(); ((a&&a.asistentes)||[]).forEach(n=>{ if(!base.includes(n)) base.push(n); }); return base; }
+function juntaNotaMedia(a){ const v=Object.values((a&&a.notas)||{}).map(Number).filter(x=>x>=1&&x<=10); return v.length ? Math.round(v.reduce((s,x)=>s+x,0)/v.length*10)/10 : null; }
+function juntaTerminar(){
+  const a=juntaActaEnCurso(); if(!a) return;
+  if(!confirm('¿Terminar la reunión y guardar el acta?')) return;
+  juntaAcumular(a); a.cerrada=true; a.fin=now(); a.parteDesde=null;
+  S.juntaTab='actas'; S.juntaVerActa=a.id; render(); juntaToca(a); toast('Reunión terminada. Acta guardada.');
+}
+function juntaCancelarReunion(){
+  const a=juntaActaEnCurso(); if(!a) return;
+  if(!confirm('¿Descartar la reunión empezada?\n\nSe quita su acta. Los asuntos resueltos y las tareas creadas se quedan como están.')) return;
+  a.borrado=true; render(); juntaToca(a); toast('Reunión descartada');
+}
+/* reloj de la parte en curso: solo cambia el texto, no repinta la pantalla */
+setInterval(function(){
+  try{
+    const r=document.getElementById('juntaReloj'); if(!r) return;
+    const a=juntaActaEnCurso(); if(!a) return;
+    const p=JUNTA_PARTES.find(x=>x.id===a.parte); if(!p) return;
+    const s=juntaSegParte(a, a.parte);
+    r.textContent=juntaMinSeg(s)+' de '+p.min+':00';
+    r.style.color = s>p.min*60 ? '#C0392B' : '#333F48';
+  }catch(_){}
+}, 1000);
+
+/* ---- números (los define el equipo; cada semana se apunta el valor) ---- */
+function juntaNumeros(){ return ((S.juntaCfg&&S.juntaCfg.numeros)||[]).filter(n=>n && !n.borrado); }
+function juntaNumParse(s){ const m=String(s==null?'':s).replace(/\./g,'').replace(',','.').match(/-?\d+(\.\d+)?/); return m?parseFloat(m[0]):null; }
+function juntaNumColor(n, v){ const x=juntaNumParse(v), o=juntaNumParse(n.objetivo); if(x==null || o==null) return ''; const ok = n.sentido==='max' ? x<=o : x>=o; return ok ? '#6E8E00' : '#C0392B'; }
+function juntaNumAbrir(id){ const n=id ? juntaNumeros().find(x=>x.id===id) : null; F={type:'junta_numero', id:n?n.id:null, nombre:n?n.nombre:'', duena:n?n.duena:'', objetivo:n?n.objetivo:'', sentido:n?(n.sentido||'min'):'min'}; S.modal='junta_numero'; render(); }
+function juntaNumModal(){
+  const us=juntaPosibles();
+  return `<div class="overlay"><div class="modal" style="max-width:520px">
+    <div class="modal-head"><h2>${F.id?'Editar número':'Nuevo número'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>Qué se mide</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="setInp('nombre',this.value)" placeholder="Citas perdidas de la semana"></div>
+      <div class="fld"><label>Responsable</label><select class="inp" onchange="setInp('duena',this.value)"><option value="">Elige…</option>${us.map(u=>`<option ${F.duena===u?'selected':''}>${incEsc(u)}</option>`).join('')}</select></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:150px"><label>Objetivo</label><input class="inp" value="${incEsc(F.objetivo||'')}" oninput="setInp('objetivo',this.value)" placeholder="8 %"></div>
+        <div class="fld" style="flex:1;min-width:150px"><label>Va bien si es…</label><select class="inp" onchange="setInp('sentido',this.value)"><option value="min" ${F.sentido!=='max'?'selected':''}>igual o mayor</option><option value="max" ${F.sentido==='max'?'selected':''}>igual o menor</option></select></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:space-between;margin-top:16px;flex-wrap:wrap">
+        <div>${F.id?`<button class="btn btn-ghost" style="color:#C0392B" onclick="juntaNumQuitar()">Quitar número</button>`:''}</div>
+        <div style="display:flex;gap:10px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="juntaNumGuardar()">Guardar</button></div>
+      </div>
+    </div></div></div>`;
+}
+function juntaNumGuardar(){
+  const nombre=(F.nombre||'').trim(); if(!nombre){ toast('Escribe qué se mide'); return; }
+  const cfg=S.juntaCfg; if(!Array.isArray(cfg.numeros)) cfg.numeros=[];
+  let n=F.id ? cfg.numeros.find(x=>x.id===F.id) : null;
+  if(!n){ n={ id:juntaId('N') }; cfg.numeros.push(n); }
+  n.nombre=nombre; n.duena=F.duena||''; n.objetivo=(F.objetivo||'').trim(); n.sentido=F.sentido||'min';
+  closeModal(); render(); juntaToca(cfg);
+}
+function juntaNumQuitar(){ const n=((S.juntaCfg&&S.juntaCfg.numeros)||[]).find(x=>x.id===F.id); if(!n) return; if(!confirm('¿Quitar "'+n.nombre+'" de los números de la reunión? Lo apuntado en actas anteriores se conserva.')) return; n.borrado=true; closeModal(); render(); juntaToca(S.juntaCfg); }
+function juntaNumerosHtml(a, editable){
+  const ns=juntaNumeros();
+  if(!ns.length) return `<div class="muted" style="padding:6px 2px 10px;font-size:13.5px">Aún no hay números. Añade los que el equipo quiere mirar cada semana (cada uno con su responsable y su objetivo).</div>`;
+  return ns.map(n=>{
+    const v=(a&&a.numeros||{})[n.id]; const col=juntaNumColor(n, v);
+    const valor = editable
+      ? `<input class="inp jt-numinp" value="${incEsc(v==null?'':v)}" onchange="juntaNumSet('${n.id}',this.value)" placeholder="—" style="${col?`border-color:${col};color:${col};font-weight:700`:''}">`
+      : `<strong style="color:${col||'#333F48'}">${incEsc(v==null||v===''?'—':v)}</strong>`;
+    return `<div class="jt-row" style="align-items:center">
+      <div style="flex:1;min-width:0"><div class="jt-tit" style="font-size:14px">${incEsc(n.nombre)}${editable?` <button class="jt-link" onclick="juntaNumAbrir('${n.id}')">editar</button>`:''}</div>
+      <div class="jt-sub">${incEsc(n.duena||'sin responsable')} · objetivo ${n.sentido==='max'?'≤':'≥'} ${incEsc(n.objetivo||'—')}</div></div>
+      <div style="flex:0 0 auto">${valor}</div></div>`;
+  }).join('');
+}
+
+/* ---- tareas que salen de la reunión (tareas normales) ---- */
+function juntaTareaNueva(){ const a=juntaActaEnCurso(); openTarea({ descripcion:'Sale de la reunión del '+fmtFecha(todayStr())+'.', _juntaActa:a?a.id:null }); }
+const _commitTarea_junta = commitTarea;
+commitTarea = function(){
+  const prio=F._juntaPrio, asu=F._juntaAsunto, actaId=F._juntaActa, fid=F.id, titulo=(F.titulo||'').trim();
+  _commitTarea_junta();
+  if(!(prio || asu || actaId)) return;
+  if(S.modal) return;                       // no se creó (faltaba algún dato): no se enlaza nada
+  const t = juntaTarea(fid) || ((S.tareas||[])[0] && S.tareas[0].titulo===titulo ? S.tareas[0] : null);
+  if(!t) return;
+  if(prio){ const p={ id:juntaId('P'), tareaId:t.id, titulo:t.titulo, trim:prio, ts:now(), autor:S.user.nombre }; S.juntaPrios.push(p); juntaToca(p); }
+  if(asu){ const a=(S.juntaAsuntos||[]).find(x=>x.id===asu); if(a){ if(!Array.isArray(a.tareaIds)) a.tareaIds=[]; a.tareaIds.push(t.id); juntaToca(a); } }
+  if(actaId){ const r=(S.juntaActas||[]).find(x=>x.id===actaId); if(r){ if(!Array.isArray(r.tareaIds)) r.tareaIds=[]; if(!r.tareaIds.includes(t.id)) r.tareaIds.push(t.id); juntaToca(r); } }
+  render();
+};
+function juntaTareasDeActa(a){
+  const ids=new Set((a&&a.tareaIds)||[]);
+  (S.juntaAsuntos||[]).forEach(x=>{ if(!x.borrado && x.actaId===a.id) (x.tareaIds||[]).forEach(i=>ids.add(i)); });
+  return [...ids].map(juntaTarea).filter(Boolean);
+}
+/* tareas de la semana anterior: todas las de la última reunión cerrada y las que sigan sin hacer de antes */
+function juntaTareasARevisar(actual){
+  const previas=juntaActasVivas().filter(x=>x.cerrada && (!actual || x.id!==actual.id));
+  if(!previas.length) return [];
+  const ult=previas[0]; const vistos=new Set(); const out=[];
+  juntaTareasDeActa(ult).forEach(t=>{ if(!vistos.has(t.id)){ vistos.add(t.id); out.push(t); } });
+  previas.slice(1).forEach(x=>juntaTareasDeActa(x).forEach(t=>{ if(!vistos.has(t.id) && t.estado!=='Hecha'){ vistos.add(t.id); out.push(t); } }));
+  return out;
+}
+function juntaTareaAAsunto(tid){
+  const t=juntaTarea(tid); if(!t) return;
+  if((S.juntaAsuntos||[]).some(x=>!x.borrado && x.estado!=='resuelto' && x.origen && x.origen.tarea===tid)){ toast('Esa tarea ya está en asuntos'); return; }
+  const s={ id:juntaId('A'), titulo:'Sin hacer: '+t.titulo, detalle:`${t.paraQuien||''} · para el ${fmtFecha(t.fechaLimite||'')}`, autor:S.user.nombre, ts:now(), orden:juntaOrdenUltimo(), estado:'abierto', origen:{tarea:tid} };
+  S.juntaAsuntos.push(s); render(); juntaToca(s); toast('Pasa a asuntos pendientes');
+}
+function juntaTareasHtml(a){
+  const ts=juntaTareasDeActa(a);
+  if(!ts.length) return `<div class="muted" style="padding:6px 2px;font-size:13.5px">Aún no ha salido ninguna tarea de esta reunión.</div>`;
+  return ts.map(t=>`<div class="jt-row" style="cursor:pointer" onclick="openTarDet('${t.id}')"><div style="flex:1;min-width:0"><div class="jt-tit" style="font-size:14px">${incEsc(t.titulo)}</div><div class="jt-sub">${incEsc(t.paraQuien||'')} · ${incEsc(fmtFecha(t.fechaLimite||''))}</div></div><div style="flex:0 0 auto">${tarEstadoChip(t.estado)}</div></div>`).join('');
+}
+
+/* ---- ajustes: quién forma el equipo y cuándo es la reunión ---- */
+function juntaAjustesAbrir(){
+  if(!(isAdmin() || juntaEsMiembro())){ toast('Solo el equipo de la reunión'); return; }
+  F={type:'junta_ajustes', miembros:juntaMiembros().slice(), dia:(S.juntaCfg.dia!=null?+S.juntaCfg.dia:3), hora:S.juntaCfg.hora||'12:00'}; S.modal='junta_ajustes'; render();
+}
+function juntaAjMiembro(i){ const u=appUsers()[i]; if(!u) return; const k=F.miembros.indexOf(u.nombre); if(k>=0) F.miembros.splice(k,1); else F.miembros.push(u.nombre); render(); }
+function juntaAjustesModal(){
+  const us=appUsers();
+  return `<div class="overlay"><div class="modal" style="max-width:560px">
+    <div class="modal-head"><h2>Ajustes de la reunión</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fld" style="margin-top:0"><label>Quién forma el equipo</label>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Solo estas personas (y Dirección) ven el apartado. Salen como asistentes al empezar cada reunión.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${us.map((u,i)=>`<button type="button" class="btn btn-sm ${F.miembros.includes(u.nombre)?'btn-primary':'btn-ghost'}" onclick="juntaAjMiembro(${i})">${incEsc(u.nombre)}</button>`).join('')}</div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:150px"><label>Día</label><select class="inp" onchange="F.dia=+this.value">${JUNTA_DIAS.map((d,i)=>`<option value="${i}" ${+F.dia===i?'selected':''}>${d}</option>`).join('')}</select></div>
+        <div class="fld" style="flex:1;min-width:120px"><label>Hora</label><input class="inp" type="time" value="${incEsc(F.hora||'')}" oninput="F.hora=this.value"></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="juntaAjustesGuardar()">Guardar</button></div>
+    </div></div></div>`;
+}
+function juntaAjustesGuardar(){
+  const cfg=S.juntaCfg; cfg.miembros=F.miembros.slice(); cfg.dia=+F.dia; cfg.hora=F.hora||'';
+  closeModal(); render(); juntaToca(cfg); toast('Ajustes guardados');
+}
+
+/* ---- vistas ---- */
+const JUNTA_CSS=`<style>
+.jt-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:6px 16px 10px;margin-bottom:14px}
+.jt-card h3{font-size:15px;color:#333F48;margin:10px 0 4px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.jt-row{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid #F1ECE3}
+.jt-row:last-child{border-bottom:none}
+.jt-tit{font-weight:700;color:#333F48;font-size:14.5px;word-break:break-word}
+.jt-sub{font-size:12.5px;color:#5A6770;margin-top:2px;word-break:break-word}
+.jt-bar{height:5px;background:#F4F0E9;border-radius:99px;overflow:hidden;margin-top:6px;max-width:260px}
+.jt-bar div{height:100%;background:#6E8E00;border-radius:99px}
+.jt-der{flex:0 0 auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.jt-marca{display:flex;gap:6px}
+.jt-ok{background:#6E8E00!important;color:#fff!important;border-color:#6E8E00!important}
+.jt-mal{background:#C0392B!important;color:#fff!important;border-color:#C0392B!important}
+.jt-chip{font-size:11px;font-weight:700;border-radius:20px;padding:2px 9px;white-space:nowrap}
+.jt-chip-ok{background:#EAF1D8;color:#3f5400}.jt-chip-mal{background:#F8E1DE;color:#9B2C20}
+.jt-flechas{display:flex;flex-direction:column;gap:2px;flex:0 0 auto}
+.jt-flechas button{border:1px solid var(--line);background:#fff;border-radius:6px;width:28px;height:22px;font-size:10px;color:#5A6770;cursor:pointer;padding:0}
+.jt-flechas button:disabled{opacity:.3;cursor:default}
+.jt-num{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:#EAE3D7;color:#333F48;font-weight:800;font-size:12px;display:grid;place-items:center;margin-top:1px}
+.jt-pasos{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 14px}
+.jt-paso{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 12px;font-size:12.5px;font-weight:600;color:#5A6770;cursor:pointer;font-family:inherit}
+.jt-paso.on{background:#333F48;color:#fff;border-color:#333F48}
+.jt-paso.ya{background:#EAF1D8;color:#3f5400;border-color:#C9DB9F}
+.jt-reloj{font-size:22px;font-weight:800;font-family:Georgia,serif;font-variant-numeric:tabular-nums}
+.jt-pick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 12px;margin-bottom:6px;cursor:pointer;font-family:inherit;font-size:14px;color:#333F48}
+.jt-pick span{font-size:12px;color:#8A949B}
+.jt-pick:hover{border-color:#B8A88F}
+.jt-numinp{width:110px;text-align:right;padding:6px 9px}
+.jt-link{border:none;background:none;color:#8A949B;font-size:11.5px;cursor:pointer;text-decoration:underline;padding:0 0 0 4px;font-weight:400}
+.jt-asis{display:flex;gap:6px;flex-wrap:wrap}
+.jt-asis button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 13px;font-size:12.5px;cursor:pointer;color:#5A6770;font-family:inherit}
+.jt-asis button.on{background:#333F48;color:#fff;border-color:#333F48;font-weight:600}
+.jt-asis button.on::before{content:'✓ '}
+.jt-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0}
+.jt-circ{display:inline-block;width:16px;height:16px;border-radius:50%}
+.jt-hwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:4px 0 2px}
+.jt-hist{border-collapse:collapse;font-size:13px}
+.jt-hist th{font-size:11px;color:#8A949B;font-weight:700;text-align:center;padding:4px 6px;border-bottom:1px solid #EAE3D7;white-space:nowrap}
+.jt-hist th span{font-weight:400}
+.jt-hist td{text-align:center;padding:7px 6px;border-bottom:1px solid #F1ECE3}
+.jt-hist .jt-hp{text-align:left;min-width:170px;color:#333F48;font-weight:600}
+.jt-hist .jt-hr{text-align:left;white-space:nowrap;color:#5A6770}
+.jt-nota{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #F1ECE3;font-size:14px}
+.jt-nota select{width:90px}
+@media(max-width:720px){
+  .jt-card{padding:4px 12px 8px}
+  .jt-row{flex-wrap:wrap}
+  .jt-der{width:100%;justify-content:flex-start}
+  .jt-asunto .jt-der{padding-left:62px}
+  .jt-marca .btn{flex:1}
+  .jt-marca{width:100%}
+}
+</style>`;
+function juntaView(){
+  if(!S.juntaTrim) S.juntaTrim=juntaTrim();
+  const tab=S.juntaTab||'reunion';
+  const nAs=juntaAsuntosAbiertos().length;
+  const tabs=[['reunion','Reunión'],['prios','Prioridades'],['asuntos','Asuntos'+(nAs?` (${nAs})`:'')],['actas','Actas']];
+  const seg=`<div class="seg tar-seg" style="margin-bottom:14px">${tabs.map(([id,l])=>`<button class="${tab===id?'on':''}" onclick="S.juntaTab='${id}';S.juntaVerActa=null;render()">${l}</button>`).join('')}</div>`;
+  let body='';
+  if(tab==='prios') body=juntaPriosView();
+  else if(tab==='asuntos') body=juntaAsuntosView();
+  else if(tab==='actas') body=juntaActasView();
+  else body=juntaReunionView();
+  const sinEquipo = !juntaMiembros().length ? `<div class="note" style="margin-top:0;margin-bottom:14px">Primero elige quién forma el equipo de la reunión. <button class="btn btn-ghost btn-sm" onclick="juntaAjustesAbrir()" style="margin-left:6px">Elegir</button></div>` : '';
+  const err = S.juntaError ? `<div class="note" style="margin-top:0;margin-bottom:14px;border-left-color:#C0392B">Lo último no se ha podido guardar. <button class="btn btn-ghost btn-sm" onclick="juntaGuardar()" style="margin-left:6px">Reintentar</button></div>` : '';
+  return `${JUNTA_CSS}${moduleHeader('Reunión semanal', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:12px">
+      <div><div class="section-title">Reunión semanal</div>
+      <div class="section-sub" style="margin:0">${incEsc(JUNTA_DIAS[+(S.juntaCfg.dia!=null?S.juntaCfg.dia:3)]||'')}${S.juntaCfg.hora?' · '+incEsc(S.juntaCfg.hora):''}${juntaMiembros().length?' · '+incEsc(juntaMiembros().map(n=>juntaCorto(n, juntaMiembros())).join(', ')):''}</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="juntaRefrescar()">Actualizar</button><button class="btn btn-ghost btn-sm" onclick="juntaAjustesAbrir()">Ajustes</button></div>
+    </div>
+    ${err}${sinEquipo}${seg}${body}
+  </div></main>
+  ${S.modal?modalContent():''}
+  ${S.tarDelId&&typeof tarDelScopeModal==='function'?tarDelScopeModal():''}
+  ${(typeof iaFloatHtml==='function')?iaFloatHtml():''}`;
+}
+async function juntaRefrescar(){ toast('Actualizando…'); await loadFromDB(); render(); toast('Al día'); }
+
+function juntaReunionView(){
+  const a=juntaActaEnCurso();
+  if(!a){
+    const prox=juntaProxima(); const ult=juntaActasVivas()[0];
+    return `<div class="jt-card" style="padding:18px 18px 20px">
+      <div style="font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:#B8A88F;font-weight:700">Próxima reunión</div>
+      <div style="font-family:Georgia,serif;font-size:22px;color:#333F48;margin:6px 0 2px">${incEsc(juntaFechaLarga(prox))}${S.juntaCfg.hora?' · '+incEsc(S.juntaCfg.hora):''}</div>
+      <div class="muted" style="font-size:13px">${juntaPriosDe(juntaTrim()).length} prioridades del trimestre · ${juntaAsuntosAbiertos().length} asuntos pendientes${ult?` · última: ${incEsc(fmtFecha(ult.fecha))}`:''}</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+        <button class="btn btn-primary" onclick="juntaEmpezar()">Empezar la reunión</button>
+        <button class="btn btn-ghost" onclick="juntaAsuntoNuevo()">＋ Apuntar asunto</button>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:12px">Partes: ${JUNTA_PARTES.map(p=>`${incEsc(p.corto)} ${p.min}'`).join(' · ')}.</div>
+    </div>`;
+  }
+  const parte=JUNTA_PARTES.find(p=>p.id===a.parte)||JUNTA_PARTES[0];
+  const iP=JUNTA_PARTES.indexOf(parte);
+  const pasos=`<div class="jt-pasos">${JUNTA_PARTES.map((p,i)=>`<button class="jt-paso ${p.id===parte.id?'on':(i<iP?'ya':'')}" onclick="juntaIrParte('${p.id}')">${i<iP?'✓ ':''}${incEsc(p.corto)} ${p.min}'</button>`).join('')}</div>`;
+  const posibles=juntaPosibles();
+  const asis=`<div class="jt-asis">${posibles.map((n,i)=>`<button class="${(a.asistentes||[]).includes(n)?'on':''}" onclick="juntaAsistToggle(${i})" title="Toca si ha venido">${incEsc(juntaCorto(n, posibles))}</button>`).join('')}</div>`;
+  let cuerpo='';
+  if(parte.id==='buenas'){
+    cuerpo=`<div style="font-size:14px;color:#46525B;padding:4px 0 10px">Una buena noticia o un aprendizaje de cada persona, de la clínica o personal. Se habla; no se apunta.</div>`;
+  } else if(parte.id==='numeros'){
+    cuerpo=`${juntaNumerosHtml(a, true)}<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="juntaNumAbrir()">＋ Añadir número</button></div>
+      <div class="muted" style="font-size:12px;margin-top:8px">Solo se dice si está en objetivo o no. Si un número no va, apúntalo como asunto: se habla después.</div>`;
+  } else if(parte.id==='prios'){
+    const ps=juntaPriosDe(juntaTrim());
+    cuerpo = ps.length ? ps.map(p=>juntaPrioHtml(p, a)).join('') : `<div class="muted" style="padding:6px 2px;font-size:13.5px">No hay prioridades de este trimestre. Añádelas en la pestaña Prioridades.</div>`;
+    cuerpo += `<div class="muted" style="font-size:12px;margin-top:8px">Cada responsable dice solo cómo va: avanza, con cuidado o bloqueada. Lo bloqueado pasa a asuntos y se habla después.</div>`;
+  } else if(parte.id==='titulares'){
+    cuerpo=`<div class="muted" style="font-size:13px;margin-bottom:8px">Noticias de pacientes y del equipo, en una frase. Si algo hay que hablarlo, apúntalo como asunto.</div>
+      <textarea style="font-family:inherit" class="inp" rows="5" onchange="juntaActaSet('titulares',this.value)" placeholder="Una línea por titular">${incEsc(a.titulares||'')}</textarea>
+      <div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="juntaAsuntoNuevo()">＋ Apuntar asunto</button></div>`;
+  } else if(parte.id==='tareas'){
+    const ts=juntaTareasARevisar(a);
+    cuerpo=`<div class="muted" style="font-size:13px;margin-bottom:4px">Las tareas que salieron de la reunión anterior y las que siguen sin hacer de antes. Cada responsable dice si está hecha.</div>
+      ${ts.length?ts.map(t=>{ const hecha=t.estado==='Hecha'; const tarde=!hecha && t.fechaLimite && t.fechaLimite<todayStr();
+        return `<div class="jt-row" style="align-items:center"><div style="flex:1;min-width:0;cursor:pointer" onclick="openTarDet('${t.id}')"><div class="jt-tit" style="font-size:14px;${hecha?'color:#8A949B;text-decoration:line-through':''}">${incEsc(t.titulo)}</div><div class="jt-sub">${incEsc(t.paraQuien||'')} · ${tarde?`<span style="color:#C0392B;font-weight:700">${incEsc(fmtFecha(t.fechaLimite||''))}, fecha pasada</span>`:incEsc(fmtFecha(t.fechaLimite||''))}</div></div>
+          <div class="jt-der">${hecha?`<span class="jt-chip jt-chip-ok">Hecha</span>`:`<button class="btn btn-ghost btn-sm" onclick="tarMarcarHecha('${t.id}')">Marcar hecha</button><button class="btn btn-ghost btn-sm" onclick="juntaTareaAAsunto('${t.id}')" title="Hay que hablarla">→ Asunto</button>`}</div></div>`; }).join('')
+        :`<div class="muted" style="padding:6px 2px;font-size:13.5px">No hay tareas de reuniones anteriores por revisar.</div>`}`;
+  } else if(parte.id==='asuntos'){
+    const res=juntaAsuntosResueltos().filter(x=>x.actaId===a.id);
+    cuerpo=`<div class="muted" style="font-size:13px;margin-bottom:4px">Ordenad la lista: primero los tres más importantes. Uno a uno, hasta resolverlo con una decisión.</div>
+      ${juntaAsuntosLista(true)}
+      <div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="juntaAsuntoNuevo()">＋ Apuntar asunto</button></div>
+      ${res.length?`<h3 style="margin-top:16px">Resueltos hoy (${res.length})</h3>${res.map(x=>`<div class="jt-row"><div style="flex:1;min-width:0"><div class="jt-tit" style="font-size:14px">${incEsc(x.titulo)}</div><div class="jt-sub">→ ${incEsc(x.decision||'')}</div></div><button class="btn btn-ghost btn-sm" onclick="juntaAsuntoReabrir('${x.id}')">Reabrir</button></div>`).join('')}`:''}`;
+  } else if(parte.id==='cierre'){
+    const notas=(a.asistentes||[]).map(n=>{ const i=(a.asistentes||[]).indexOf(n); const v=(a.notas||{})[n]; return `<div class="jt-nota"><span>${incEsc(n)}</span><select class="inp" onchange="juntaNotaSet(${i},this.value)"><option value="">—</option>${[1,2,3,4,5,6,7,8,9,10].map(x=>`<option ${v===x?'selected':''}>${x}</option>`).join('')}</select></div>`; }).join('');
+    const media=juntaNotaMedia(a);
+    cuerpo=`<h3 style="margin-top:4px">Tareas que salen de hoy</h3>${juntaTareasHtml(a)}
+      <div style="margin:8px 0 6px"><button class="btn btn-ghost btn-sm" onclick="juntaTareaNueva()">＋ Nueva tarea</button></div>
+      <h3>Nota de la reunión (1 a 10)${media!=null?` <span style="font-family:Georgia,serif;font-size:20px">${String(media).replace('.',',')}</span>`:''}</h3>
+      <div class="muted" style="font-size:12px;margin-bottom:4px">Cada persona pone su nota. Si alguien pone menos de 8, que diga en una frase por qué.</div>
+      ${notas||'<div class="muted" style="font-size:13px">Pasa lista arriba: toca a quien ha venido.</div>'}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px"><button class="btn btn-primary" onclick="juntaTerminar()">Terminar y guardar el acta</button></div>`;
+  }
+  const s=juntaSegParte(a, parte.id);
+  const sig = iP<JUNTA_PARTES.length-1 ? `<button class="btn btn-ghost" onclick="juntaSiguiente()">Siguiente: ${incEsc(JUNTA_PARTES[iP+1].corto)} ›</button>` : '';
+  return `<div class="jt-card" style="padding:12px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div><div style="font-weight:700;color:#333F48">${incEsc(juntaFechaLarga(a.fecha))}</div><div class="muted" style="font-size:12px">Pasa lista: toca a quien ha venido</div></div>
+        <div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" onclick="juntaTareaNueva()">＋ Tarea</button><button class="btn btn-ghost btn-sm" onclick="juntaAsuntoNuevo()">＋ Asunto</button><button class="btn btn-ghost btn-sm" onclick="juntaCancelarReunion()" title="Descartar esta reunión" style="color:#8A949B">Descartar</button></div>
+      </div>
+      <div style="margin-top:8px">${asis}</div>
+    </div>
+    ${pasos}
+    <div class="jt-card">
+      <h3><span>${incEsc(parte.nombre)}</span><span id="juntaReloj" class="jt-reloj" style="color:${s>parte.min*60?'#C0392B':'#333F48'}">${juntaMinSeg(s)} de ${parte.min}:00</span></h3>
+      ${cuerpo}
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">${sig}</div>`;
+}
+
+function juntaPriosView(){
+  const trim=S.juntaTrim||juntaTrim();
+  const ps=juntaPriosDe(trim);
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px"><button class="btn btn-ghost btn-sm" onclick="juntaTrimMover(-1)" title="Trimestre anterior">‹</button><strong style="color:#333F48;font-size:15px">${incEsc(juntaTrimLbl(trim))}</strong><button class="btn btn-ghost btn-sm" onclick="juntaTrimMover(1)" title="Trimestre siguiente">›</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="juntaPrioVincularAbrir()">Usar una tarea que ya existe</button><button class="btn btn-primary" onclick="juntaNuevaPrio()">＋ Nueva prioridad</button></div>
+    </div>
+    <div class="jt-card">
+      ${ps.length?ps.map(p=>juntaPrioHtml(p,null)).join(''):`<div class="muted" style="padding:14px 2px;font-size:13.5px">Aún no hay prioridades en este trimestre. Entre 3 y 6: cada una con una sola responsable, un «hecho» que se pueda comprobar el último día del trimestre y sus siguientes pasos con fecha.</div>`}
+    </div>
+    ${juntaHistorialHtml(trim)}
+    <div class="muted" style="font-size:12px">Cada prioridad es una tarea normal de Lucai (la ve su responsable en Tareas). Sus pasos son las subtareas, cada una con su fecha: basta con los 2 o 3 siguientes; se añaden y se marcan dentro de la tarea.</div>`;
+}
+function juntaAsuntosView(){
+  const res=juntaAsuntosResueltos();
+  const verRes=!!S.juntaVerResueltos;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="muted" style="font-size:13px;max-width:560px">Lo que hay que hablar en la reunión. Cualquiera del equipo lo apunta durante la semana; en la reunión se ordena y se resuelve.</div>
+      <button class="btn btn-primary" onclick="juntaAsuntoNuevo()">＋ Apuntar asunto</button>
+    </div>
+    <div class="jt-card">${juntaAsuntosLista(false)}</div>
+    ${res.length?`<button class="btn btn-ghost btn-sm" onclick="S.juntaVerResueltos=!S.juntaVerResueltos;render()" style="margin-bottom:10px">${verRes?'Ocultar':'Ver'} resueltos (${res.length})</button>`:''}
+    ${verRes&&res.length?`<div class="jt-card">${res.map(x=>`<div class="jt-row"><div style="flex:1;min-width:0"><div class="jt-tit" style="font-size:14px">${incEsc(x.titulo)}</div><div class="jt-sub">→ ${incEsc(x.decision||'')}</div><div class="jt-sub" style="color:#8A949B">${incEsc(fmtFecha(x.resueltoTs||''))}${x.resueltoPor?' · '+incEsc(x.resueltoPor):''}${(x.tareaIds||[]).length?` · ${(x.tareaIds||[]).length} tarea${(x.tareaIds||[]).length===1?'':'s'}`:''}</div></div><button class="btn btn-ghost btn-sm" onclick="juntaAsuntoReabrir('${x.id}')">Reabrir</button></div>`).join('')}</div>`:''}`;
+}
+function juntaActasView(){
+  if(S.juntaVerActa){ const a=(S.juntaActas||[]).find(x=>x.id===S.juntaVerActa && !x.borrado); if(a) return juntaActaDetalle(a); S.juntaVerActa=null; }
+  const actas=juntaActasVivas();
+  if(!actas.length) return `<div class="jt-card"><div class="muted" style="padding:14px 2px;font-size:13.5px">Aún no hay actas. Se guardan solas al terminar cada reunión.</div></div>`;
+  return `<div class="jt-card">${actas.map(a=>{ const dec=(S.juntaAsuntos||[]).filter(x=>!x.borrado && x.actaId===a.id && x.estado==='resuelto').length; const m=juntaNotaMedia(a); const nt=juntaTareasDeActa(a).length;
+    return `<div class="jt-row" style="cursor:pointer;align-items:center" onclick="S.juntaVerActa='${a.id}';render()"><div style="flex:1;min-width:0"><div class="jt-tit">${incEsc(juntaFechaLarga(a.fecha))}${!a.cerrada?' <span class="jt-chip jt-chip-ok" style="text-transform:none">en curso</span>':''}</div><div class="jt-sub">${(a.asistentes||[]).length} asistentes · ${dec} decisi${dec===1?'ón':'ones'} · ${nt} tarea${nt===1?'':'s'}</div></div>${m!=null?`<div style="font-family:Georgia,serif;font-size:22px;color:#333F48">${String(m).replace('.',',')}</div>`:''}<span style="color:#B8A88F;font-size:22px">›</span></div>`; }).join('')}</div>`;
+}
+function juntaActaContenido(a){
+  const dec=(S.juntaAsuntos||[]).filter(x=>!x.borrado && x.actaId===a.id && x.estado==='resuelto');
+  const marcas=Object.keys(a.prioMarcas||{}).filter(k=>a.prioMarcas[k]).map(k=>{ const p=(S.juntaPrios||[]).find(x=>x.id===k); const t=p&&juntaTarea(p.tareaId); return { tit:(t&&t.titulo)||(p&&p.titulo)||'Prioridad', quien:(t&&t.paraQuien)||'', m:a.prioMarcas[k] }; });
+  const ns=((S.juntaCfg&&S.juntaCfg.numeros)||[]).filter(n=>a.numeros && a.numeros[n.id]!=null && a.numeros[n.id]!=='');
+  const tareas=juntaTareasDeActa(a);
+  const media=juntaNotaMedia(a);
+  const dur=JUNTA_PARTES.map(p=>{ const s=(a.tiempos||{})[p.id]; return s>=30?`${p.corto} ${Math.max(1,Math.round(s/60))}'`:''; }).filter(Boolean).join(' · ');
+  return { dec, marcas, ns, tareas, media, dur };
+}
+function juntaActaDetalle(a){
+  const c=juntaActaContenido(a);
+  const sec=(t,h)=>`<div class="jt-card"><h3>${t}</h3>${h}</div>`;
+  const vacio='<div class="muted" style="font-size:13px;padding:4px 0 6px">—</div>';
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" onclick="S.juntaVerActa=null;render()">‹ Actas</button>
+      <div style="display:flex;gap:8px">${!a.cerrada?`<button class="btn btn-primary btn-sm" onclick="S.juntaTab='reunion';render()">Seguir con la reunión</button>`:''}<button class="btn btn-ghost btn-sm" onclick="juntaActaImprimir('${a.id}')">Imprimir</button>${isAdmin()?`<button class="btn btn-ghost btn-sm" style="color:#C0392B" onclick="juntaActaBorrar('${a.id}')">Quitar</button>`:''}</div>
+    </div>
+    <div class="jt-card" style="padding:14px 16px">
+      <div style="font-family:Georgia,serif;font-size:21px;color:#333F48">Reunión del ${incEsc(juntaFechaLarga(a.fecha))}</div>
+      <div class="jt-sub">Asistentes: ${incEsc((a.asistentes||[]).join(', ')||'—')}${a.inicio?` · ${incEsc(String(a.inicio).slice(11,16))}${a.fin?'–'+incEsc(String(a.fin).slice(11,16)):''}`:''}${c.media!=null?` · nota ${String(c.media).replace('.',',')}`:''}</div>
+      ${c.dur?`<div class="jt-sub" style="color:#8A949B">${incEsc(c.dur)}</div>`:''}
+    </div>
+    ${sec('Números', c.ns.length?c.ns.map(n=>{ const v=a.numeros[n.id]; const col=juntaNumColor(n,v); return `<div class="jt-row"><div style="flex:1">${incEsc(n.nombre)} <span class="jt-sub">(${incEsc(n.duena||'')} · objetivo ${n.sentido==='max'?'≤':'≥'} ${incEsc(n.objetivo||'—')})</span></div><strong style="color:${col||'#333F48'}">${incEsc(v)}</strong></div>`; }).join(''):vacio)}
+    ${sec('Prioridades', c.marcas.length?c.marcas.map(x=>`<div class="jt-row"><div style="flex:1;min-width:0">${incEsc(x.tit)} <span class="jt-sub">${incEsc(x.quien)}</span></div>${(function(){ const M=JUNTA_MARCAS[juntaMarcaNorm(x.m)]||JUNTA_MARCAS.amarillo; return `<span class="jt-chip" style="background:${M.bg};color:${M.fg}">${M.txt}</span>`; })()}</div>`).join(''):vacio)}
+    ${sec('Titulares', a.titulares?`<div style="white-space:pre-wrap;font-size:14px;padding-bottom:6px">${incEsc(a.titulares)}</div>`:vacio)}
+    ${sec('Decisiones', c.dec.length?c.dec.map(x=>`<div class="jt-row"><div style="flex:1;min-width:0"><div class="jt-tit" style="font-size:14px">${incEsc(x.titulo)}</div><div class="jt-sub">→ ${incEsc(x.decision||'')}</div></div></div>`).join(''):vacio)}
+    ${sec('Tareas', juntaTareasHtml(a))}`;
+}
+function juntaActaBorrar(id){
+  if(!isAdmin()) return; const a=(S.juntaActas||[]).find(x=>x.id===id); if(!a) return;
+  if(!confirm('¿Quitar esta acta de la lista?')) return;
+  a.borrado=true; S.juntaVerActa=null; render(); juntaToca(a);
+}
+function juntaActaImprimir(id){
+  const a=(S.juntaActas||[]).find(x=>x.id===id); if(!a) return;
+  const c=juntaActaContenido(a); const e=incEsc;
+  const li=arr=>arr.length?'<ul>'+arr.join('')+'</ul>':'<p class="v">—</p>';
+  const txt=s=>s?`<p style="white-space:pre-wrap">${e(s)}</p>`:'<p class="v">—</p>';
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Acta ${e(fmtFecha(a.fecha))}</title><style>
+    body{font-family:Arial,sans-serif;color:#333F48;max-width:720px;margin:24px auto;padding:0 18px;line-height:1.35}
+    h1{font-family:Georgia,serif;font-weight:400;font-size:24px;margin:0 0 4px;color:#8C7A5E} h2{font-size:14px;color:#8C7A5E;border-bottom:1px solid #B8A88F;padding-bottom:3px;margin:20px 0 8px;text-transform:uppercase;letter-spacing:1px}
+    .m{font-size:12.5px;color:#6C757D} .v{color:#9AA0A6} ul{margin:0;padding-left:18px} li{margin:5px 0} .ok{color:#6E8E00;font-weight:700} .mal{color:#C0392B;font-weight:700}
+    @media print{ body{margin:10mm auto} }</style></head><body>
+    <h1>Reunión semanal · ${e(juntaFechaLarga(a.fecha))}</h1>
+    <div class="m">Asistentes: ${e((a.asistentes||[]).join(', '))}${a.inicio?` · ${e(String(a.inicio).slice(11,16))}${a.fin?'–'+e(String(a.fin).slice(11,16)):''}`:''}${c.media!=null?` · nota ${String(c.media).replace('.',',')}`:''}</div>
+    <h2>Números</h2>${li(c.ns.map(n=>`<li>${e(n.nombre)} (${e(n.duena||'')}, objetivo ${n.sentido==='max'?'≤':'≥'} ${e(n.objetivo||'—')}): <b>${e(a.numeros[n.id])}</b></li>`))}
+    <h2>Prioridades</h2>${li(c.marcas.map(x=>`<li>${e(x.tit)} (${e(x.quien)}): ${(function(){ const M=JUNTA_MARCAS[juntaMarcaNorm(x.m)]||JUNTA_MARCAS.amarillo; return `<b style="color:${M.col}">${M.txt.toLowerCase()}</b>`; })()}</li>`))}
+    <h2>Titulares</h2>${txt(a.titulares)}
+    <h2>Decisiones</h2>${li(c.dec.map(x=>`<li><b>${e(x.titulo)}</b>: ${e(x.decision||'')}</li>`))}
+    <h2>Tareas</h2>${li(c.tareas.map(t=>`<li>${e(t.titulo)} · ${e(t.paraQuien||'')} · ${e(fmtFecha(t.fechaLimite||''))}</li>`))}
+    <script>window.onload=function(){ setTimeout(function(){ window.print(); }, 300); };<\/script></body></html>`;
+  const w=window.open('', '_blank');
+  if(!w){ toast('El navegador ha bloqueado la ventana de impresión'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
+/* ---- enrutado ---- */
+const _appView_junta = appView;
+appView = function(){
+  if(S.module==='junta'){ if(!canAccess('junta')){ S.module=null; return homeView(); } return juntaView(); }
+  return _appView_junta();
+};
+const _modalContent_junta = modalContent;
+modalContent = function(){
+  if(F.type==='junta_asunto') return juntaAsuntoModal();
+  if(F.type==='junta_resolver') return juntaResolverModal();
+  if(F.type==='junta_vincular') return juntaVincularModal();
+  if(F.type==='junta_numero') return juntaNumModal();
+  if(F.type==='junta_ajustes') return juntaAjustesModal();
+  return _modalContent_junta();
+};
+const _setModule_junta = setModule;
+setModule = function(id){
+  _setModule_junta(id);
+  if(id==='junta' && S.module==='junta'){ juntaCargar().then(()=>{ if(S.module==='junta') render(); }); }
+};
+/* ===== FIN REUNIÓN SEMANAL ===== */
 
 boot();
 
