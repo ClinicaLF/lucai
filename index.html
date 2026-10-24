@@ -4834,7 +4834,7 @@ function tarBuzonView(modo){
     const de = t.deQuien===me, para = t.paraQuien===me, part = tarPartList(t).includes(me);
     if(esTodas) return de || para || part;     // todo lo que me involucra (incluidas las mías)
     if(esMias)  return de && para;             // me la mando a mí mismo
-    if(modo==='emitidas') return de && !para;  // la mando a otra persona
+    if(modo==='emitidas') return de;           // las mando yo (también las que me mando a mí mismo)
     return (para || part) && !de;              // recibidas: me la mandan o participo
   });
   const otroDe = t => esMias ? '' : (esTodas ? (t.deQuien===me ? t.paraQuien : t.deQuien) : (modo==='emitidas'?t.paraQuien:t.deQuien));
