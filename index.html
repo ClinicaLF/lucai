@@ -1182,7 +1182,7 @@ function stockView(){
       <td data-label="Estado">${est==='Sin aviso'?'<span class="muted">Sin aviso</span>':`<span class="tag ${cls}">${est}</span>`}</td>
       <td data-label="Salida">${a.trazable
         ? `<button class="btn btn-ghost btn-sm" onclick="openSalida('${a.cod}')" ${a.stock<=0?'disabled':''}>Salida</button>`
-        : `<button class="btn btn-ghost btn-sm" onclick="quickOut('${a.cod}')" ${a.stock<=0?'disabled':''} title="Descontar 1 (genérico)">−1</button>`}</td>
+        : `<button class="btn btn-ghost btn-sm" onclick="quickOut('${a.cod}')" ${a.stock<=0?'disabled':''} title="Descontar 1 (genérico)">−1</button>`}<button class="lx-ed" onclick="openEdit('${a.cod}')" title="Editar artículo">${LX_IC_EDIT}</button></td>
     </tr>`;
   }).join("") : `<tr><td colspan="8" class="empty">Ningún artículo coincide con el filtro.</td></tr>`;
   /* tarjetas para móvil (la tabla de arriba queda solo para escritorio) */
@@ -1222,10 +1222,10 @@ function stockView(){
         ${catSel}
         <button class="chip-sel ${S.stockPedir?'on':''}" onclick="toggleStockPedir()">Solo lo que hay que pedir</button>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="exportStock()">⤓ Exportar a Excel</button>
+      
     </div>
     <div class="matrix alm-desk"><table>
-      <thead><tr><th>Artículo</th><th>Categoría</th><th>Proveedor</th><th>Stock</th><th>Mínimo</th><th>Caduca</th><th>Estado</th><th>Salida</th></tr></thead>
+      <thead><tr><th>Artículo</th><th>Categoría</th><th>Proveedor</th><th>Stock</th><th>Mínimo</th><th>Caduca</th><th>Estado</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div class="alm-cards">${cards}</div>`;
@@ -11593,6 +11593,91 @@ function lxPregunta(msg){
 function lxPedir(msg, valor){
   return lxDialogo({titulo:String(msg||'').replace(/:\s*$/,''), tipo:'pregunta', input:{valor:valor||''}, botones:[{k:null,label:'Cancelar'},{k:true,label:'Guardar',cls:'azul'}]});
 }
+
+/* ============================================================
+   LUCAI · CONTROL DE MATERIAL EN 4 PESTAÑAS (24/10/2026, David eligió la opción A)
+   Stock (con editar artículo y los dados de baja) · Pedidos (con Proveedores) · Historial (Entradas y salidas ·
+   Revisiones) · Informes, solo Dirección (Valor almacenado · Pérdidas). Solo cambia dónde se ve cada cosa:
+   las vistas, los datos y las funciones de guardar son las de siempre (stockView, pedidosView, movsView…).
+   Las pestañas antiguas se traducen solas (p. ej. tras crear un artículo el código pone S.sub='arts' → Stock).
+   ============================================================ */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css11">
+.lx-msub{margin:0 0 14px}
+.lx-mbaja{margin-top:14px;border:1px dashed var(--line);border-radius:12px;padding:10px 14px}
+.lx-mbaja summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--grey)}
+.lx-mbaja table{margin-top:8px}
+.lx-ed{border:1px solid var(--line);background:var(--white);border-radius:8px;width:30px;height:30px;padding:0;display:inline-grid;place-items:center;color:var(--grey);cursor:pointer;margin-left:6px;vertical-align:middle}
+.lx-ed:hover{color:var(--lx-acc);border-color:var(--lx-acc)}
+.lx-ed svg{width:14px;height:14px}
+@media(min-width:721px){
+  .lx-mat .vhead>div{display:flex !important;flex-wrap:nowrap !important;gap:8px;align-items:center;width:100%}
+  .lx-mat .vhead .fh{width:auto !important;flex:0 1 280px;margin:0 !important}
+  .lx-mat .vhead .chip-sel{white-space:nowrap;margin:0}
+}
+@media(max-width:720px){
+  body.has-tb .lx-mat .toolbar{flex-direction:column !important;align-items:stretch !important;gap:10px}
+  body.has-tb .lx-mat .actions.lx-acts{flex-wrap:wrap !important;width:100% !important;gap:8px}
+  body.has-tb .lx-mat .actions.lx-acts>.btn-primary{flex:1 1 100% !important}
+  body.has-tb .lx-mat .actions.lx-acts>.lx-masw:first-of-type{flex:1 1 auto}
+  body.has-tb .lx-mat .actions.lx-acts>.lx-masw:first-of-type>.btn{width:100%}
+}
+</style>`);
+const LX_IC_EDIT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+function lxMatTab(){
+  const s=S.sub||'stock', admin=isAdmin();
+  if(s==='arts') return 'stock';
+  if(s==='provs'){ S.matPed='provs'; return 'pedidos'; }
+  if(s==='movs'){ S.matHist='movs'; return 'hist'; }
+  if(s==='segui'){ S.matHist='segui'; return 'hist'; }
+  if(s==='valor'||s==='perdidas'){ if(!admin) return 'stock'; S.matInf=s; return 'informes'; }
+  if(s==='informes' && !admin) return 'stock';
+  return ['stock','pedidos','hist','informes'].includes(s) ? s : 'stock';
+}
+function lxSubSel(clave, ops){
+  const v=S[clave]||ops[0][0];
+  return `<div class="lx-msub"><div class="lx-modo">${ops.map(([k,l])=>`<button class="${v===k?'on':''}" onclick="S.${clave}='${k}';render()">${l}</button>`).join('')}</div></div>`;
+}
+function lxMatBajas(){
+  const xs=(S.articulos||[]).filter(a=>a.activo===false);
+  if(!xs.length) return '';
+  return `<details class="lx-mbaja"${S.matBajasOpen?' open':''} ontoggle="S.matBajasOpen=this.open"><summary>Artículos dados de baja (${xs.length})</summary>
+    <div class="matrix"><table><thead><tr><th>Código</th><th>Nombre</th><th>Categoría</th><th></th></tr></thead><tbody>
+    ${xs.map(a=>`<tr style="opacity:.75"><td class="mono">${a.cod}</td><td><strong>${a.nombre}</strong></td><td>${a.categoria}</td><td><button class="btn btn-ghost btn-sm" onclick="openEdit('${a.cod}')">Reactivar</button></td></tr>`).join('')}
+    </tbody></table></div></details>`;
+}
+materialView=function(){
+  const tab=lxMatTab(); S.sub=tab; const admin=isAdmin();
+  const tabs=[['stock','Stock'],['pedidos','Pedidos'],['hist','Historial']].concat(admin?[['informes','Informes']]:[]);
+  const seg=`<div class="seg">${tabs.map(([k,l])=>`<button class="${tab===k?'on':''}" onclick="setSub('${k}')">${l}</button>`).join('')}</div>`;
+  let body='';
+  if(tab==='pedidos'){
+    body=lxSubSel('matPed',[['peds','Pedidos'],['provs','Proveedores']]) + ((S.matPed||'peds')==='provs' ? proveedoresView() : pedidosView());
+  } else if(tab==='hist'){
+    body=lxSubSel('matHist',[['movs','Entradas y salidas'],['segui','Revisiones']]) + ((S.matHist||'movs')==='segui' ? seguiView() : movsView());
+  } else if(tab==='informes'){
+    body=lxSubSel('matInf',[['valor','Valor almacenado'],['perdidas','Pérdidas']]) + ((S.matInf||'valor')==='perdidas' ? perdidasView() : valorView());
+  } else {
+    body=stockView()+lxMatBajas();
+  }
+  const acts = tab!=='stock' ? '' : `
+    <div class="actions lx-acts">
+      <button class="btn btn-primary" onclick="openModal('salida')">Registrar salida</button>
+      <div class="lx-masw"><button class="btn btn-ghost" onclick="S.lxEnt=!S.lxEnt;S.lxMas=false;render()">＋ Entrada ▾</button>${S.lxEnt?`<div class="lx-menu-ov" onclick="S.lxEnt=false;render()"></div><div class="lx-menu" onclick="S.lxEnt=false"><button onclick="openModal('entrada')">Entrada directa</button><button onclick="cargaPedidoOpen()">Cargar compra (foto o PDF)</button></div>`:''}</div>
+      <button class="btn btn-ghost" onclick="openModal('merma')">Baja</button>
+      <div class="lx-masw"><button class="btn btn-ghost lx-masb" onclick="S.lxMas=!S.lxMas;S.lxEnt=false;render()" title="Más opciones">⋯</button>${S.lxMas?`<div class="lx-menu-ov" onclick="S.lxMas=false;render()"></div><div class="lx-menu" onclick="S.lxMas=false"><button onclick="openModal('articulo')">＋ Nuevo artículo</button><button onclick="exportStock()">Exportar a Excel</button></div>`:''}</div>
+    </div>`;
+  return `${moduleHeader('Control de material', true)}
+  <main class="lx-tar lx-mat"><div class="wrap">
+    <div class="toolbar" style="margin-bottom:14px">
+      <div><div class="section-title">Material</div></div>
+      ${acts}
+    </div>
+    ${seg}
+    ${body}
+  </div></main>
+  ${S.modal?modalContent():''}
+  ${S.alert==='pedir'?pedirModal():S.alert==='cad'?cadModal():''}`;
+};
 
 boot();
 
