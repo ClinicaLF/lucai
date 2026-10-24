@@ -4888,7 +4888,7 @@ function tarBuzonView(modo){
   const arrow = bf.sortDir==='desc'?'▼':'▲';
   const dlab=`style="font-size:10px;color:var(--t-fg-8A949B);letter-spacing:.2px;margin-bottom:1px"`;
   const dinp=`class="inp" style="margin:0;padding:3px 6px;font-size:12px;width:108px"`;
-  const rangoEntrega=`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin-top:4px">
+  const rangoEntrega=`<div class="lx-rango" onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin-top:4px">
       <div style="display:flex;align-items:center;gap:5px">
         <span style="font-size:10px;color:var(--t-fg-8A949B);text-transform:uppercase;letter-spacing:.04em;min-width:36px">Desde</span>
         <input type="date" ${dinp} value="${incEsc(bf.desde||'')}" onchange="setTarBuzF('desde',this.value)">
@@ -4931,7 +4931,7 @@ function tarBuzonView(modo){
     const quick = tarActiva(t)
       ? `<button class="btn btn-ghost btn-sm" style="padding:6px 8px;line-height:0;color:var(--t-fg-6E8E00)" title="Marcar como hecha" onclick="event.stopPropagation();tarMarcarHecha('${t.id}')"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></button>`
       : '';
-    return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'style="background:var(--t-bg-FBEEEA)"':''}>
+    return `<tr onclick="openTarDet('${t.id}')" ${tarVencida(t)?'class="lx-venc"':''}>
       <td class="tar-c-prio">${tarPrioChip(t.prioridad)}</td>
       <td class="tar-c-tarea" style="font-weight:600">${pinBtn}${incEsc(tarCap(t.titulo))}${tarRecurMark(t)}${tarNvBadge(t)}${tarDescPrevHtml(t)}</td>
       <td class="tar-c-cat col-hide-m" style="color:var(--t-fg-5A6770);font-size:13px">${incEsc(t.area||'General')}</td>
@@ -11412,6 +11412,50 @@ tarVistaSel=function(){
   const bf=S.tarBuzF||{}; const nF=[bf.prio,bf.cat,bf.persona,bf.estado,bf.q,bf.desde,bf.hasta].filter(Boolean).length;
   return `<div class="lx-bar"><div class="tar-vista">${op.map(([k,l])=>`<button class="${v===k?'on':''}" onclick="S.tarVista='${k}';render()">${l}</button>`).join('')}</div>
     <div class="lx-der">${lista?`<button class="lx-filtb${S.tarFiltOpen||nF?' on':''}" onclick="tarToggleFilt()">Filtros${nF?' · '+nF:''}</button>`:''}${lxModoSel()}</div></div>`;
+};
+
+/* ============================================================
+   LUCAI · TAREAS EN TABLA Y COLORES DE UNA SOLA FAMILIA (24/10/2026, David)
+   - Siempre en tabla (fuera el selector Lista/Tabla).
+   - Etiquetas suaves y del mismo estilo: prioridad (rojo/ámbar/gris) y estado (gris/azul/ámbar/verde).
+   - Vencidas: raya roja a la izquierda en vez de toda la fila rosa.
+   - Cabecera de la tabla más baja: las fechas Desde/Hasta en una línea.
+   ============================================================ */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css5">
+:root{--lx-rojo-s:#FEF3F2;--lx-rojo:#B42318;--lx-amb-s:#FFFAEB;--lx-amb:#B54708;--lx-gris-s:#F2F4F7;--lx-gris:#475467;--lx-azul-s:#EFF4FF;--lx-azul:#1D4ED8;--lx-verde-s:#ECFDF3;--lx-verde:#067647}
+:root[data-tema="noche"]{--lx-rojo-s:#3A1D1B;--lx-rojo:#F97066;--lx-amb-s:#3A2E12;--lx-amb:#FEC84B;--lx-gris-s:#262E38;--lx-gris:#C9D1DB;--lx-azul-s:#1E2A44;--lx-azul:#84ADFF;--lx-verde-s:#0F2E1C;--lx-verde:#75E0A7}
+.inc-imp{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;text-transform:none;letter-spacing:0;color:var(--lx-gris)}
+.imp-Alta{background:var(--lx-rojo-s);color:var(--lx-rojo)}
+.imp-Media{background:var(--lx-amb-s);color:var(--lx-amb)}
+.imp-Baja{background:var(--lx-gris-s);color:var(--lx-gris)}
+.inctable-tar tr.lx-venc td:first-child{box-shadow:inset 3px 0 0 #D92D20}
+.inctable-tar .tar-c-act .btn{color:var(--grey-2) !important;border-color:var(--line)}
+.inctable-tar .tar-c-act .btn:hover{color:#16A34A !important;border-color:#16A34A}
+.inctable-tar thead th{padding:7px 8px !important;vertical-align:middle !important}
+.inctable-tar thead th .tar-hf, .inctable-tar thead th>div{margin-top:3px}
+.inctable-tar thead .inp{height:30px;padding:3px 8px !important;margin:0 !important}
+.inctable-tar .lx-rango{display:flex !important;flex-direction:row !important;align-items:center !important;gap:4px !important;margin-top:3px !important}
+.inctable-tar .lx-rango>div>span{display:none}
+.inctable-tar .lx-rango input{width:118px !important}
+.tar-vista button.on{background:var(--lx-accs);border-color:var(--lx-acc);color:var(--lx-acc)}
+</style>`);
+S.tarModo='tabla';
+tarEstadoCss=function(e){
+  if(e==='Hecha') return 'background:var(--lx-verde-s);color:var(--lx-verde)';
+  if(e==='En curso') return 'background:var(--lx-azul-s);color:var(--lx-azul)';
+  if(e==='En espera') return 'background:var(--lx-amb-s);color:var(--lx-amb)';
+  return 'background:var(--lx-gris-s);color:var(--lx-gris)';
+};
+tarVistaSel=function(){
+  const v=S.tarVista||'todas';
+  const op=[['todas','Todas'],['recibidas','Me las mandan'],['emitidas','Las mando yo']];
+  return `<div class="lx-bar"><div class="tar-vista">${op.map(([k,l])=>`<button class="${v===k?'on':''}" onclick="S.tarVista='${k}';render()">${l}</button>`).join('')}</div></div>`;
+};
+document.head.insertAdjacentHTML('beforeend', `<style>.inctable-tar .tar-c-prio select{min-width:76px} .tar-card.tar-card-venc{background:var(--white) !important;border-left:3px solid #D92D20 !important}</style>`);
+tarNvBadge=function(t){
+  const me=S.user&&S.user.nombre; if(!me) return '';
+  const nv=tarNuevosPara(t,me); if(!nv) return '';
+  return ` <span style="background:var(--lx-azul-s);color:var(--lx-azul);font-size:11px;font-weight:800;border-radius:6px;padding:1px 7px;margin-left:6px;white-space:nowrap">● ${nv} nuevo${nv>1?'s':''}</span>`;
 };
 
 boot();
