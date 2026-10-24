@@ -11519,6 +11519,17 @@ tarCambiarEstado=function(id, v){
   tarMarcar(id, v);
 };
 
+/* LUCAI · al marcar hecha desde dentro de la tarea, la ventana de la tarea se cierra (David, 24/10/2026) */
+function lxCerrarDetSi(id){ try{ if(S.modal==='tar_det' && F && F.id===id) closeModal(); }catch(_){} }
+tarMarcarHecha=function(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  lxConfirmarHecha(t, ()=>{ lxCerrarDetSi(id); tarMarcar(id,'Hecha'); });
+};
+tarCambiarEstado=function(id, v){
+  if(v==='Hecha'){ const t=(S.tareas||[]).find(x=>x.id===id); if(t){ lxConfirmarHecha(t, ()=>{ lxCerrarDetSi(id); tarMarcar(id,'Hecha'); }, ()=>render()); return; } }
+  tarMarcar(id, v);
+};
+
 boot();
 
 </script>
