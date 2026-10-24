@@ -5605,9 +5605,9 @@ function tarDetModalContent(){
   const tabBtn=(k,lbl)=>`<button onclick="tarDetTab('${k}')" style="cursor:pointer;border:none;background:none;padding:8px 2px;margin-right:18px;font-size:13.5px;font-weight:600;color:${tab===k?'var(--t-fg-333F48)':'var(--t-fg-8A949B)'};border-bottom:2px solid ${tab===k?'var(--t-bd-6E8E00)':'transparent'}">${lbl}</button>`;
   const tabBar=`<div style="display:flex;border-bottom:1px solid var(--t-bd-line);margin:4px 0 10px">
     ${tabBtn('conv','Conversación'+(nMsg?` (${nMsg})`:''))}
-    ${tabBtn('sub','Subtareas'+(_chk.length?` (${_chkDone}/${_chk.length})`:''))}
+    ${(_chk.length || (S.juntaPrios||[]).some(p=>!p.borrado && p.tareaId===t.id)) ? tabBtn('sub','Subtareas'+(_chk.length?` (${_chkDone}/${_chk.length})`:'')) : ''}
     ${tabBtn('time','Tiempo'+(totMin?` · ${tarFmtMin(totMin)}`:''))}
-    ${tabBtn('img','Imágenes'+(nImg?` (${nImg})`:''))}
+    ${nImg ? tabBtn('img','Imágenes'+` (${nImg})`) : ''}
   </div>`;
   let tabBody='';
   if(tab==='time') tabBody=tarTiempoHtml(t,true);
