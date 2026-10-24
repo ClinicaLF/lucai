@@ -2988,7 +2988,8 @@ function homeView(){
     orto:'<path d="M6 4c1.6 0 2.4 1 3.2 1s1.2-1 2.8-1 2 1 2.8 1S18 4 18 4c1.6 0 2.5 1.3 2.5 3.2 0 2.4-1 4-1.6 6.8-.5 2.3-1 5-2.4 5-1.2 0-1.3-2.4-2.5-2.4S13 19 12 19s-1.3-2.4-2.5-2.4S8.7 19 7.5 19c-1.4 0-1.9-2.7-2.4-5C4.5 11.2 3.5 9.6 3.5 7.2 3.5 5.3 4.4 4 6 4z"/>',
     documentos:'<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 16.5h6"/>',
     temas:'<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 12h5"/>',
-    junta:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="9" cy="14.5" r="1.3"/><circle cx="15" cy="14.5" r="1.3"/>'
+    junta:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="9" cy="14.5" r="1.3"/><circle cx="15" cy="14.5" r="1.3"/>',
+    manual:'<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8 8h8M8 11.5h6"/>'
   };
   /* módulos en uso, en este orden (David, 24/10/2026); los demás quedan ocultos, con sus datos intactos */
   const GROUPS = [
@@ -10724,6 +10725,312 @@ setModule = function(id){
   if(id==='junta' && S.module==='junta'){ juntaCargar().then(()=>{ if(S.module==='junta') render(); }); }
 };
 /* ===== FIN REUNIÓN SEMANAL ===== */
+
+/* ============================================================
+   LUCAI · MANUAL (24/10/2026)
+   Los procesos con sus anexos (protocolos), el organigrama, los
+   puestos con sus funciones y su rutina, y un buscador. Cada cosa
+   lleva su sello: Aprobado o Pendiente de aprobar.
+   El contenido no se escribe aquí: lo genera el instalador del
+   cerebro (manual.json) y Dirección lo carga desde el módulo.
+   Se guarda en la tabla lucai_manual (SQL-manual.sql), un
+   documento por fila; la fila '_cfg' guarda si el equipo lo ve.
+   Si la tabla no existe, el módulo lo dice y el resto de la app
+   sigue igual.
+   ============================================================ */
+const MAN = { docs:{}, lista:[], cfg:{visible:false}, cargado:false, cargando:false, sinTabla:false, error:'' };
+(function(){
+  if(!MODULES.find(x=>x.id==='manual')){
+    MODULES.push({ id:'manual', ini:'M', nombre:'Manual',
+      desc:'Cómo trabajamos: los procesos y sus protocolos, el organigrama y lo que hace cada puesto.',
+      estado:'activo' });
+  }
+  if(!LUCAI_VISIBLES.includes('manual')){ const i=LUCAI_VISIBLES.indexOf('junta'); LUCAI_VISIBLES.splice(i>=0?i+1:LUCAI_VISIBLES.length, 0, 'manual'); }
+  if(typeof TB_IC==='object' && TB_IC && !TB_IC.manual) TB_IC.manual='<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8 8h8M8 11.5h6"/>';
+})();
+/* Dirección siempre; el resto del equipo, cuando Dirección lo hace visible */
+const _canAccess_manual = canAccess;
+canAccess = function(id){ if(id==='manual') return !!S.user && (isAdmin() || MAN.cfg.visible===true || _canAccess_manual(id)); return _canAccess_manual(id); };
+
+function manEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* el html viene del instalador; aun así, fuera scripts y atributos on… */
+function manLimpio(h){ return String(h||'').replace(/<\s*(script|iframe|object|embed|style)[\s\S]*?<\s*\/\s*\1\s*>/gi,'').replace(/<\s*(script|iframe|object|embed)[^>]*>/gi,'').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,'').replace(/javascript:/gi,''); }
+function manTablaFalta(e){ const m=String((e&&(e.message||e.code))||''); return (e&&(e.code==='42P01'||e.code==='PGRST205')) || /lucai_manual/.test(m) && /(exist|schema cache|not find)/i.test(m); }
+
+async function manCfgCargar(){
+  try{
+    const { data, error } = await sbc.from('lucai_manual').select('datos').eq('clinica', CLINICA).eq('id', '_cfg').maybeSingle();
+    if(error){ if(manTablaFalta(error)) MAN.sinTabla=true; return; }
+    MAN.sinTabla=false;
+    if(data && data.datos && typeof data.datos==='object') MAN.cfg=data.datos;
+  }catch(e){ console.error('manCfgCargar', e); }
+}
+async function manCargar(){
+  if(MAN.cargando) return; MAN.cargando=true;
+  try{
+    const { data, error } = await sbc.from('lucai_manual').select('id,tipo,datos').eq('clinica', CLINICA).limit(5000);
+    if(error) throw error;
+    MAN.sinTabla=false; MAN.error='';
+    const docs={}, lista=[];
+    (data||[]).forEach(r=>{ if(r.id==='_cfg'){ if(r.datos) MAN.cfg=r.datos; return; } if(r.datos){ docs[r.id]=r.datos; lista.push(r.datos); } });
+    MAN.docs=docs; MAN.lista=lista; MAN.cargado=true;
+  }catch(e){
+    console.error('manCargar', e);
+    if(manTablaFalta(e)) MAN.sinTabla=true; else MAN.error='No se ha podido leer el manual.';
+  }finally{ MAN.cargando=false; }
+}
+const _loadFromDB_manual = loadFromDB;
+loadFromDB = async function(){
+  await _loadFromDB_manual();
+  await manCfgCargar();
+  if(S.module==='manual' && !MAN.cargado) await manCargar();
+};
+
+/* ---- cargar el manual (solo Dirección) ---- */
+function manElegirArchivo(){
+  if(!isAdmin()) return;
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return; const r=new FileReader();
+    r.onload=()=>{ let m; try{ m=JSON.parse(r.result); }catch(_){ toast('Ese archivo no es un manual'); return; } manSubir(m); };
+    r.onerror=()=>toast('No se ha podido leer el archivo'); r.readAsText(f, 'utf-8'); };
+  inp.click();
+}
+async function manSubir(m){
+  if(!m || !Array.isArray(m.docs) || !m.docs.length || !m.docs.every(d=>d && d.id && d.tipo && d.titulo!=null)){ toast('Ese archivo no es un manual'); return; }
+  const ap=m.docs.filter(d=>d.estado==='aprobado').length;
+  if(!confirm(`Cargar el manual de «${m.clinica||''}» (generado el ${m.generado||'?'}): ${m.docs.length} documentos, ${ap} aprobados.\n\nSustituye al manual que haya ahora en Lucai.`)) return;
+  MAN.subiendo=true; render();
+  try{
+    const ahora=new Date().toISOString();
+    const filas=m.docs.map(d=>({ clinica:CLINICA, id:String(d.id), tipo:String(d.tipo), datos:Object.assign({}, d, {html:manLimpio(d.html)}), updated_at:ahora }));
+    for(let i=0;i<filas.length;i+=15){
+      const { error } = await sbc.from('lucai_manual').upsert(filas.slice(i,i+15), { onConflict:'clinica,id' });
+      if(error) throw error;
+    }
+    const cfg=Object.assign({}, MAN.cfg, { clinica:m.clinica||'', generado:m.generado||'', cargado:ahora, cargadoPor:(S.user&&S.user.nombre)||'' });
+    { const { error } = await sbc.from('lucai_manual').upsert({ clinica:CLINICA, id:'_cfg', tipo:'cfg', datos:cfg, updated_at:ahora }, { onConflict:'clinica,id' }); if(error) throw error; }
+    /* lo que ya no viene en el manual nuevo, fuera (solo después de guardar lo nuevo) */
+    const nuevos=new Set(filas.map(f=>f.id).concat(['_cfg']));
+    const { data: hay, error: e2 } = await sbc.from('lucai_manual').select('id').eq('clinica', CLINICA).limit(5000);
+    if(!e2){ const sobran=(hay||[]).map(r=>r.id).filter(id=>!nuevos.has(id)); for(let i=0;i<sobran.length;i+=50){ await sbc.from('lucai_manual').delete().eq('clinica', CLINICA).in('id', sobran.slice(i,i+50)); } }
+    MAN.cfg=cfg; MAN.cargado=false; await manCargar();
+    toast(`Manual cargado: ${m.docs.length} documentos`);
+  }catch(e){
+    console.error('manSubir', e);
+    toast(manTablaFalta(e) ? 'Falta preparar la base de datos (SQL del manual)' : 'No se ha podido cargar el manual. Inténtalo otra vez.');
+  }finally{ MAN.subiendo=false; render(); }
+}
+async function manVisible(v){
+  if(!isAdmin()) return;
+  const cfg=Object.assign({}, MAN.cfg, { visible:!!v });
+  try{
+    const { error } = await sbc.from('lucai_manual').upsert({ clinica:CLINICA, id:'_cfg', tipo:'cfg', datos:cfg, updated_at:new Date().toISOString() }, { onConflict:'clinica,id' });
+    if(error) throw error;
+    MAN.cfg=cfg; toast(v ? 'El equipo ya ve el Manual' : 'El Manual vuelve a ser solo para Dirección');
+  }catch(e){ console.error('manVisible', e); toast('No se ha podido guardar'); }
+  render();
+}
+async function manRefrescar(){ MAN.cargado=false; render(); await manCargar(); render(); }
+
+/* ---- navegación ---- */
+function manIr(id){ S.manDoc=id||null; render(); try{ window.scrollTo(0,0); }catch(_){} }
+function manTab(t){ S.manTab=t; S.manDoc=null; render(); try{ window.scrollTo(0,0); }catch(_){} }
+function manDocs(t){ return MAN.lista.filter(d=>d.tipo===t).sort((a,b)=>(a.num||0)-(b.num||0)); }
+function manSello(d){ return d.estado==='aprobado' ? `<span class="man-sello ok">✓ Aprobado</span>` : `<span class="man-sello pend">● Pendiente de aprobar</span>`; }
+function manOcupa(d){ return (d && d.ocupa && d.ocupa.titular) ? manEsc(d.ocupa.titular) : '<em>por asignar</em>'; }
+function manAviso(d){
+  return d.estado==='aprobado'
+    ? `<div class="man-aviso ok">Versión aprobada${d.desde?' · '+manEsc(d.desde):''}. Es la que vale.</div>`
+    : `<div class="man-aviso pend">Borrador pendiente de aprobar: se puede consultar, pero puede cambiar.</div>`;
+}
+function manFila(id, izq, txt, d){ return `<button class="man-fila" onclick="manIr('${manEsc(id)}')">${izq?`<span class="man-cod">${manEsc(izq)}</span>`:''}<span class="man-tt">${txt}</span>${d?manSello(d):''}</button>`; }
+
+function manVProcesos(){
+  return `<div class="man-sec">Los ${manDocs('proceso').length} procesos de la clínica</div><div class="man-grid">` + manDocs('proceso').map(p=>{
+    const anx=(p.anexos||[]).map(a=>MAN.docs[a]).filter(Boolean); const ap=anx.filter(a=>a.estado==='aprobado').length;
+    return `<button class="man-card" onclick="manIr('${manEsc(p.id)}')"><div class="man-n">PROCESO ${p.num}</div><div class="man-h">${manEsc(p.titulo)}</div>
+      <div class="man-meta">Dueño: ${manEsc(p.dueno)} · <b>${manOcupa(p)}</b></div>
+      <div class="man-pie"><span class="man-meta">${anx.length} anexos${ap?' · '+ap+' aprobados':''}</span>${manSello(p)}</div></button>`;
+  }).join('') + `</div>`;
+}
+function manVProceso(p){
+  const anx=(p.anexos||[]).map(a=>MAN.docs[a]).filter(Boolean);
+  return `<button class="man-volver" onclick="manIr(null)">← Procesos</button>
+  <div class="man-lado"><div class="man-doc"><div class="man-cab"><span class="man-n">PROCESO ${p.num}</span>${manSello(p)}</div>${manAviso(p)}${p.html||''}</div>
+  <div class="man-caja"><div class="man-ct">Dueño</div><div>${manEsc(p.dueno)}</div><div style="margin-bottom:14px"><b>${manOcupa(p)}</b></div>
+    <div class="man-ct">Anexos (${anx.length})</div><div class="man-lista">${anx.map(a=>manFila(a.id, a.codigo, manEsc(a.titulo))).join('')}</div></div></div>`;
+}
+function manVAnexo(a){
+  const p=MAN.docs[a.padre];
+  return `<button class="man-volver" onclick="manIr('${manEsc(a.padre)}')">← ${manEsc(p?p.titulo:'Proceso')}</button>
+  <div class="man-doc"><div class="man-cab"><span class="man-n">ANEXO ${manEsc(a.codigo)} · ${manEsc(p?p.titulo:'')}</span>${manSello(a)}</div>${manAviso(a)}${a.html||''}</div>`;
+}
+function manNiveles(){ const o=MAN.docs['organigrama']; return (o && o.niveles) ? Object.entries(o.niveles) : [['Puestos', manDocs('puesto').map(d=>d.num)]]; }
+function manVPuestos(){
+  return manNiveles().map(([niv, nums])=>`<div class="man-sec">${manEsc(niv)}</div><div class="man-grid">` + nums.map(n=>{
+    const d=MAN.docs['puesto:'+n]; if(!d) return '';
+    return `<button class="man-card" onclick="manIr('${d.id}')"><div class="man-n">PUESTO ${n}</div><div class="man-h">${manEsc(d.titulo)}</div>
+      <div class="man-meta"><b>${manOcupa(d)}</b></div><div class="man-pie"><span class="man-meta">${d.rinde?'Rinde cuentas a: '+manEsc(d.rinde):''}</span>${manSello(d)}</div></button>`;
+  }).join('') + `</div>`).join('');
+}
+function manVPuesto(d){
+  const r=MAN.docs['rutina:'+d.num]; const suyos=manDocs('proceso').filter(p=>p.dueno_puesto===d.num);
+  return `<button class="man-volver" onclick="manIr(null)">← Puestos</button>
+  <div class="man-lado"><div class="man-doc"><div class="man-cab"><span class="man-n">PUESTO ${d.num}</span>${manSello(d)}</div>${manAviso(d)}${d.html||''}</div>
+  <div class="man-caja"><div class="man-ct">Lo ocupa</div><div><b>${manOcupa(d)}</b></div>
+    <div class="man-meta" style="margin-top:4px">Suplente: ${d.ocupa&&d.ocupa.suplente?manEsc(d.ocupa.suplente):'por asignar'}</div>
+    ${d.rinde?`<div class="man-ct" style="margin-top:14px">Rinde cuentas a</div><div>${manEsc(d.rinde)}</div>`:''}
+    ${r?`<div class="man-ct" style="margin-top:14px">Su rutina</div><div class="man-lista">${manFila(r.id,'','Día, semana y mes',r)}</div>`:''}
+    ${suyos.length?`<div class="man-ct" style="margin-top:14px">Dueño de</div><div class="man-lista">${suyos.map(p=>manFila(p.id,String(p.num),manEsc(p.titulo))).join('')}</div>`:''}
+  </div></div>`;
+}
+function manVRutina(r){
+  const p=MAN.docs[r.padre];
+  return `<button class="man-volver" onclick="manIr('${manEsc(r.padre)}')">← ${manEsc(p?p.titulo:'Puesto')}</button>
+  <div class="man-doc"><div class="man-cab">${manSello(r)}</div>${manAviso(r)}${r.html||''}</div>`;
+}
+function manVOrganigrama(){
+  const o=MAN.docs['organigrama'];
+  return `${o?`<div class="man-cab" style="margin-bottom:12px">${manSello(o)}<button class="man-volver" style="margin:0 0 0 auto" onclick="manIr('organigrama')">Ver el documento completo →</button></div>`:''}`
+    + manNiveles().map(([niv, nums])=>`<div class="man-sec">${manEsc(niv)}</div><div class="man-grid man-org">` + nums.map(n=>{
+      const d=MAN.docs['puesto:'+n]; if(!d) return '';
+      return `<button class="man-card" onclick="manIr('${d.id}')"><div class="man-h">${manEsc(d.titulo)}</div><div><b>${manOcupa(d)}</b></div>${d.rinde?`<div class="man-meta" style="margin-top:6px">↑ ${manEsc(d.rinde)}</div>`:''}</button>`;
+    }).join('') + `</div>`).join('');
+}
+function manVOrgDoc(o){ return `<button class="man-volver" onclick="manIr(null)">← Organigrama</button><div class="man-doc"><div class="man-cab">${manSello(o)}</div>${manAviso(o)}${o.html||''}</div>`; }
+function manPersonas(){
+  const s=new Set();
+  manDocs('puesto').forEach(d=>{ String((d.ocupa&&d.ocupa.titular)||'').replace(/\(.*?\)/g,'').replace(/^Todas:/i,'').split(/,|·| y /).map(x=>x.trim()).filter(x=>x && !/^cada/i.test(x)).forEach(x=>s.add(x)); });
+  return [...s].sort((a,b)=>a.localeCompare(b,'es'));
+}
+/* «Noemi Martinez» en la app = «Noemí» en el manual: sin tildes ni letras dobles, por el nombre de pila */
+function manNom(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/^dra?\.\s*/,'').replace(/(.)\1/g,'$1').trim(); }
+function manYo(){
+  if(S.manYo!=null) return S.manYo;
+  const yo=manNom(S.user&&S.user.nombre);
+  const p=manPersonas().find(x=>{ const c=manNom(x); return yo && (yo===c || yo.startsWith(c+' ') || c.startsWith(yo+' ') || yo.split(' ')[0]===c.split(' ')[0]); });
+  return p||'';
+}
+function manVMiPuesto(){
+  const yo=manYo();
+  const sel=`<select class="man-input" onchange="S.manYo=this.value;render()"><option value="">¿Quién eres?</option>${manPersonas().map(p=>`<option ${p===yo?'selected':''}>${manEsc(p)}</option>`).join('')}</select>`;
+  if(!yo) return `${sel}<p class="man-vacio">Elige tu nombre y verás tus puestos, tu rutina y los procesos de los que eres dueño.</p>`;
+  const mios=manDocs('puesto').filter(d=>String((d.ocupa&&d.ocupa.titular)||'').split(/,|·| y |\(|\)|:/).map(x=>x.trim()).includes(yo));
+  return sel + (mios.length ? mios.map(d=>{
+    const r=MAN.docs['rutina:'+d.num]; const suyos=manDocs('proceso').filter(p=>p.dueno_puesto===d.num);
+    return `<div class="man-sec">${manEsc(d.titulo)}</div><div class="man-lista">${manFila(d.id,'','Mis funciones',d)}${r?manFila(r.id,'','Mi rutina (día, semana y mes)',r):''}${suyos.map(p=>manFila(p.id,'','Soy dueño/a de: '+manEsc(p.titulo),p)).join('')}</div>`;
+  }).join('') : `<p class="man-vacio">No constas en ningún puesto del manual.</p>`);
+}
+const MAN_TIPO={proceso:'Proceso', anexo:'Anexo', puesto:'Puesto', rutina:'Rutina', organigrama:'Organigrama'};
+function manVBuscar(){ return `<input class="man-input" id="manQ" placeholder="Busca en todo el manual: esterilización, recall, presupuesto…" value="${manEsc(S.manQ||'')}" oninput="S.manQ=this.value;manPintarRes()"><div class="man-res" id="manRes"></div>`; }
+function manPintarRes(){
+  const el2=document.getElementById('manRes'); if(!el2) return;
+  const t=String(S.manQ||'').trim();
+  if(t.length<3){ el2.innerHTML='<p class="man-vacio">Escribe al menos 3 letras.</p>'; return; }
+  const sin=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); const tt=sin(t);
+  const hits=MAN.lista.map(d=>{
+    const tx=String(d.texto||''), i=sin(tx).indexOf(tt), it=sin(d.titulo).indexOf(tt);
+    if(i<0 && it<0) return null;
+    const pos=i<0?0:i, frag=tx.slice(Math.max(0,pos-70), pos+130), j=sin(frag).indexOf(tt), f=manEsc(frag);
+    const marcado = j>=0 ? manEsc(frag.slice(0,j))+'<mark>'+manEsc(frag.slice(j,j+t.length))+'</mark>'+manEsc(frag.slice(j+t.length)) : f;
+    return {d, p:it>=0?2:1, marcado};
+  }).filter(Boolean).sort((a,b)=>b.p-a.p);
+  el2.innerHTML = hits.length ? hits.slice(0,40).map(h=>`<button class="man-card" onclick="manIr('${manEsc(h.d.id)}')"><div class="man-pie" style="margin:0"><span class="man-n">${MAN_TIPO[h.d.tipo]||''}${h.d.codigo?' '+manEsc(h.d.codigo):''}</span>${manSello(h.d)}</div><div class="man-h">${manEsc(h.d.titulo)}</div><div class="man-meta">…${h.marcado}…</div></button>`).join('') : '<p class="man-vacio">Nada encontrado.</p>';
+}
+
+const MAN_CSS=`<style>
+.man-w{--m-line:#e3e6eb;--m-muted:#66727f;--m-acc:#2563eb;--m-ok:#15803d;--m-oks:#e7f6ec;--m-pe:#a16207;--m-pes:#fdf4dc}
+.man-w .man-sello{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.man-w .man-sello.ok{background:var(--m-oks);color:var(--m-ok)} .man-w .man-sello.pend{background:var(--m-pes);color:var(--m-pe)}
+.man-w .man-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.man-w .man-org{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.man-w .man-card{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:#fff;border:1px solid var(--m-line);border-radius:12px;padding:14px 16px;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.man-w .man-card:hover{border-color:#b9c3d0}
+.man-w .man-n{font-size:12px;color:var(--m-muted);font-weight:600;letter-spacing:.02em}
+.man-w .man-h{font-size:16px;font-weight:650;margin:2px 0 6px}
+.man-w .man-meta{font-size:13px;color:var(--m-muted)} .man-w .man-meta b,.man-w .man-card b{color:#1f2933;font-weight:600}
+.man-w .man-pie{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px}
+.man-w .man-sec{font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--m-muted);font-weight:700;margin:22px 0 10px}
+.man-w .man-sec:first-child{margin-top:4px}
+.man-w .man-volver{border:0;background:none;color:var(--m-acc);font:inherit;font-weight:600;cursor:pointer;padding:0;margin-bottom:12px}
+.man-w .man-cab{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:6px}
+.man-w .man-aviso{border-radius:10px;padding:10px 14px;font-size:14px;margin:4px 0 16px}
+.man-w .man-aviso.pend{background:var(--m-pes);color:#713f12} .man-w .man-aviso.ok{background:var(--m-oks);color:#14532d}
+.man-w .man-doc{background:#fff;border:1px solid var(--m-line);border-radius:12px;padding:22px 26px;line-height:1.6;font-size:15px;color:#1f2933;min-width:0}
+.man-w .man-doc h1{font-size:22px;margin:0 0 12px;font-family:inherit} .man-w .man-doc h2{font-size:18px;margin:26px 0 10px;padding-top:14px;border-top:1px solid var(--m-line)}
+.man-w .man-doc h3{font-size:16px;margin:20px 0 8px} .man-w .man-doc h4{font-size:15px;margin:16px 0 6px}
+.man-w .man-doc p{margin:0 0 12px} .man-w .man-doc ul,.man-w .man-doc ol{margin:0 0 12px;padding-left:22px} .man-w .man-doc li{margin:3px 0}
+.man-w .man-doc blockquote{margin:0 0 12px;padding:8px 14px;border-left:3px solid var(--m-line);color:var(--m-muted)}
+.man-w .man-doc code{background:#f1f3f6;border-radius:4px;padding:1px 4px;font-size:.92em}
+.man-w .man-doc .tabla{overflow-x:auto;margin:0 0 14px}
+.man-w .man-doc table{border-collapse:collapse;width:100%;font-size:14px;display:table}
+.man-w .man-doc th,.man-w .man-doc td{border:1px solid var(--m-line);padding:7px 10px;text-align:left;vertical-align:top;display:table-cell}
+.man-w .man-doc tr{display:table-row} .man-w .man-doc thead{display:table-header-group} .man-w .man-doc tbody{display:table-row-group}
+.man-w .man-doc th{background:#f7f8fa;font-weight:600} .man-w .man-doc td::before{content:none}
+.man-w .man-lista{display:flex;flex-direction:column;gap:6px;margin:8px 0 4px}
+.man-w .man-fila{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;color:inherit;background:#fff;border:1px solid var(--m-line);border-radius:10px;padding:10px 14px;cursor:pointer}
+.man-w .man-fila:hover{border-color:#b9c3d0} .man-w .man-cod{font-weight:650;color:var(--m-muted);font-size:13px;min-width:44px} .man-w .man-tt{flex:1}
+.man-w .man-lado{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px;align-items:start}
+.man-w .man-caja{background:#fff;border:1px solid var(--m-line);border-radius:12px;padding:14px 16px}
+.man-w .man-ct{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--m-muted);font-weight:700;margin-bottom:6px}
+.man-w .man-input{width:100%;font:inherit;padding:11px 14px;border:1px solid var(--m-line);border-radius:10px;background:#fff;margin-bottom:6px}
+.man-w .man-res{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.man-w mark{background:#fff1a8;border-radius:3px;padding:0 2px}
+.man-w .man-vacio{color:var(--m-muted);padding:24px 0;text-align:center}
+.man-w .man-nota{font-size:12.5px;color:var(--m-muted);margin-top:26px}
+@media (max-width:760px){ .man-w .man-lado{grid-template-columns:1fr} .man-w .man-doc{padding:16px} }
+</style>`;
+
+function manualView(){
+  const admin=isAdmin();
+  if(!MAN.cargado && !MAN.cargando && !MAN.sinTabla && !MAN.error){ manCargar().then(()=>{ if(S.module==='manual') render(); }); }
+  const tab=S.manTab||'procesos';
+  const tabs=[['procesos','Procesos'],['puestos','Puestos'],['organigrama','Organigrama'],['mipuesto','Mi puesto'],['buscar','Buscar']];
+  const n=MAN.lista.length, ap=MAN.lista.filter(d=>d.estado==='aprobado').length;
+  const sub = n ? `${manEsc(MAN.cfg.clinica||'')}${MAN.cfg.generado?' · generado el '+manEsc(MAN.cfg.generado):''} · <span class="man-sello ok">✓ ${ap} aprobados</span> <span class="man-sello pend">● ${n-ap} pendientes</span>` : 'Cómo trabajamos';
+  const botones = `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="manRefrescar()">Actualizar</button>${admin?`<button class="btn btn-ghost btn-sm" onclick="manElegirArchivo()" ${MAN.subiendo?'disabled':''}>${MAN.subiendo?'Cargando…':'Cargar manual'}</button>${n?`<button class="btn btn-ghost btn-sm" onclick="manVisible(${MAN.cfg.visible?'false':'true'})" title="Hoy ${MAN.cfg.visible?'lo ve todo el equipo':'solo lo ve Dirección'}">${MAN.cfg.visible?'Visible para el equipo ✓':'Solo Dirección · hacer visible'}</button>`:''}`:''}</div>`;
+  let body='';
+  if(MAN.sinTabla) body = `<div class="note" style="margin-top:0">${admin?'Falta preparar la base de datos: ejecuta <b>SQL-manual.sql</b> en Supabase (SQL Editor) y pulsa «Actualizar».':'El manual aún no está disponible.'}</div>`;
+  else if(MAN.error) body = `<div class="note" style="margin-top:0;border-left-color:#C0392B">${manEsc(MAN.error)} <button class="btn btn-ghost btn-sm" onclick="MAN.error='';manRefrescar()" style="margin-left:6px">Reintentar</button></div>`;
+  else if(!MAN.cargado) body = `<p class="man-vacio">Cargando el manual…</p>`;
+  else if(!n) body = `<div class="note" style="margin-top:0">${admin?'Aún no hay manual cargado. Pulsa «Cargar manual» y elige el archivo <b>manual.json</b> que genera el instalador.':'Aún no hay manual.'}</div>`;
+  else {
+    const d = S.manDoc ? MAN.docs[S.manDoc] : null;
+    let cont;
+    if(d && d.tipo==='proceso') cont=manVProceso(d);
+    else if(d && d.tipo==='anexo') cont=manVAnexo(d);
+    else if(d && d.tipo==='puesto') cont=manVPuesto(d);
+    else if(d && d.tipo==='rutina') cont=manVRutina(d);
+    else if(d && d.tipo==='organigrama') cont=manVOrgDoc(d);
+    else cont=({procesos:manVProcesos, puestos:manVPuestos, organigrama:manVOrganigrama, mipuesto:manVMiPuesto, buscar:manVBuscar}[tab]||manVProcesos)();
+    const seg=`<div style="margin-bottom:14px"><div class="seg tar-seg">${tabs.map(([id,l])=>`<button class="${tab===id?'on':''}" onclick="manTab('${id}')">${l}</button>`).join('')}</div></div>`;
+    body = seg + cont + `<p class="man-nota">El manual no se edita aquí: se cambia en el método de la clínica y Dirección lo vuelve a cargar.</p>`;
+    if(tab==='buscar' && !d) setTimeout(()=>{ manPintarRes(); const i=document.getElementById('manQ'); if(i && document.activeElement!==i){ i.focus(); const v=i.value; i.value=''; i.value=v; } }, 0);
+  }
+  return `${MAN_CSS}${moduleHeader('Manual', false)}
+  <main><div class="wrap man-w">
+    <div class="toolbar" style="margin-bottom:12px">
+      <div><div class="section-title">Manual</div><div class="section-sub" style="margin:0">${sub}</div></div>
+      ${botones}
+    </div>
+    ${body}
+  </div></main>
+  ${S.modal?modalContent():''}`;
+}
+
+/* ---- enrutado ---- */
+const _appView_manual = appView;
+appView = function(){
+  if(S.module==='manual'){ if(!canAccess('manual')){ S.module=null; return homeView(); } return manualView(); }
+  return _appView_manual();
+};
+const _setModule_manual = setModule;
+setModule = function(id){
+  if(id==='manual'){ S.manDoc=null; }
+  _setModule_manual(id);
+  if(id==='manual' && S.module==='manual'){ manCargar().then(()=>{ if(S.module==='manual') render(); }); }
+};
+/* ===== FIN MANUAL ===== */
 
 /* iconos del menú «Más» del móvil para la Reunión semanal y Mantenimiento de equipos */
 if(typeof TB_IC==='object' && TB_IC){ if(!TB_IC.junta) TB_IC.junta='<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="9" cy="14.5" r="1.3"/><circle cx="15" cy="14.5" r="1.3"/>'; if(!TB_IC.equipos) TB_IC.equipos='<path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.1-.6-.6-2.1 2.4-2.4z"/>'; }
