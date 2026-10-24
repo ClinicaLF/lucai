@@ -1212,15 +1212,12 @@ function stockView(){
     </div>`;
   }).join('') : `<div class="empty">Ningún artículo coincide con el filtro.</div>`;
   return `
-    <div class="kpi" style="margin-bottom:14px">
-      <div><div class="lbl">Artículos en el almacén</div><div class="val">${totalArt}</div></div>
-      <div style="text-align:right"><div class="sub2">${pedir} por pedir</div><div class="sub2">${isAdmin()?'Valor: '+eur(valor):''}</div></div>
-    </div>
     <div class="vhead">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input id="stkQ" class="fh" style="min-width:200px" placeholder="Buscar artículo o código…" value="${S.stockQuery}" oninput="setStockQuery(this.value)">
         ${catSel}
-        <button class="chip-sel ${S.stockPedir?'on':''}" onclick="toggleStockPedir()">Solo lo que hay que pedir</button>
+        <button class="lx-pill${S.stockPedir?' on':''}${pedir?' rojo':''}" onclick="toggleStockPedir()" title="Ver solo lo que hay que pedir"><b>${pedir}</b>por pedir</button>
+        <span class="lx-mres">${totalArt} artículos${isAdmin()?' · '+eur(valor):''}</span>
       </div>
       
     </div>
@@ -11678,6 +11675,39 @@ materialView=function(){
   ${S.modal?modalContent():''}
   ${S.alert==='pedir'?pedirModal():S.alert==='cad'?cadModal():''}`;
 };
+
+/* LUCAI · STOCK COMPACTO (24/10/2026, David: «se ven pocas líneas, todo muy grande»): filas de una línea, letra algo menor, cifras junto al buscador */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css12">
+.lx-mat .seg{margin-bottom:12px}
+.lx-mat .vhead{margin-bottom:10px}
+.lx-mat #stkQ{flex:1 1 340px !important;max-width:none !important;font-size:14px}
+.lx-mres{font-size:12.5px;color:var(--grey-2);white-space:nowrap;margin-left:4px}
+.lx-mat .alm-desk table{table-layout:fixed;font-size:13px}
+.lx-mat .alm-desk th{padding:8px 10px;font-size:10.5px}
+.lx-mat .alm-desk td{padding:6px 10px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.lx-mat .alm-desk th:nth-child(1),.lx-mat .alm-desk td:nth-child(1){width:auto}
+.lx-mat .alm-desk th:nth-child(2),.lx-mat .alm-desk td:nth-child(2){width:15%}
+.lx-mat .alm-desk th:nth-child(3),.lx-mat .alm-desk td:nth-child(3){width:15%}
+.lx-mat .alm-desk th:nth-child(4),.lx-mat .alm-desk td:nth-child(4){width:64px;text-align:right}
+.lx-mat .alm-desk th:nth-child(5),.lx-mat .alm-desk td:nth-child(5){width:64px;text-align:right}
+.lx-mat .alm-desk th:nth-child(6),.lx-mat .alm-desk td:nth-child(6){width:96px}
+.lx-mat .alm-desk th:nth-child(7),.lx-mat .alm-desk td:nth-child(7){width:96px}
+.lx-mat .alm-desk th:nth-child(8),.lx-mat .alm-desk td:nth-child(8){width:118px;text-align:right}
+.lx-mat .alm-desk td:nth-child(2),.lx-mat .alm-desk td:nth-child(3){color:var(--grey);font-size:12.5px}
+.lx-mat .alm-desk td:nth-child(1) strong{font-weight:700}
+.lx-mat .alm-desk td:nth-child(1) .muted{font-size:12px}
+.lx-mat .alm-desk tbody tr:hover td{background:var(--arena-1)}
+.lx-mat .alm-desk .btn-sm{padding:4px 10px !important;min-height:0 !important;height:28px;font-size:12.5px}
+.lx-mat .alm-desk .lx-ed{width:28px;height:28px;margin-left:4px}
+.lx-mat .alm-desk .tag{font-size:10.5px;padding:2px 7px;border-radius:6px}
+.lx-mat .tag[style*="t-bg-5A6770"]{background:var(--lx-azul-s) !important;color:var(--lx-azul) !important;font-size:10px;padding:1px 6px;border-radius:5px;vertical-align:1px}
+@media(max-width:720px){
+  .lx-mat .alm-card{padding:10px 12px;margin-bottom:7px}
+  .lx-mat .alm-q{font-size:20px}
+  .lx-mres{display:none}
+}
+.lx-mat .wrap{max-width:1440px}
+</style>`);
 
 boot();
 
