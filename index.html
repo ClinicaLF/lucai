@@ -3060,16 +3060,13 @@ function homeView(){
     if(tiles.length<2 && canAccess('comunicaciones')) tiles.push({v:comNL, rojo:comNL>0, l:'Avisos sin leer', go:"setModule('comunicaciones')"});
     if(tiles.length) mk=`<div class="np-mkpis">${tiles.slice(0,2).map(t=>`<button onclick="${t.go}"><div class="k-v${t.rojo?' rojo':''}">${t.v}</div><div class="k-l">${t.l}</div></button>`).join('')}</div>`;
   }catch(_){}
-  return `${NP_CSS}<header><div class="brand">
+  return `${NP_CSS}<header class="lx-homehdr"><div class="brand">
       <img src="${LOGO_WHITE}" alt="Laura Fernández">
       <div class="t">Lucai<small>Gestión interna · Centro Odontológico Laura Fernández</small></div>
     </div>${whoBlock(false)}</header>
-  <main class="homearea"><div class="np-wrap">
-    <div class="np-eyebrow">Panel de la clínica</div>
-    <h1 class="np-hello">Hola, ${first}.</h1>
-    <p class="np-attn">${attn}</p>
-    ${mk}
-    ${sections}
+  <main class="homearea lx-home"><div class="np-wrap">
+    ${lxHomeTop()}
+    <div class="lx-mods">${sections}</div>
     ${(typeof mejHomeBlock==='function')?mejHomeBlock():''}
     <div id="lucaiVerLabel" style="text-align:center;margin-top:34px;font-size:10.5px;color:var(--t-fg-9AA0A6);opacity:.7;letter-spacing:.3px">Lucai · ${_lucaiVerLabel}</div>
   </div></main>${S.modal?modalContent():''}`;
@@ -4428,7 +4425,7 @@ function tareasView(){
   else body=tarVistaSel()+tarBuzonView(S.tarVista||'todas');
   const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button><button class="btn btn-ghost" onclick="exportTareas()" title="Todas las tareas de la clínica en Excel">Excel</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<a class="btn btn-ghost" href="javascript:void(0)" onclick="gcalOpen()" title="Ver Google Calendar dentro de la app" style="display:inline-flex;align-items:center;gap:7px;text-decoration:none"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18"/><path d="M8 3v3M16 3v3"/></svg>Google Calendar</a><button class="btn btn-ghost" onclick="juntaDictarAbrir()" title="Dictar una o varias tareas">🎤 Dictar</button><button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
   return `${tarHeader()}
-  <main><div class="wrap">
+  <main class="lx-tar"><div class="wrap">
     <div class="toolbar" style="margin-bottom:14px">
       <div><div class="section-title">Tareas</div>
       <div class="section-sub" style="margin:0">Manda tareas con prioridad y fecha de entrega. El objetivo es ir terminándolas: al marcarlas hechas se archivan.</div></div>
@@ -4868,6 +4865,7 @@ function tarBuzonView(modo){
   const toggle=`<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px">
     <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--t-fg-6C757D);cursor:pointer;margin:0">
       <input type="checkbox" ${S.tarVerHechas?'checked':''} onchange="toggleTarHechas()"> Ver también las hechas/archivadas</label>
+    <span style="margin-left:auto">${lxModoSel()}</span>
   </div>`;
   const q=(bf.q||'').toLowerCase();
   const enRango = t => { if(!bf.desde && !bf.hasta) return true; if(!t.fechaLimite) return false; if(bf.desde && t.fechaLimite<bf.desde) return false; if(bf.hasta && t.fechaLimite>bf.hasta) return false; return true; };
@@ -4973,6 +4971,7 @@ function tarBuzonView(modo){
       ${quick?`<div class="tar-card-actions">${quick}</div>`:''}
     </div>`;
   }).join('');
+  if((S.tarModo||'lista')==='lista') return tarKpis(all)+toggle+`<div class="lx-lista">${mfilt}${lxGrupos(list)}</div>`;
   return tarKpis(all)+toggle+mfilt
     + `<div class="tar-cards">${cards}</div>`
     + `<div class="inctable-wrap tar-table-wrap"><table class="inctable inctable-tar">${thead}<tbody>${rows}</tbody></table></div>`;
@@ -11141,6 +11140,214 @@ setModule = function(id){
 
 /* iconos del menú «Más» del móvil para la Reunión semanal y Mantenimiento de equipos */
 if(typeof TB_IC==='object' && TB_IC){ if(!TB_IC.junta) TB_IC.junta='<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="9" cy="14.5" r="1.3"/><circle cx="15" cy="14.5" r="1.3"/>'; if(!TB_IC.equipos) TB_IC.equipos='<path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L4 17v3h3l5.5-5.5a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.1-.6-.6-2.1 2.4-2.4z"/>'; }
+
+/* ============================================================
+   LUCAI · ASPECTO MODERNO (fases 2 y 3, 24/10/2026)
+   - Menú lateral en ordenador (en móvil sigue la barra inferior).
+   - Inicio «Mi día»: saludo con progreso, resumen de módulos y «Lo tuyo».
+   - Tareas en lista por grupos (Atrasadas, Hoy, Próximos 7 días…); la tabla sigue en «Tabla».
+   Solo cambia cómo se ve: lee los mismos datos y usa las mismas funciones (openTarDet, tarMarcarHecha…).
+   ============================================================ */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css">
+:root{--lx-acc:#2563EB;--lx-acc2:#1D4ED8;--lx-accs:#EFF4FF}
+:root[data-tema="noche"]{--lx-acc:#3B82F6;--lx-acc2:#2563EB;--lx-accs:#1E2A44}
+.btn-primary{background:var(--lx-acc);color:#fff}
+.btn-primary:hover{background:var(--lx-acc2)}
+.lx-rail{display:none}
+@media(min-width:721px){
+  body.has-rail #app{padding-left:76px}
+  .lx-rail{display:flex;flex-direction:column;align-items:center;gap:3px;position:fixed;left:0;top:0;bottom:0;width:76px;
+    background:var(--white);border-right:1px solid var(--line);padding:14px 6px 12px;z-index:950;overflow-y:auto;overflow-x:hidden}
+  .lx-logo{width:40px;height:40px;border-radius:12px;background:var(--lx-acc);color:#fff;font-weight:800;font-size:19px;
+    display:grid;place-items:center;margin-bottom:12px;border:none;cursor:pointer;font-family:inherit}
+  .lx-rail .lx-it{position:relative;width:64px;border:none;background:none;border-radius:12px;padding:8px 2px 7px;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--grey-2);font-family:inherit;font-size:10.5px;font-weight:600}
+  .lx-rail .lx-it:hover{background:var(--arena-1);color:var(--ink)}
+  .lx-rail .lx-it.on{background:var(--lx-accs);color:var(--lx-acc)}
+  .lx-rail .lx-it svg{width:21px;height:21px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .lx-rail .lx-b{position:absolute;top:3px;left:36px;min-width:16px;height:16px;padding:0 4px;border-radius:10px;background:#D92D20;color:#fff;
+    font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .lx-rail .lx-sp{flex:1}
+  .lx-rail .lx-av{width:32px;height:32px;border-radius:50%;background:var(--lx-acc);color:#fff;font-size:11.5px;font-weight:800;display:grid;place-items:center}
+  body.has-rail header{background:var(--white) !important;color:var(--ink);border-bottom:1px solid var(--line);height:58px}
+  body.has-rail header .brand img, body.has-rail header .backbtn, body.has-rail header .logout, body.has-rail header .who .chip{display:none}
+  body.has-rail header .brand .t{font-family:var(--sans);font-weight:700;font-size:17px;color:var(--ink)}
+  body.has-rail header .bell{color:var(--ink)}
+  body.has-rail header.lx-homehdr{display:none}
+  body.has-rail .lx-mods{display:none}
+  /* la hoja «Más» en ordenador sale junto al menú lateral */
+  body.has-rail .lucai-more-ov{justify-content:flex-start;background:rgba(16,24,40,.25)}
+  body.has-rail .lucai-more{width:340px;margin:0 0 14px 84px;border-radius:16px;max-height:80vh;box-shadow:0 12px 32px rgba(16,24,40,.18)}
+  body.has-rail .lucai-more .mo-grab, body.has-rail .lucai-more .mo-it[onclick^="tbMoreGo"]{display:none}
+}
+/* inicio «Mi día» */
+.lx-hero{display:flex;align-items:center;gap:18px;background:var(--white);border:1px solid var(--line);border-radius:18px;padding:18px 20px}
+.lx-ring{position:relative;width:56px;height:56px;flex:0 0 auto}
+.lx-ring svg{width:56px;height:56px;transform:rotate(-90deg)}
+.lx-ring span{position:absolute;inset:0;display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--ink)}
+.lx-hello{font-size:22px;font-weight:800;color:var(--ink);line-height:1.2}
+.lx-hsub{font-size:13.5px;color:var(--grey);margin-top:3px}
+.lx-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+.lx-tile{display:flex;align-items:center;gap:11px;background:var(--white);border:1px solid var(--line);border-radius:14px;padding:12px 14px;
+  text-align:left;cursor:pointer;font-family:inherit;color:var(--ink)}
+.lx-tile:hover{border-color:var(--madera)}
+.lx-tile .ic{width:34px;height:34px;border-radius:10px;background:var(--lx-accs);color:var(--lx-acc);display:grid;place-items:center;flex:0 0 auto}
+.lx-tile .ic svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.lx-tile b{display:block;font-size:14px}
+.lx-tile small{display:block;font-size:12px;color:var(--grey-2);margin-top:1px}
+.lx-tile small.rojo{color:var(--alert);font-weight:700}
+.lx-h2{font-size:17px;font-weight:800;color:var(--ink);margin:26px 0 4px}
+.lx-mas{display:inline-block;margin-top:10px;font-size:13.5px;font-weight:700;color:var(--lx-acc);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px 0}
+@media(max-width:720px){
+  .lx-hero{padding:14px 15px;gap:14px}
+  .lx-hello{font-size:19px}
+  .lx-tiles{grid-template-columns:1fr 1fr}
+}
+/* lista de tareas por grupos */
+.lx-gh{display:flex;align-items:center;gap:8px;margin:18px 0 7px;font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--grey)}
+.lx-gh .n{background:var(--arena-2);color:var(--grey);border-radius:10px;padding:1px 7px;font-size:11px;letter-spacing:0}
+.lx-row{display:flex;align-items:center;gap:12px;background:var(--white);border:1px solid var(--line);border-radius:12px;padding:11px 14px;margin-bottom:7px;cursor:pointer}
+.lx-row:hover{border-color:var(--madera)}
+.lx-row.lx-atr{border-left:3px solid #D92D20}
+.lx-ck{width:22px;height:22px;border-radius:50%;border:2px solid var(--madera);background:none;flex:0 0 auto;cursor:pointer;display:grid;place-items:center;padding:0;color:#fff}
+.lx-ck:hover{border-color:var(--lx-acc)}
+.lx-ck.on{background:#16A34A;border-color:#16A34A;cursor:default}
+.lx-ck svg{width:13px;height:13px}
+.lx-ct{flex:1;min-width:0}
+.lx-tt{font-weight:700;font-size:14.5px;color:var(--ink);line-height:1.3}
+.lx-done .lx-tt{color:var(--grey-2);text-decoration:line-through}
+.lx-sub{font-size:12.5px;color:var(--grey-2);margin-top:2px}
+.lx-sub b{color:var(--alert)}
+.lx-rt{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.lx-msg{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--grey)}
+.lx-msg svg{width:15px;height:15px;stroke:currentColor;stroke-width:1.8;fill:none}
+.lx-pin{color:var(--lx-acc);line-height:0}
+.lx-chip{font-size:11.5px;font-weight:700;border-radius:8px;padding:3px 8px;background:var(--arena-2);color:var(--grey);white-space:nowrap}
+.lx-chip.rojo{background:var(--alert-bg);color:var(--alert)}
+.lx-chip.ambar{background:var(--t-bg-FAEEDA);color:var(--t-fg-854F0B)}
+.lx-modo{display:inline-flex;background:var(--arena-2);border-radius:10px;padding:3px;gap:2px}
+.lx-modo button{border:none;background:none;border-radius:8px;padding:5px 12px;font-size:12.5px;font-weight:700;color:var(--grey);cursor:pointer;font-family:inherit}
+.lx-modo button.on{background:var(--white);color:var(--ink);box-shadow:0 1px 2px rgba(16,24,40,.08)}
+.lx-lista .tar-mfilt{display:block !important;max-width:420px;margin-bottom:10px}
+@media(max-width:720px){
+  .lx-tar .section-sub{display:none}
+  .lx-tar .toolbar{margin-bottom:10px !important}
+  body.has-tb .lx-tar .actions{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:8px;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  body.has-tb .lx-tar .actions .btn{flex:0 0 auto;padding:9px 13px;font-size:13px;min-height:0}
+  body.has-tb .lx-tar .actions .btn-primary{order:-1}
+  .lx-tar .tar-kpis{grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+  .lx-tar .tar-kpis>button{padding:8px 9px !important;border-radius:10px !important;min-width:0 !important}
+  .lx-tar .tar-kpis>button>div:first-child{font-size:10.5px !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lx-tar .tar-kpis>button>div:last-child{font-size:20px !important}
+}
+@media(max-width:720px){ .lx-row{padding:11px 12px} .lx-msg{display:none} .lx-lista .tar-mfilt{max-width:none} }
+</style>`);
+
+function lxGrupo(t){ if(!tarActiva(t)) return 'hechas'; if(!t.fechaLimite) return 'sinfecha'; const d=tarDiasRest(t); if(d<0) return 'atrasadas'; if(d===0) return 'hoy'; if(d<=7) return 'semana'; return 'luego'; }
+const LX_GRUPOS=[['fijadas','Fijadas'],['atrasadas','Atrasadas'],['hoy','Hoy'],['semana','Próximos 7 días'],['luego','Más adelante'],['sinfecha','Sin fecha'],['hechas','Hechas']];
+function lxFechaTxt(t){
+  if(!tarActiva(t)) return 'Hecha';
+  if(!t.fechaLimite) return 'Sin fecha';
+  const d=tarDiasRest(t), f=new Date(t.fechaLimite+'T00:00:00');
+  if(d===0) return 'Hoy'; if(d===1) return 'Mañana'; if(d===-1) return 'Ayer';
+  if(d<0) return 'Hace '+(-d)+' días';
+  if(d<=6) return f.toLocaleDateString('es-ES',{weekday:'short'}).replace('.','').replace(/^./,c=>c.toUpperCase());
+  return f.toLocaleDateString('es-ES',{day:'numeric',month:'short'}).replace('.','');
+}
+function lxRel(t){
+  const me=S.user.nombre, c=n=>incEsc(tarPersonaCorto(n||''));
+  if(t.deQuien===me && t.paraQuien===me) return 'Tuya';
+  if(t.paraQuien===me) return 'Te la manda '+c(t.deQuien);
+  if(t.deQuien===me) return 'Se la mandas a '+c(t.paraQuien);
+  return 'Participas · de '+c(t.deQuien)+' para '+c(t.paraQuien);
+}
+const LX_IC_CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const LX_IC_CHAT='<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>';
+function lxRow(t){
+  const me=S.user.nombre, g=lxGrupo(t), done=!tarActiva(t);
+  const nm=(t.mensajes||[]).length;
+  const est=(!done && t.estado && t.estado!=='Pendiente') ? ' · '+incEsc(t.estado) : '';
+  const prio=(!done && t.prioridad==='Alta') ? ' · <b>Prioridad alta</b>' : '';
+  const chip=done ? '' : (g==='atrasadas' ? 'rojo' : (g==='hoy' ? 'ambar' : ''));
+  const pin=tarEstaFijada(t.id,me) ? `<span class="lx-pin" title="Fijada">${TAR_IC_PIN}</span>` : '';
+  return `<div class="lx-row${g==='atrasadas'?' lx-atr':''}${done?' lx-done':''}" onclick="openTarDet('${t.id}')">
+    <button class="lx-ck${done?' on':''}" title="${done?'Hecha':'Marcar hecha'}" onclick="event.stopPropagation();${done?'':`tarMarcarHecha('${t.id}')`}">${done?LX_IC_CHECK:''}</button>
+    <div class="lx-ct"><div class="lx-tt">${incEsc(tarCap(t.titulo))}${tarRecurMark(t)}${tarNvBadge(t)}</div><div class="lx-sub">${lxRel(t)}${est}${prio}</div></div>
+    <div class="lx-rt">${pin}${nm?`<span class="lx-msg" title="Mensajes">${LX_IC_CHAT}${nm}</span>`:''}<span class="lx-chip ${chip}">${lxFechaTxt(t)}</span></div>
+  </div>`;
+}
+/* agrupa respetando el orden de la lista que recibe; las fijadas activas van primero */
+function lxGrupos(list, opt){
+  opt=opt||{}; const me=S.user.nombre, porG={};
+  list.forEach(t=>{ const g=(opt.fijadas!==false && tarActiva(t) && tarEstaFijada(t.id,me)) ? 'fijadas' : lxGrupo(t); (porG[g]=porG[g]||[]).push(t); });
+  let h='', puestos=0;
+  LX_GRUPOS.forEach(([g,lbl])=>{
+    let xs=porG[g]; if(!xs||!xs.length) return;
+    if(opt.limite){ if(puestos>=opt.limite) return; xs=xs.slice(0,opt.limite-puestos); }
+    puestos+=xs.length;
+    h+=`<div class="lx-gh">${lbl}<span class="n">${porG[g].length}</span></div>`+xs.map(lxRow).join('');
+  });
+  return h;
+}
+function lxModoSel(){
+  const m=S.tarModo||'lista';
+  return `<div class="lx-modo" title="Cómo ver las tareas"><button class="${m==='lista'?'on':''}" onclick="S.tarModo='lista';render()">Lista</button><button class="${m==='tabla'?'on':''}" onclick="S.tarModo='tabla';render()">Tabla</button></div>`;
+}
+
+/* ---------- inicio «Mi día» ---------- */
+function lxHomeTop(){
+  const me=S.user.nombre, hoy=todayStr();
+  const mias=(S.tareas||[]).filter(t=>t.paraQuien===me);
+  const act=mias.filter(tarActiva);
+  const atr=act.filter(t=>lxGrupo(t)==='atrasadas').length;
+  const paraHoy=act.filter(t=>lxGrupo(t)==='hoy').length;
+  const hechasHoy=mias.filter(t=>!tarActiva(t) && t.fechaHecha===hoy).length;
+  const tot=hechasHoy+paraHoy+atr, pct=tot?hechasHoy/tot:1, R=24, C=2*Math.PI*R;
+  const hora=new Date().getHours();
+  const saludo=hora<14?'Buenos días':(hora<21?'Buenas tardes':'Buenas noches');
+  const fecha=new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}).replace(/^./,c=>c.toUpperCase());
+  const quedan=paraHoy+atr;
+  const sub=fecha+' · '+(quedan?`te quedan ${quedan} para hoy`:'nada pendiente para hoy')+(atr?` · ${atr} atrasada${atr===1?'':'s'}`:'');
+  const ring=`<div class="lx-ring" title="Hechas hoy / para hoy"><svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${R}" fill="none" stroke="var(--arena-2)" stroke-width="5"/><circle cx="28" cy="28" r="${R}" fill="none" stroke="#16A34A" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/></svg><span>${tot?`${hechasHoy}/${tot}`:'✓'}</span></div>`;
+  const tiles=[];
+  const tile=(id,lbl,txt,rojo)=>{ const ic=(typeof TB_IC==='object'&&TB_IC[id])?`<svg viewBox="0 0 24 24">${TB_IC[id]}</svg>`:''; return `<button class="lx-tile" onclick="setModule('${id}')"><span class="ic">${ic}</span><span><b>${lbl}</b><small class="${rojo?'rojo':''}">${txt}</small></span></button>`; };
+  try{ if(canAccess('material')){ const n=lowItems().length; tiles.push(tile('material','Material', n?`${n} bajo mínimo`:'Todo en orden', n>0)); } }catch(_){}
+  try{ if(canAccess('incidencias')){ const n=(S.incidencias||[]).filter(x=>!x.revisada).length; tiles.push(tile('incidencias','Incidencias', n?`${n} sin revisar`:'Nada pendiente', n>0)); } }catch(_){}
+  try{ if(canAccess('equipos')){ const n=(S.partes||[]).filter(eqAbierto).length; tiles.push(tile('equipos','Equipos', n?`${n} parte${n===1?'':'s'} abierto${n===1?'':'s'}`:'Sin partes abiertos', false)); } }catch(_){}
+  try{ if(canAccess('junta')){ const d=juntaProxima(); const f=d?new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'}).replace('.',''):''; tiles.push(tile('junta','Reunión', f?`${f} · ${(S.juntaCfg&&S.juntaCfg.hora)||''}`:'Sin fecha', false)); } }catch(_){}
+  const orden=act.slice().sort((a,b)=>String(a.fechaLimite||'9999').localeCompare(String(b.fechaLimite||'9999')));
+  const lista=orden.length ? lxGrupos(orden,{limite:8}) : `<div class="lx-row" style="cursor:default"><div class="lx-ct"><div class="lx-tt">Todo al día</div><div class="lx-sub">No tienes tareas pendientes.</div></div></div>`;
+  const mas=canAccess('tareas') ? `<button class="lx-mas" onclick="setModule('tareas')">${orden.length>8?`Ver las ${orden.length} tareas`:'Ir a Tareas'} →</button>` : '';
+  return `<div class="lx-hero">${ring}<div><div class="lx-hello">${saludo}, ${incEsc(S.user.nombre.split(' ')[0])}</div><div class="lx-hsub">${sub}</div></div></div>
+    ${tiles.length?`<div class="lx-tiles">${tiles.join('')}</div>`:''}
+    <div class="lx-h2">Lo tuyo</div>${lista}${mas}`;
+}
+
+/* ---------- menú lateral (ordenador) ---------- */
+function lxRailHTML(){
+  const ids=['tareas','material','junta','incidencias','equipos','manual'].filter(id=>{ try{ return canAccess(id) && MODULES.some(m=>m.id===id && m.estado!=='pronto'); }catch(_){ return false; } });
+  const LBL={tareas:'Tareas',material:'Material',junta:'Reunión',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
+  const it=(lbl,ic,on,click,b)=>`<button class="lx-it${on?' on':''}" onclick="${click}" title="${lbl}">${b?`<span class="lx-b">${b>99?'99+':b}</span>`:''}<svg viewBox="0 0 24 24">${ic||''}</svg>${lbl}</button>`;
+  let h=`<button class="lx-logo" onclick="S.tbMore=false;goHome()" title="Inicio">L</button>`;
+  h+=it('Inicio',TB_IC.inicio,!S.module,'S.tbMore=false;goHome()',0);
+  ids.forEach(id=>{ h+=it(LBL[id],TB_IC[id],S.module===id,`S.tbMore=false;setModule('${id}')`,tbBadgeOf(id)); });
+  h+=`<div class="lx-sp"></div>`;
+  h+=it('Mejorar','<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.5 1 2.5h6c0-1 .4-1.9 1-2.5A6 6 0 0 0 12 3z"/>',false,'openMejora()',0);
+  h+=`<button class="lx-it" onclick="tbMore()" title="Tu cuenta: modo noche, contraseña, cerrar sesión"><span class="lx-av">${initials(S.user.nombre)}</span>${incEsc(S.user.nombre.split(' ')[0])}</button>`;
+  return h;
+}
+function lxRailPaint(){
+  let host=document.getElementById('lxRail');
+  const show=(typeof DEVICE!=='undefined') && DEVICE && S && S.user;
+  if(!show){ if(host) host.innerHTML=''; document.body.classList.remove('has-rail'); return; }
+  if(!host){ host=document.createElement('nav'); host.id='lxRail'; host.className='lx-rail'; document.body.appendChild(host); }
+  host.innerHTML=lxRailHTML();
+  document.body.classList.add('has-rail');
+}
+(function(){
+  const _tb=lucaiTbPaint;
+  lucaiTbPaint=function(){ _tb.apply(this, arguments); try{ lxRailPaint(); }catch(_){} };
+})();
 
 boot();
 
