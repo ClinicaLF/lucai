@@ -11649,7 +11649,7 @@ materialView=function(){
   if(tab==='pedidos'){
     body=lxSubSel('matPed',[['peds','Pedidos'],['provs','Proveedores']]) + ((S.matPed||'peds')==='provs' ? proveedoresView() : pedidosView());
   } else if(tab==='hist'){
-    body=lxSubSel('matHist',[['movs','Entradas y salidas'],['segui','Revisiones']]) + ((S.matHist||'movs')==='segui' ? seguiView() : movsView());
+    body=movsView();   /* Revisiones ocultas (24/10/2026): seguiView() sigue en el código y sus datos en lucai_seguimientos */
   } else if(tab==='informes'){
     body=lxSubSel('matInf',[['valor','Valor almacenado'],['perdidas','Pérdidas']]) + ((S.matInf||'valor')==='perdidas' ? perdidasView() : valorView());
   } else {
