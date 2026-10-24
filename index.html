@@ -4423,7 +4423,7 @@ function tareasView(){
   else if(sub==='tar_ideas') body=tarIdeasView();
   else if(sub==='tar_panel') body=tarPanelView();
   else body=tarVistaSel()+tarBuzonView(S.tarVista||'todas');
-  const acts=`<div class="actions">${admin?`<button class="btn btn-ghost" onclick="openTarAreas()">Áreas</button><button class="btn btn-ghost" onclick="exportTareas()" title="Todas las tareas de la clínica en Excel">Excel</button>`:''}${TG_BOT?`<a class="btn btn-ghost" href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<a class="btn btn-ghost" href="javascript:void(0)" onclick="gcalOpen()" title="Ver Google Calendar dentro de la app" style="display:inline-flex;align-items:center;gap:7px;text-decoration:none"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18"/><path d="M8 3v3M16 3v3"/></svg>Google Calendar</a><button class="btn btn-ghost" onclick="juntaDictarAbrir()" title="Dictar una o varias tareas">🎤 Dictar</button><button class="btn btn-primary" onclick="openTarea()">Nueva tarea</button></div>`;
+  const acts=`<div class="actions lx-acts"><button class="btn btn-ghost" onclick="juntaDictarAbrir()" title="Dictar una o varias tareas">🎤 Dictar</button><button class="btn btn-primary" onclick="openTarea()">+ Nueva tarea</button><div class="lx-masw"><button class="btn btn-ghost lx-masb" onclick="S.lxMas=!S.lxMas;render()" title="Más opciones">⋯</button>${S.lxMas?`<div class="lx-menu-ov" onclick="S.lxMas=false;render()"></div><div class="lx-menu" onclick="S.lxMas=false">${admin?`<button onclick="openTarAreas()">Áreas</button><button onclick="exportTareas()">Excel (todas las tareas)</button>`:''}${TG_BOT?`<a href="${tgLink()}" target="_blank" rel="noopener">Avisos al móvil</a>`:''}<button onclick="gcalOpen()">Google Calendar</button></div>`:''}</div></div>`;
   return `${tarHeader()}
   <main class="lx-tar"><div class="wrap">
     <div class="toolbar" style="margin-bottom:14px">
@@ -4862,11 +4862,7 @@ function tarBuzonView(modo){
   });
   const otroDe = t => esMias ? '' : (esTodas ? (t.deQuien===me ? t.paraQuien : t.deQuien) : (modo==='emitidas'?t.paraQuien:t.deQuien));
   const bf = S.tarBuzF = S.tarBuzF || {prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''};
-  const toggle=`<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px">
-    <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--t-fg-6C757D);cursor:pointer;margin:0">
-      <input type="checkbox" ${S.tarVerHechas?'checked':''} onchange="toggleTarHechas()"> Ver también las hechas/archivadas</label>
-    <span style="margin-left:auto">${lxModoSel()}</span>
-  </div>`;
+  const toggle='';
   const q=(bf.q||'').toLowerCase();
   const enRango = t => { if(!bf.desde && !bf.hasta) return true; if(!t.fechaLimite) return false; if(bf.desde && t.fechaLimite<bf.desde) return false; if(bf.hasta && t.fechaLimite>bf.hasta) return false; return true; };
   const list=all.filter(t=>
@@ -4925,7 +4921,7 @@ function tarBuzonView(modo){
       <button class="btn btn-ghost btn-sm" onclick="tarToggleFilt()" style="width:100%;justify-content:center">${S.tarFiltOpen?'Ocultar filtros':'Filtros'}${nFilt?` · ${nFilt}`:''}</button>
       ${S.tarFiltOpen?`<div class="tar-mfilt-panel">${mPrio}${mCat}${mPersona}${mEstado}${mSearch}${mRango}${nFilt?`<button class="btn btn-ghost btn-sm" onclick="clearTarBuzF()" style="width:100%;justify-content:center">Limpiar filtros</button>`:''}</div>`:''}
     </div>`;
-  if(!list.length) return tarKpis(all)+toggle+mfilt+`<div class="muted" style="padding:22px;text-align:center;border:1px solid var(--t-bd-line);border-radius:12px;background:var(--t-bg-FAF8F3)">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</div>`;
+  if(!list.length) return tarKpis(all)+toggle+((S.tarModo||'lista')==='lista'?`<div class="lx-lista">${mfilt}</div>`:mfilt)+`<div class="muted" style="padding:22px;text-align:center;border:1px solid var(--t-bd-line);border-radius:12px;background:var(--t-bg-FAF8F3)">${hayFiltro?'No hay tareas con esos filtros.':'Nada activo aquí. Marca “ver hechas” para ver el archivo.'}</div>`;
   const rows=list.map(t=>{
     const persona = otroDe(t);
     const dir = esTodas ? (t.deQuien===me?'<span title="La mandaste tú" style="color:var(--t-fg-8A949B)">↗ </span>':'<span title="Te la mandaron" style="color:var(--t-fg-6E8E00)">↙ </span>') : '';
@@ -11348,6 +11344,75 @@ function lxRailPaint(){
   const _tb=lucaiTbPaint;
   lucaiTbPaint=function(){ _tb.apply(this, arguments); try{ lxRailPaint(); }catch(_){} };
 })();
+
+/* ============================================================
+   LUCAI · TAREAS MÁS LIMPIA (24/10/2026, David: «muchas cosas, no sabes dónde mirar»)
+   Arriba: título + Dictar + Nueva tarea + «⋯» (Áreas, Excel, Avisos al móvil, Google Calendar).
+   Una fila: Todas / Me las mandan / Las mando yo · Filtros · Lista/Tabla.
+   Los 4 contadores pasan a píldoras pequeñas (siguen filtrando) y «Ver hechas» va con ellas.
+   ============================================================ */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css4">
+.lx-tar .section-sub{display:none}
+.lx-tar .section-title{font-family:var(--sans);font-size:24px;font-weight:800;color:var(--ink)}
+.lx-tar .toolbar{align-items:center}
+.lx-acts{align-items:center}
+.lx-masw{position:relative}
+.lx-masb{font-size:18px;line-height:1;padding:10px 14px}
+.lx-menu-ov{position:fixed;inset:0;z-index:960}
+.lx-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:961;background:var(--white);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 12px 32px rgba(16,24,40,.16);padding:6px;min-width:220px;display:flex;flex-direction:column}
+.lx-menu button,.lx-menu a{border:none;background:none;text-align:left;padding:10px 12px;border-radius:8px;font-size:14px;font-weight:600;
+  color:var(--ink);cursor:pointer;font-family:inherit;text-decoration:none}
+.lx-menu button:hover,.lx-menu a:hover{background:var(--arena-1)}
+.lx-tar .seg.tar-seg{margin-bottom:12px}
+.lx-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.lx-bar .tar-vista{margin:0}
+.lx-bar .lx-der{margin-left:auto;display:flex;align-items:center;gap:8px}
+.lx-filtb{border:1px solid var(--line);background:var(--white);border-radius:10px;padding:6px 12px;font-size:12.5px;font-weight:700;color:var(--grey);cursor:pointer;font-family:inherit}
+.lx-filtb.on{border-color:var(--lx-acc);color:var(--lx-acc)}
+.lx-pills{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}
+.lx-pill{border:1px solid var(--line);background:var(--white);border-radius:20px;padding:5px 12px;font-size:12.5px;font-weight:600;color:var(--grey);cursor:pointer;font-family:inherit}
+.lx-pill b{color:var(--ink);font-weight:800;margin-right:3px}
+.lx-pill.rojo b{color:var(--alert)}
+.lx-pill.on{border-color:var(--lx-acc);background:var(--lx-accs);color:var(--lx-acc)}
+.lx-pill.on b{color:var(--lx-acc)}
+.lx-lista .tar-mfilt>button{display:none}
+.lx-lista .tar-mfilt{margin:4px 0 6px}
+@media(min-width:721px){
+  .lx-lista .tar-mfilt{max-width:none !important}
+  .lx-lista .tar-mfilt-panel{display:grid !important;grid-template-columns:repeat(3,1fr);gap:8px;align-items:center;background:var(--arena-1);border:1px solid var(--line);border-radius:12px;padding:10px}
+  .lx-lista .tar-mfilt-panel .inp{margin:0 !important}
+  .lx-lista .tar-mfilt-panel>div{grid-column:span 2}
+  .lx-lista .tar-mfilt-panel .tar-mfilt-rango{display:flex;gap:8px}
+}
+@media(max-width:720px){
+  .lx-tar .section-title{font-size:21px}
+  body.has-tb .lx-tar .toolbar{flex-direction:row;flex-wrap:nowrap;justify-content:space-between}
+  body.has-tb .lx-tar .actions.lx-acts{width:auto;flex-wrap:nowrap;overflow:visible}
+  body.has-tb .lx-tar .actions.lx-acts .btn{flex:0 0 auto;padding:9px 11px;font-size:13px}
+  body.has-tb .lx-tar .actions.lx-acts .btn-primary{order:0}
+  .lx-bar .lx-der{margin-left:0;width:100%;justify-content:space-between}
+}
+</style>`);
+/* contadores en píldoras (mismo cálculo y mismo filtro que los recuadros de antes) */
+tarKpis=function(arr){
+  const act=arr.filter(tarActiva);
+  const porHacer=act.filter(t=>t.estado!=='En espera').length;
+  const espera=act.filter(t=>t.estado==='En espera').length;
+  const venc=act.filter(tarVencida).length;
+  const hoy=act.filter(t=>t.estado!=='En espera' && t.fechaLimite===todayStr()).length;
+  const sel=(S.tarBuzF&&S.tarBuzF.kpi)||'';
+  const p=(k,n,l,rojo)=>`<button class="lx-pill${sel===k?' on':''}${rojo&&n?' rojo':''}" onclick="setTarKpi('${k}')" title="Filtrar">${`<b>${n}</b>`}${l}</button>`;
+  return `<div class="lx-pills">${p('porhacer',porHacer,'por hacer')}${p('vencidas',venc,venc===1?'vencida':'vencidas',true)}${p('hoy',hoy,'para hoy')}${p('espera',espera,'en espera')}<button class="lx-pill${S.tarVerHechas?' on':''}" onclick="toggleTarHechas()">${S.tarVerHechas?'✓ ':''}Ver hechas</button></div>`;
+};
+/* selector + Filtros + Lista/Tabla en una sola fila */
+tarVistaSel=function(){
+  const v=S.tarVista||'todas', lista=(S.tarModo||'lista')==='lista';
+  const op=[['todas','Todas'],['recibidas','Me las mandan'],['emitidas','Las mando yo']];
+  const bf=S.tarBuzF||{}; const nF=[bf.prio,bf.cat,bf.persona,bf.estado,bf.q,bf.desde,bf.hasta].filter(Boolean).length;
+  return `<div class="lx-bar"><div class="tar-vista">${op.map(([k,l])=>`<button class="${v===k?'on':''}" onclick="S.tarVista='${k}';render()">${l}</button>`).join('')}</div>
+    <div class="lx-der">${lista?`<button class="lx-filtb${S.tarFiltOpen||nF?' on':''}" onclick="tarToggleFilt()">Filtros${nF?' · '+nF:''}</button>`:''}${lxModoSel()}</div></div>`;
+};
 
 boot();
 
