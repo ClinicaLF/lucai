@@ -9893,6 +9893,7 @@ function juntaTrimLbl(k){ const p=String(k).split('-T'); return (['','1er','2º'
 function juntaTrimFin(k){ const p=String(k).split('-T').map(Number); return tarIso(new Date(p[0], p[1]*3, 0)); }
 function juntaTrimMover(dir){ let p=String(S.juntaTrim||juntaTrim()).split('-T').map(Number); let y=p[0], q=p[1]+dir; if(q<1){q=4;y--;} if(q>4){q=1;y++;} S.juntaTrim=y+'-T'+q; render(); }
 function juntaProxima(){ const dia=(S.juntaCfg && S.juntaCfg.dia!=null) ? +S.juntaCfg.dia : 3; let d=todayStr(); for(let i=0;i<7;i++){ if(tarDow(d)===dia) return d; d=juntaMasDias(d,1); } return todayStr(); }
+function juntaFechaSiguiente(){ const dia=(S.juntaCfg && S.juntaCfg.dia!=null)?+S.juntaCfg.dia:3; let d=juntaMasDias(todayStr(),1); for(let i=0;i<7;i++){ if(tarDow(d)===dia) return d; d=juntaMasDias(d,1); } return juntaMasDias(todayStr(),7); }
 function juntaFechaLarga(iso){ try{ const t=new Date(iso+'T00:00:00').toLocaleDateString('es-ES',{weekday:'long', day:'numeric', month:'long'}); return t.charAt(0).toUpperCase()+t.slice(1); }catch(_){ return fmtFecha(iso); } }
 /* nombre corto: el nombre de pila, con la inicial del apellido si hay otra persona que se llama igual */
 function juntaCorto(n, lista){ const p=String(n||'').trim().split(/\s+/); const igual=(lista||[]).filter(x=>x!==n && String(x||'').trim().split(/\s+/)[0]===p[0]).length; return igual && p[1] ? p[0]+' '+p[1].charAt(0)+'.' : p[0]; }
@@ -10058,7 +10059,7 @@ function juntaResolverGuardar(){
   a.estado='resuelto'; a.decision=dec; a.resueltoTs=now(); a.resueltoPor=S.user.nombre; a.actaId=acta?acta.id:null;
   const crear=!!F.crearTarea;
   closeModal(); render(); juntaToca(a); toast('Asunto resuelto');
-  if(crear) openTarea({ titulo:a.titulo.replace(/^(No va|Bloqueada|Sin hacer):\s*/,''), descripcion:'Decidido en la reunión del '+fmtFecha(todayStr())+': '+dec, _juntaAsunto:a.id, _juntaActa:acta?acta.id:null });
+  if(crear) openTarea({ titulo:a.titulo.replace(/^(No va|Bloqueada|Sin hacer):\s*/,''), descripcion:'Decidido en la reunión del '+fmtFecha(todayStr())+': '+dec, fechaLimite:juntaFechaSiguiente(), _juntaAsunto:a.id, _juntaActa:acta?acta.id:null });
 }
 function juntaAsuntoFila(a, i, n, enReunion){
   const flechas=`<div class="jt-flechas"><button onclick="juntaAsuntoMover('${a.id}',-1)" ${i===0?'disabled':''} title="Subir">▲</button><button onclick="juntaAsuntoMover('${a.id}',1)" ${i===n-1?'disabled':''} title="Bajar">▼</button></div>`;
@@ -10178,7 +10179,7 @@ function juntaNumerosHtml(a, editable){
 }
 
 /* ---- tareas que salen de la reunión (tareas normales) ---- */
-function juntaTareaNueva(){ const a=juntaActaEnCurso(); openTarea({ descripcion:'Sale de la reunión del '+fmtFecha(todayStr())+'.', _juntaActa:a?a.id:null }); }
+function juntaTareaNueva(){ const a=juntaActaEnCurso(); openTarea({ descripcion:'Sale de la reunión del '+fmtFecha(todayStr())+'.', fechaLimite:juntaFechaSiguiente(), _juntaActa:a?a.id:null }); }
 const _commitTarea_junta = commitTarea;
 commitTarea = function(){
   const prio=F._juntaPrio, asu=F._juntaAsunto, actaId=F._juntaActa, fid=F.id, titulo=(F.titulo||'').trim();
@@ -10608,7 +10609,7 @@ async function juntaDictarConvertir(){
     const m=raw.match(/\{[\s\S]*\}/); const js=m?JSON.parse(m[0]):null;
     const arr=(js && Array.isArray(js.tareas)) ? js.tareas : [];
     if(!arr.length) throw new Error('sin tareas');
-    F.items=arr.map(t=>({ titulo:String(t.titulo||'').trim(), para:juntaCasarPersona(t.para), fecha:/^\d{4}-\d{2}-\d{2}$/.test(String(t.fecha||''))?t.fecha:'', detalle:String(t.detalle||'').trim(), ok:true }));
+    F.items=arr.map(t=>({ titulo:String(t.titulo||'').trim(), para:juntaCasarPersona(t.para), fecha:/^\d{4}-\d{2}-\d{2}$/.test(String(t.fecha||''))?t.fecha:juntaFechaSiguiente(), detalle:String(t.detalle||'').trim(), ok:true }));
   }catch(e){
     console.error('juntaDictar', e, raw);
     toast('No he podido convertirlo. Prueba a dictarlo otra vez, más claro, o crea la tarea a mano.');
@@ -10635,7 +10636,7 @@ function juntaDictarModal(){
         ${it.detalle?`<div class="muted" style="font-size:12px;margin-top:5px">${incEsc(it.detalle)}</div>`:''}
       </div>`; }).join('');
     const n=F.items.filter(x=>x.ok).length;
-    cuerpo=`<div class="muted" style="font-size:13px;margin-bottom:10px">Revisa cada tarea: título, persona y fecha. Lo que esté en rojo le falta algo.</div>${filas}
+    cuerpo=`<div class="muted" style="font-size:13px;margin-bottom:10px">Revisa cada tarea: título, persona y fecha. Si no se dijo fecha, queda para la próxima reunión (${incEsc(juntaFechaLarga(juntaFechaSiguiente()))}). Lo que esté en rojo le falta algo.</div>${filas}
       <div style="display:flex;gap:10px;justify-content:space-between;margin-top:14px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="F.items=null;render()">‹ Volver a dictar</button><button class="btn btn-primary" onclick="juntaDictarCrear()">Crear ${n} tarea${n===1?'':'s'}</button></div>`;
   }
   return `<div class="overlay"><div class="modal" style="max-width:620px">
