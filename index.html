@@ -11847,6 +11847,13 @@ editArticleModalContent=function(){
   </div></div>`;
 };
 
+/* LUCAI · MISMO ANCHO Y MISMO TÍTULO EN TODOS LOS MÓDULOS (25/10/2026, David: «que todo sea igual que Almacén») */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css16">
+.wrap,body .np-wrap{max-width:1440px}
+main>.wrap>.toolbar:first-child .section-title,main>.wrap>.toolbar:first-of-type>div>.section-title{font-family:var(--sans);font-size:24px;font-weight:800;color:var(--ink)}
+@media(max-width:720px){ main>.wrap>.toolbar:first-child .section-title{font-size:21px} }
+</style>`);
+
 boot();
 
 </script>
