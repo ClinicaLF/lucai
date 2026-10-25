@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1957">
+<meta name="lucai-version" content="2026-10-25-2015">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -12570,6 +12570,8 @@ async function cevQuitar(id){
    Solicitud: {id, tipo, persona, desde, hasta, horaIni, horaFin, con, cambio, motivo, nota, estado, cubierto,
    historial[{quien, que, ts, nota}], ts, upd}. estado: companero | revisar | aprobar | aprobada | rechazada | anulada |
    avisada | cubierta.
+   Quien revisa, quien aprueba y Dirección pueden apuntar por otra persona («Para quién»; David, 25/10): si lo apunta
+   quien aprueba, queda aprobado; si lo apunta quien revisa, se da por revisado y pasa a aprobar (una ausencia, cubierta).
    ============================================================ */
 const PER_TIPOS=[
   {id:'vacaciones', nombre:'Vacaciones', aviso:28, txt:'antes de planificar el trimestre o con 4 semanas'},
@@ -12651,17 +12653,19 @@ function personasView(){
 async function perRefrescar(){ toast('Actualizando…'); await juntaCargar(); render(); toast('Al día'); }
 /* ---- pedir ---- */
 function perPedir(){
-  F={type:'per_pedir', tipo:'vacaciones', desde:juntaMasDias(todayStr(),30), hasta:'', diaEntero:true, horaIni:'', horaFin:'', con:'', cambio:'', motivo:'', nota:''};
+  F={type:'per_pedir', para:S.user.nombre, tipo:'vacaciones', desde:juntaMasDias(todayStr(),30), hasta:'', diaEntero:true, horaIni:'', horaFin:'', con:'', cambio:'', motivo:'', nota:''};
   S.modal='per_pedir'; render();
 }
 function perPedirModal(){
-  const tp=perTipo(F.tipo); const us=appUsers().map(u=>u.nombre).filter(n=>n!==S.user.nombre);
+  const tp=perTipo(F.tipo); const para=F.para||S.user.nombre; const us=appUsers().map(u=>u.nombre).filter(n=>n!==para);
+  const paraQuien = perVeTodo() ? `<div class="fld" style="margin-top:0"><label>Para quién</label><select class="inp" onchange="F.para=this.value;if(F.con===this.value)F.con='';render()">${appUsers().map(u=>`<option ${para===u.nombre?'selected':''}>${incEsc(u.nombre)}</option>`).join('')}</select>${para!==S.user.nombre?`<div class="muted" style="font-size:12px;margin-top:4px">Lo apuntas tú por ${incEsc(perCorto(para))}: ${perEsAprobador()?'queda aprobado':'se da por revisado y pasa a aprobar'} y se le avisa.</div>`:''}</div>` : '';
   const fld=(k,l,t,ph)=>`<div class="fld"><label>${l}</label><input class="inp" ${t?`type="${t}"`:''} value="${incEsc(F[k]||'')}" placeholder="${incEsc(ph||'')}" oninput="F.${k}=this.value;${t==='date'?'perAvisoPintar()':''}"></div>`;
   const varios = F.tipo==='vacaciones' || F.tipo==='ausencia';
   return `<div class="overlay"><div class="modal" style="max-width:600px">
     <div class="modal-head"><h2>Pedir o avisar</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body lx-mc">
-      <div class="fld" style="margin-top:0"><label>Qué</label><div style="display:flex;flex-direction:column;gap:6px">${PER_TIPOS.map(x=>`<label style="display:flex;gap:8px;align-items:center;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer"><input type="radio" name="perTipo" ${F.tipo===x.id?'checked':''} onchange="F.tipo='${x.id}';F.motivo='';${x.id==='ausencia'?"F.desde=todayStr();":''}render()"> ${incEsc(x.nombre)}</label>`).join('')}</div></div>
+      ${paraQuien}
+      <div class="fld" ${paraQuien?'':'style="margin-top:0"'}><label>Qué</label><div style="display:flex;flex-direction:column;gap:6px">${PER_TIPOS.map(x=>`<label style="display:flex;gap:8px;align-items:center;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer"><input type="radio" name="perTipo" ${F.tipo===x.id?'checked':''} onchange="F.tipo='${x.id}';F.motivo='';${x.id==='ausencia'?"F.desde=todayStr();":''}render()"> ${incEsc(x.nombre)}</label>`).join('')}</div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:150px">${fld('desde',varios?'Desde':'Día','date')}</div>
         ${varios?`<div style="flex:1;min-width:150px">${fld('hasta','Hasta (si es más de un día)','date')}</div>`:''}
@@ -12687,10 +12691,19 @@ function perEnviar(){
   if(F.hasta && F.hasta<F.desde){ toast('«Hasta» no puede ser antes de «Desde»'); return; }
   if(F.tipo==='cambio' && !F.con){ toast('Elige con quién cambias'); return; }
   if(PER_MOTIVOS[F.tipo] && !F.motivo){ toast('Elige el motivo'); return; }
-  const me=S.user.nombre;
-  const x={ id:juntaId('P'), tipo:F.tipo, persona:me, desde:F.desde, hasta:(F.hasta&&F.hasta>F.desde)?F.hasta:'', horaIni:(F.tipo==='permiso'&&!F.diaEntero)?(F.horaIni||''):'', horaFin:(F.tipo==='permiso'&&!F.diaEntero)?(F.horaFin||''):'',
+  const me=S.user.nombre; const para=(perVeTodo() && F.para) ? F.para : me; const porOtro=para!==me;
+  const x={ id:juntaId('P'), tipo:F.tipo, persona:para, desde:F.desde, hasta:(F.hasta&&F.hasta>F.desde)?F.hasta:'', horaIni:(F.tipo==='permiso'&&!F.diaEntero)?(F.horaIni||''):'', horaFin:(F.tipo==='permiso'&&!F.diaEntero)?(F.horaFin||''):'',
     con:F.tipo==='cambio'?F.con:'', cambio:F.tipo==='cambio'?String(F.cambio||'').trim():'', motivo:F.motivo||'', nota:String(F.nota||'').trim(), ts:now(), historial:[] };
   const nombre=perTipo(x.tipo).nombre.split(' (')[0].toLowerCase();
+  if(porOtro){
+    perHist(x,'apunta', 'por '+para);
+    if(perEsAprobador()) x.estado = x.tipo==='ausencia' ? (perEsRevisor()?'cubierta':'avisada') : 'aprobada';
+    else { x.estado = x.tipo==='ausencia' ? 'cubierta' : 'aprobar'; if(x.tipo!=='ausencia') x.cubierto=true; }
+    perAvisar([para], `📋 ${me} ha apuntado por ti: ${nombre}, ${perFechas(x)} (${(PER_ESTADOS[x.estado]||'').toLowerCase()}).\n\nLo tienes en Lucai, en Personas.`);
+    if(x.estado==='aprobar') perAvisar(perAprobadores(), `📅 ${me} ha apuntado ${nombre} de ${para}: ${perFechas(x)} (queda cubierto).\n\nApruébalo en Lucai, en Personas.`);
+    if(x.estado==='avisada') perAvisar(perRevisores(), `⚠️ ${me} ha apuntado una ausencia de ${para}: ${perFechas(x)}.\n\nLo tienes en Lucai, en Personas.`);
+    S.perSolicitudes.push(x); closeModal(); S.perTab='todas'; render(); juntaToca(x); toast('Apuntado por '+perCorto(para)); return;
+  }
   if(x.tipo==='ausencia'){ x.estado='avisada'; perHist(x,'avisa'); perAvisar(perRevisores().concat(perAprobadores()), `⚠️ ${me} avisa de una ausencia: ${perFechas(x)}${x.motivo?' ('+x.motivo.toLowerCase()+')':''}.\n\nLo tienes en Lucai, en Personas.`); }
   else if(x.tipo==='cambio'){ x.estado='companero'; perHist(x,'pide'); perAvisar([x.con], `🔁 ${me} te propone un cambio de turno: ${x.cambio||perFechas(x)}.\n\nConfírmalo en Lucai, en Personas.`); }
   else { x.estado=perRevisores().length?'revisar':'aprobar'; perHist(x,'pide'); perAvisar(x.estado==='revisar'?perRevisores():perAprobadores(), `📅 ${me} pide ${nombre}: ${perFechas(x)}.\n\nLo tienes en Lucai, en Personas.`); }
@@ -12702,7 +12715,7 @@ function perVerModal(){
   const x=(S.perSolicitudes||[]).find(y=>y.id===F.id); if(!x) return '';
   const me=S.user.nombre;
   const fila=(l,v)=>v?`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--t-bd-F1ECE3)"><div style="width:100px;flex:none;color:var(--t-fg-8A949B);font-size:13px">${l}</div><div style="font-size:14px;color:var(--t-fg-333F48);white-space:pre-wrap">${incEsc(v)}</div></div>`:'';
-  const QUE={pide:'lo pide', avisa:'avisa', acepta:'acepta el cambio', noacepta:'no acepta el cambio', cubierto:'revisado: queda cubierto', nocubierto:'revisado: no se puede cubrir', aprueba:'aprueba', rechaza:'rechaza', anula:'lo anula', cubre:'marca que está cubierta', cambiaDecision:'cambia la decisión'};
+  const QUE={apunta:'lo apunta', pide:'lo pide', avisa:'avisa', acepta:'acepta el cambio', noacepta:'no acepta el cambio', cubierto:'revisado: queda cubierto', nocubierto:'revisado: no se puede cubrir', aprueba:'aprueba', rechaza:'rechaza', anula:'lo anula', cubre:'marca que está cubierta', cambiaDecision:'cambia la decisión'};
   let acc='';
   const nota=`<div class="fld" style="margin-top:12px"><label>Nota <span class="muted" style="font-weight:400">(opcional)</span></label><input class="inp" value="${incEsc(F.nota||'')}" oninput="F.nota=this.value" placeholder="Quién cubre, por qué no…"></div>`;
   if(x.estado==='companero' && x.con===me) acc=nota+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-ghost" onclick="perAccion('noacepta')">No acepto</button><button class="btn btn-primary" onclick="perAccion('acepta')">Acepto el cambio</button></div>`;
