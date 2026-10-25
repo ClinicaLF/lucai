@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-2020">
+<meta name="lucai-version" content="2026-10-25-2048">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -12355,6 +12355,7 @@ async function jaeQuitar(id){
    Se guarda en lucai_estado (clave calEventos) con el guardado de Reuniones: relee, fusiona por id, nunca borra.
    Cada evento: {id, titulo, tipo, fecha, fechaFin, horaIni, horaFin, quien, nota, estado, serieId, autor, ts, upd, borrado}.
    estado: 'pendiente' (de aprobar; lo de por defecto, también si falta) o 'aprobado' (lo aprueba Dirección; David, 25/10).
+   asistentes: nombres de usuario; al aprobarse, a cada uno le llega un aviso por Telegram (una serie, un solo mensaje).
    ============================================================ */
 const CEV_TIPOS=[
   {id:'reunion', nombre:'Reunión'},
@@ -12383,6 +12384,11 @@ function cevVivos(){ return (S.calEventos||[]).filter(e=>e && !e.borrado && e.fe
 function cevFin(e){ return (e.fechaFin && e.fechaFin>e.fecha) ? e.fechaFin : e.fecha; }
 function cevDelDia(iso){ return cevVivos().filter(e=>e.fecha<=iso && cevFin(e)>=iso && (!S.cevSoloPend || cevPend(e))); }
 function cevPend(e){ return e.estado!=='aprobado'; }
+const CEV_GRUPOS=[ {n:'Todos', f:()=>true}, {n:'Dirección y coordinación', re:/Director|Coordinador/i}, {n:'Recepción y atención', re:/Recepci|Atenci/i},
+  {n:'Higienistas', re:/Higienista/i}, {n:'Auxiliares', re:/Auxiliar/i}, {n:'Doctores', re:/Doctor/i} ];
+function cevGrupo(g){ return appUsers().filter(u=> g.f ? g.f(u) : g.re.test(String(u.rol||''))).map(u=>u.nombre); }
+function cevAsis(n){ const k=F.asistentes.indexOf(n); if(k>=0) F.asistentes.splice(k,1); else F.asistentes.push(n); render(); }
+function cevAsisGrupo(i){ const ns=cevGrupo(CEV_GRUPOS[i]); const todos=ns.length && ns.every(n=>F.asistentes.includes(n)); if(todos) F.asistentes=F.asistentes.filter(n=>!ns.includes(n)); else ns.forEach(n=>{ if(!F.asistentes.includes(n)) F.asistentes.push(n); }); render(); }
 function cevPendientes(){ return cevVivos().filter(cevPend); }
 function cevHora(e){ return e.horaIni ? (e.horaIni+(e.horaFin?'–'+e.horaFin:'')) : 'Todo el día'; }
 function cevCuando(e){
@@ -12492,7 +12498,7 @@ function cevVerModal(){
   return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
     <div class="modal-head"><h2>${incEsc(e.titulo)}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body"><div style="margin-bottom:8px"><span class="ce-tag ce-${cevTipo(e.tipo).id}">${incEsc(cevTipo(e.tipo).nombre)}</span></div>
-      ${fila('Estado',cevPend(e)?'Pendiente de aprobar':'Aprobado'+(e.aprobadoPor?' por '+e.aprobadoPor:''))}${fila('Cuándo',cevCuando(e))}${fila('Quién',e.quien)}${fila('Nota',e.nota)}${fila('Apuntado por',e.autor)}
+      ${fila('Estado',cevPend(e)?'Pendiente de aprobar':'Aprobado'+(e.aprobadoPor?' por '+e.aprobadoPor:''))}${fila('Cuándo',cevCuando(e))}${fila('Quién',e.quien)}${fila('Asistentes',(e.asistentes||[]).join(', '))}${fila('Nota',e.nota)}${fila('Apuntado por',e.autor)}
       ${isAdmin()&&cevPend(e)?(function(){ const ns=e.serieId?cevVivos().filter(x=>x.serieId===e.serieId && cevPend(x)).length:0; return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-sm" style="background:var(--lx-verde,#22A55A);color:#fff" onclick="cevAprobar('${e.id}',false)">✓ Aprobar</button>${ns>1?`<button class="btn btn-ghost btn-sm" onclick="cevAprobar('${e.id}',true)">✓ Aprobar toda la serie (${ns})</button>`:''}</div>`; })():''}
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
         ${cevPuede()?`<button class="btn btn-ghost" style="color:var(--t-fg-C0392B);margin-right:auto" onclick="cevQuitar('${e.id}')">Quitar</button><button class="btn btn-ghost" onclick="cevAbrir('${e.id}')">Cambiar</button>`:''}
@@ -12502,7 +12508,7 @@ function cevAbrir(id, fecha){
   if(!cevPuede()){ toast('Apuntan Dirección y el equipo de la reunión semanal'); return; }
   const e=id?(S.calEventos||[]).find(x=>x.id===id):null;
   F={type:'cev_edit', id:e?e.id:'', titulo:e?e.titulo:'', tipo:e?cevTipo(e.tipo).id:'reunion', fecha:e?e.fecha:(fecha||S.cevDia||todayStr()), fechaFin:e?(e.fechaFin||''):'',
-     todoDia:e?!e.horaIni:false, horaIni:e?(e.horaIni||''):'', horaFin:e?(e.horaFin||''):'', quien:e?(e.quien||''):'', nota:e?(e.nota||''):''};
+     todoDia:e?!e.horaIni:false, horaIni:e?(e.horaIni||''):'', horaFin:e?(e.horaFin||''):'', quien:e?(e.quien||''):'', nota:e?(e.nota||''):'', asistentes:e&&Array.isArray(e.asistentes)?e.asistentes.slice():[], serieId:e?(e.serieId||''):'', aSerie:false};
   S.modal='cev_edit'; render();
 }
 function cevEditModal(){
@@ -12519,6 +12525,10 @@ function cevEditModal(){
       <div class="fld"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px"><input type="checkbox" ${F.todoDia?'checked':''} onchange="F.todoDia=this.checked;render()"> Todo el día</label></div>
       ${F.todoDia?'':`<div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:120px">${fld('horaIni','Desde','','time')}</div><div style="flex:1;min-width:120px">${fld('horaFin','Hasta','','time')}</div></div>`}
       ${fld('quien','Quién (a quién afecta o quién va)','Todo el equipo')}
+      <div class="fld"><label>Asistentes <span class="muted" style="font-weight:400">(les llega un aviso cuando se aprueba)</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${CEV_GRUPOS.map((g,i)=>{ const ns=cevGrupo(g); return ns.length?`<button type="button" class="jt-link" style="font-size:12.5px" onclick="cevAsisGrupo(${i})">＋ ${incEsc(g.n)}</button>`:''; }).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${appUsers().map(u=>`<button type="button" class="btn btn-sm ${F.asistentes.includes(u.nombre)?'btn-primary':'btn-ghost'}" onclick="cevAsis('${String(u.nombre).replace(/'/g,"\\'")}')">${incEsc(u.nombre)}</button>`).join('')}</div>
+        ${F.serieId?`<label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;margin-top:8px"><input type="checkbox" ${F.aSerie?'checked':''} onchange="F.aSerie=this.checked"> Poner estos asistentes en toda la serie</label>`:''}</div>
       <div class="fld"><label>Nota <span class="muted" style="font-weight:400">(opcional)</span></label><textarea class="inp" rows="2" style="font-family:inherit;resize:vertical" oninput="F.nota=this.value" placeholder="Lugar, qué llevar, a quién avisar…">${incEsc(F.nota||'')}</textarea></div>
       ${F.tipo==='bloqueo'||F.tipo==='cierre'?`<div class="note" style="margin:10px 0 0">Recuerda hacer también el bloqueo o el cierre en la agenda del programa de gestión: esto es solo el aviso para el equipo.</div>`:''}
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="cevGuardar()">Guardar</button></div>
@@ -12533,7 +12543,8 @@ function cevGuardar(){
   if(!e){ e={id:juntaId('V'), autor:S.user.nombre, ts:now(), estado:'pendiente'}; S.calEventos.push(e); }
   else if(!isAdmin()) e.estado='pendiente';
   Object.assign(e,{titulo, tipo:F.tipo, fecha:F.fecha, fechaFin:(F.fechaFin&&F.fechaFin>F.fecha)?F.fechaFin:'', horaIni:F.todoDia?'':(F.horaIni||''), horaFin:F.todoDia?'':(F.horaFin||''),
-    quien:String(F.quien||'').trim(), nota:String(F.nota||'').trim()});
+    quien:String(F.quien||'').trim(), nota:String(F.nota||'').trim(), asistentes:(F.asistentes||[]).slice()});
+  if(F.aSerie && e.serieId){ const ahora=juntaUpd(); cevVivos().filter(x=>x.serieId===e.serieId && x.id!==e.id && !x.virtual).forEach(x=>{ x.asistentes=e.asistentes.slice(); x.upd=ahora; }); }
   closeModal(); S.cevDia=e.fecha; S.cevMes=e.fecha.slice(0,7); render(); juntaToca(e); toast('Guardado en el calendario');
 }
 function cevAprobar(id, serie){
@@ -12542,7 +12553,23 @@ function cevAprobar(id, serie){
   const xs = (serie && e.serieId) ? cevVivos().filter(x=>x.serieId===e.serieId && cevPend(x)) : [e];
   const ahora=juntaUpd();
   xs.forEach(x=>{ x.estado='aprobado'; x.aprobadoPor=S.user.nombre; x.upd=ahora; });
-  closeModal(); render(); juntaGuardar(); toast(xs.length===1?'Aprobado':(xs.length+' aprobados'));
+  closeModal(); render(); juntaGuardar();
+  const n=cevAvisarAprobados(xs);
+  toast((xs.length===1?'Aprobado':(xs.length+' aprobados'))+(n?' · aviso a '+n+' persona'+(n===1?'':'s'):''));
+}
+function cevAvisarAprobados(xs){
+  if(typeof tgNotify!=='function') return 0;
+  const me=S.user&&S.user.nombre; const porPersona={};
+  xs.forEach(x=>(x.asistentes||[]).forEach(n=>{ if(n && n!==me) (porPersona[n]=porPersona[n]||[]).push(x); }));
+  Object.keys(porPersona).forEach(n=>{
+    const ev=porPersona[n].slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))); const p=ev[0];
+    const ic=p.tipo==='formacion'?'🎓':'📅'; const que=p.tipo==='formacion'?'Formación':'Reunión';
+    let txt;
+    if(ev.length===1) txt=`${ic} ${que} confirmada: ${p.titulo}\n${cevCuando(p)}${p.quien?'\n'+p.quien:''}${p.nota?'\n'+p.nota:''}\n\nEstá en Lucai, en Calendario.`;
+    else txt=`${ic} ${p.tipo==='formacion'?'Formaciones':'Reuniones'} confirmadas: ${p.titulo}\n${ev.length} fechas, la primera el ${juntaFechaLarga(p.fecha).toLowerCase()}${p.horaIni?' · '+cevHora(p):''}${p.quien?'\n'+p.quien:''}\n\nTodas están en Lucai, en Calendario.`;
+    try{ tgNotify(n, txt); }catch(_){}
+  });
+  return Object.keys(porPersona).length;
 }
 async function cevQuitar(id){
   const e=(S.calEventos||[]).find(x=>x.id===id); if(!e || !cevPuede()) return;
@@ -12791,6 +12818,85 @@ cevEditModal = function(){ const t=CEV_TIPOS; const i=t.findIndex(x=>x.id==='fue
   tbBadgeOf=function(id){ if(id==='personas'){ try{ return perPorHacer().length; }catch(_){ return 0; } } return _tb.apply(this, arguments); };
 })();
 /* ===== FIN PERSONAS ===== */
+
+/* ============================================================
+   LUCAI · AVISOS DE REUNIONES EN LA APP (25/10/2026, David)
+   Cuando se aprueba una reunión o formación del Calendario, a cada asistente le sale el aviso al entrar en Lucai,
+   como los demás avisos: número rojo en «Calendario», recuadro «Reuniones nuevas para ti» arriba del Inicio y un
+   aviso emergente una vez por sesión. Una serie sale como una sola línea. Si cambian el día o la hora de una ya
+   vista, vuelve a avisar (lo visto se guarda con fecha y hora).
+   Lo visto, por persona, en lucai_estado (cevVistosL: un documento por persona {id:'v-<nombre>', ids:[…]}), así vale
+   en cualquier aparato y cada uno solo escribe el suyo.
+   ============================================================ */
+if(!JUNTA_KEYS.includes('cevVistosL')) JUNTA_KEYS.push('cevVistosL');
+if(!Array.isArray(S.cevVistosL)) S.cevVistosL=[];
+function cevClaveVisto(e){ return e.id+'@'+e.fecha+'|'+(e.fechaFin||'')+'|'+(e.horaIni||'')+'|'+(e.horaFin||''); }
+function cevMiVistoDoc(){ const me=S.user&&S.user.nombre; return (S.cevVistosL||[]).find(x=>x && x.id==='v-'+me) || null; }
+function cevMisNuevas(){
+  if(!S.user) return [];
+  const me=S.user.nombre, hoy=todayStr(); const d=cevMiVistoDoc(); const vistos=new Set((d&&d.ids)||[]);
+  return (S.calEventos||[]).filter(e=>e && !e.borrado && e.estado==='aprobado' && Array.isArray(e.asistentes) && e.asistentes.includes(me) && cevFin(e)>=hoy && !vistos.has(cevClaveVisto(e)));
+}
+function cevMisNuevasGrupos(){
+  const g={}; cevMisNuevas().forEach(e=>{ const k=e.serieId||e.id; (g[k]=g[k]||[]).push(e); });
+  return Object.keys(g).map(k=>g[k].sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)))).sort((a,b)=>String(a[0].fecha).localeCompare(String(b[0].fecha)));
+}
+function cevMarcarVistas(evs){
+  const me=S.user&&S.user.nombre; if(!me || !evs.length) return;
+  let d=cevMiVistoDoc(); if(!d){ d={id:'v-'+me, ids:[]}; S.cevVistosL.push(d); }
+  const set=new Set(d.ids||[]); evs.forEach(e=>set.add(cevClaveVisto(e)));
+  /* solo se guarda lo que aún no ha pasado, para que la lista no crezca sin fin */
+  const vivos=new Set((S.calEventos||[]).filter(e=>e && cevFin(e)>=todayStr()).map(cevClaveVisto));
+  d.ids=[...set].filter(k=>vivos.has(k)); juntaToca(d);
+}
+function cevVistoGrupo(k){ const g=cevMisNuevasGrupos().find(x=>(x[0].serieId||x[0].id)===k); if(g){ cevMarcarVistas(g); render(); } }
+function cevVerGrupo(k){
+  const g=cevMisNuevasGrupos().find(x=>(x[0].serieId||x[0].id)===k); if(!g) return;
+  cevMarcarVistas(g); S.cevVista='mes'; S.cevMes=g[0].fecha.slice(0,7); S.cevDia=g[0].fecha; setModule('calendario');
+}
+function cevAvisosHtml(){
+  const gs=cevMisNuevasGrupos(); if(!gs.length) return '';
+  const linea=g=>{ const p=g[0]; const k=p.serieId||p.id;
+    const cuando = g.length>1 ? `${g.length} fechas · la primera el ${juntaFechaLarga(p.fecha).toLowerCase()}${p.horaIni?' · '+cevHora(p):''}` : cevCuando(p);
+    return `<div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--t-bd-F1ECE3)"><div style="flex:1;min-width:0">
+      <div style="font-weight:700;font-size:14px;color:var(--t-fg-333F48)">${p.tipo==='formacion'?'🎓':'📅'} ${incEsc(p.titulo)}</div>
+      <div style="font-size:12.5px;color:var(--t-fg-5A6770)">${incEsc(cuando)}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="cevVerGrupo('${incEsc(k)}')">Ver</button><button class="btn btn-primary btn-sm" onclick="cevVistoGrupo('${incEsc(k)}')">Entendido</button></div>`; };
+  return `<div style="background:var(--t-bg-FFFFFF);border:1px solid var(--lx-acc,#2563EB);border-radius:14px;padding:10px 14px 4px;margin:0 0 14px">
+    <div style="font-size:13px;font-weight:700;color:var(--lx-acc,#2563EB);margin-bottom:2px">Reuniones nuevas para ti (${gs.length})</div>${gs.map(linea).join('')}</div>`;
+}
+function cevAvisoEmergente(){
+  if(S._cevAvisoVisto || !S.user) return; const gs=cevMisNuevasGrupos(); if(!gs.length) return;
+  S._cevAvisoVisto=true;
+  if(document.getElementById('cevAvisoPop')) return;
+  const d=document.createElement('div'); d.id='cevAvisoPop';
+  d.style.cssText='position:fixed;top:14px;left:50%;z-index:2000;transform:translateX(-50%);max-width:calc(100vw - 24px)';
+  d.innerHTML=`<div style="display:flex;align-items:center;gap:10px;background:var(--lx-acc,#2563EB);color:#fff;border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.25);padding:9px 10px 9px 14px;font-size:14px">
+    <span>📅 Tienes ${gs.length} reunion${gs.length===1?'':'es'} nueva${gs.length===1?'':'s'}</span>
+    <button id="cevAvisoVer" style="background:#fff;color:var(--lx-acc,#2563EB);font-weight:700;border-radius:8px;padding:6px 12px;font-size:13px;border:none;cursor:pointer">Ver</button>
+    <span id="cevAvisoX" style="font-size:18px;line-height:1;padding:0 4px;cursor:pointer;opacity:.85">×</span></div>`;
+  document.body.appendChild(d);
+  const quitar=()=>{ const x=document.getElementById('cevAvisoPop'); if(x) x.remove(); };
+  d.querySelector('#cevAvisoX').onclick=quitar;
+  d.querySelector('#cevAvisoVer').onclick=()=>{ quitar(); S.module=null; render(); try{ window.scrollTo(0,0); }catch(_){} };
+  setTimeout(quitar, 9000);
+}
+(function(){
+  const _lht=lxHomeTop;
+  lxHomeTop=function(){
+    const h=_lht.apply(this, arguments); const card=cevAvisosHtml(); if(!card) return h;
+    const i=h.indexOf('<div class="lx-tiles">'); const j=i>=0?i:h.indexOf('<div class="lx-h2">Lo tuyo</div>');
+    return j>=0 ? h.slice(0,j)+card+h.slice(j) : card+h;
+  };
+  const _tb2=tbBadgeOf;
+  tbBadgeOf=function(id){ if(id==='calendario'){ try{ return cevMisNuevasGrupos().length; }catch(_){ return 0; } } return _tb2.apply(this, arguments); };
+  /* el aviso emergente: al entrar (o al llegar los datos), una vez por sesión */
+  const _r=render;
+  render=function(){ const out=_r.apply(this, arguments); try{ if(S.user && !S._cevAvisoVisto){ clearTimeout(window._cevAvT); window._cevAvT=setTimeout(cevAvisoEmergente, 1200); } }catch(_){} return out; };
+  const _lo=logout;
+  logout=function(){ S._cevAvisoVisto=false; const x=document.getElementById('cevAvisoPop'); if(x) x.remove(); return _lo.apply(this, arguments); };
+})();
+/* ===== FIN AVISOS DE REUNIONES ===== */
 
 boot();
 
