@@ -10965,7 +10965,9 @@ function manVAnexo(a){
   return `<button class="man-volver" onclick="manIr('${manEsc(a.padre)}')">← ${manEsc(p?p.titulo:'Proceso')}</button>
   <div class="man-doc"><div class="man-cab"><span class="man-n">ANEXO ${manEsc(a.codigo)} · ${manEsc(p?p.titulo:'')}</span>${manSello(a)}</div>${manAviso(a)}${a.html||''}</div>`;
 }
-function manNiveles(){ const o=MAN.docs['organigrama']; return (o && o.niveles) ? Object.entries(o.niveles) : [['Puestos', manDocs('puesto').map(d=>d.num)]]; }
+/* Supabase (jsonb) no conserva el orden de las claves: se reordenan por longitud y «Nivel 2 — Coordinación» salía el último.
+   Se ordenan por el número del nivel (25/10/2026). */
+function manNiveles(){ const o=MAN.docs['organigrama']; return (o && o.niveles) ? Object.entries(o.niveles).sort((a,b)=>String(a[0]).localeCompare(String(b[0]),'es',{numeric:true})) : [['Puestos', manDocs('puesto').map(d=>d.num)]]; }
 function manVPuestos(){
   return manNiveles().map(([niv, nums])=>`<div class="man-sec">${manEsc(niv)}</div><div class="man-grid">` + nums.map(n=>{
     const d=MAN.docs['puesto:'+n]; if(!d) return '';
