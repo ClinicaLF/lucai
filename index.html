@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1448">
+<meta name="lucai-version" content="2026-10-25-1507">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -12351,7 +12351,8 @@ async function jaeQuitar(id){
    apuntan Dirección y el equipo de la reunión semanal (Ajustes de Reuniones). Es un aviso para el equipo: los
    bloqueos y cierres de agenda se siguen haciendo en el programa de gestión.
    Se guarda en lucai_estado (clave calEventos) con el guardado de Reuniones: relee, fusiona por id, nunca borra.
-   Cada evento: {id, titulo, tipo, fecha, fechaFin, horaIni, horaFin, quien, nota, autor, ts, upd, borrado}.
+   Cada evento: {id, titulo, tipo, fecha, fechaFin, horaIni, horaFin, quien, nota, estado, serieId, autor, ts, upd, borrado}.
+   estado: 'pendiente' (de aprobar; lo de por defecto, también si falta) o 'aprobado' (lo aprueba Dirección; David, 25/10).
    ============================================================ */
 const CEV_TIPOS=[
   {id:'reunion', nombre:'Reunión'},
@@ -12378,7 +12379,9 @@ function cevPuede(){ return !!S.user && (isAdmin() || juntaEsMiembro()); }
 function cevTipo(id){ return CEV_TIPOS.find(t=>t.id===id) || CEV_TIPOS[CEV_TIPOS.length-1]; }
 function cevVivos(){ return (S.calEventos||[]).filter(e=>e && !e.borrado && e.fecha).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)) || String(a.horaIni||'').localeCompare(String(b.horaIni||''))); }
 function cevFin(e){ return (e.fechaFin && e.fechaFin>e.fecha) ? e.fechaFin : e.fecha; }
-function cevDelDia(iso){ return cevVivos().filter(e=>e.fecha<=iso && cevFin(e)>=iso); }
+function cevDelDia(iso){ return cevVivos().filter(e=>e.fecha<=iso && cevFin(e)>=iso && (!S.cevSoloPend || cevPend(e))); }
+function cevPend(e){ return e.estado!=='aprobado'; }
+function cevPendientes(){ return cevVivos().filter(cevPend); }
 function cevHora(e){ return e.horaIni ? (e.horaIni+(e.horaFin?'–'+e.horaFin:'')) : 'Todo el día'; }
 function cevCuando(e){
   const f=cevFin(e);
@@ -12404,6 +12407,8 @@ const CEV_CSS=`<style>
 .ce-dia.sel{box-shadow:inset 0 0 0 2px var(--lx-acc,#2563EB)}
 .ce-ch{display:block;font-size:11.5px;font-weight:600;border-radius:5px;padding:2px 6px;margin:0 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .ce-mas{font-size:11px;color:var(--t-fg-8A949B);padding-left:4px}
+.ce-ch.pend{background:transparent;outline:1.5px dashed currentColor;outline-offset:-1.5px}
+.ce-pendtag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;margin-right:6px;border:1.5px dashed var(--t-fg-8A949B);color:var(--t-fg-5A6770)}
 .ce-dots{display:none}
 .ce-it{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--t-bd-F1ECE3);cursor:pointer}
 .ce-it:last-child{border-bottom:none}
@@ -12424,12 +12429,12 @@ const CEV_CSS=`<style>
 function cevMesActual(){ if(!S.cevMes){ const d=tarDParse(todayStr()); S.cevMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); } return S.cevMes; }
 function cevMover(n){ const p=cevMesActual().split('-').map(Number); let y=p[0], m=p[1]+n; if(m<1){m=12;y--;} if(m>12){m=1;y++;} S.cevMes=y+'-'+String(m).padStart(2,'0'); S.cevDia=null; render(); }
 function cevHoy(){ S.cevMes=null; S.cevDia=todayStr(); cevMesActual(); render(); }
-function cevChip(e){ return `<span class="ce-ch ce-${cevTipo(e.tipo).id}" onclick="event.stopPropagation();cevVer('${e.id}')" title="${incEsc(e.titulo+' · '+cevHora(e))}">${e.horaIni?incEsc(e.horaIni)+' ':''}${incEsc(e.titulo)}</span>`; }
+function cevChip(e){ return `<span class="ce-ch ce-${cevTipo(e.tipo).id}${cevPend(e)?' pend':''}" onclick="event.stopPropagation();cevVer('${e.id}')" title="${incEsc(e.titulo+' · '+cevHora(e))}">${e.horaIni?incEsc(e.horaIni)+' ':''}${incEsc(e.titulo)}</span>`; }
 function cevFila(e){
   const d=tarDParse(e.fecha); const dias=['dom','lun','mar','mié','jue','vie','sáb'];
   return `<div class="ce-it" onclick="cevVer('${e.id}')"><div class="ce-fe"><span>${dias[d.getDay()]}</span><b>${d.getDate()}</b></div>
     <div style="flex:1;min-width:0"><div class="jt-tit">${incEsc(e.titulo)}</div>
-    <div class="jt-sub"><span class="ce-tag ce-${cevTipo(e.tipo).id}">${incEsc(cevTipo(e.tipo).nombre)}</span>${cevFin(e)!==e.fecha?incEsc('Hasta el '+fmtFecha(cevFin(e)))+' · ':''}${incEsc(cevHora(e))}</div>
+    <div class="jt-sub"><span class="ce-tag ce-${cevTipo(e.tipo).id}">${incEsc(cevTipo(e.tipo).nombre)}</span>${cevPend(e)?'<span class="ce-pendtag">Pendiente de aprobar</span>':''}${cevFin(e)!==e.fecha?incEsc('Hasta el '+fmtFecha(cevFin(e)))+' · ':''}${incEsc(cevHora(e))}</div>
     ${e.quien?`<div class="jt-sub">${incEsc(e.quien)}</div>`:''}</div></div>`;
 }
 function cevMesView(){
@@ -12439,7 +12444,7 @@ function cevMesView(){
   for(let i=0;i<semanas*7;i++){
     const iso=tarIso(d); const fuera=d.getMonth()!==m-1; const evs=cevDelDia(iso);
     cells.push(`<div class="ce-dia${fuera?' fuera':''}${iso===hoy?' hoy':''}${S.cevDia===iso?' sel':''}" onclick="cevDiaClic('${iso}')"><div class="n">${d.getDate()}</div>
-      ${evs.slice(0,3).map(cevChip).join('')}${evs.length>3?`<div class="ce-mas">+${evs.length-3} más</div>`:''}
+      ${(function(){ const vis=evs.filter(e=>e.fecha===iso || d.getDay()===1); return vis.slice(0,3).map(cevChip).join('')+(vis.length>3?`<div class="ce-mas">+${vis.length-3} más</div>`:''); })()}
       <div class="ce-dots">${evs.slice(0,4).map(e=>`<i class="ce-${cevTipo(e.tipo).id}" style="background:var(--ce-${cevTipo(e.tipo).id})"></i>`).join('')}</div></div>`);
     d=new Date(d.getFullYear(), d.getMonth(), d.getDate()+1);
   }
@@ -12451,7 +12456,7 @@ function cevMesView(){
 function cevDiaClic(iso){ S.cevDia = (S.cevDia===iso) ? null : iso; render(); }
 function cevListaView(){
   const hoy=todayStr(); const desde=S.cevPasados ? juntaMasDias(hoy,-90) : hoy; const hasta=juntaMasDias(hoy,180);
-  const xs=cevVivos().filter(e=>cevFin(e)>=desde && e.fecha<=hasta);
+  const xs=cevVivos().filter(e=>cevFin(e)>=desde && e.fecha<=hasta && (!S.cevSoloPend || cevPend(e)));
   if(!xs.length) return `<div class="jt-card"><div class="muted" style="padding:14px 2px;font-size:13.5px">No hay nada apuntado para los próximos meses.</div></div>`;
   const grupos={}; xs.forEach(e=>{ const k=(e.fecha<desde?desde:e.fecha).slice(0,7); (grupos[k]=grupos[k]||[]).push(e); });
   return Object.keys(grupos).sort().map(k=>{ const p=k.split('-'); return `<div class="jt-card" style="padding:8px 14px 4px"><h3>${CEV_MESES[+p[1]-1]} ${p[0]}</h3>${grupos[k].map(cevFila).join('')}</div>`; }).join('')
@@ -12462,8 +12467,8 @@ function calendarioView(){
   const v=S.cevVista; const [y,m]=cevMesActual().split('-').map(Number);
   const bar=`<div class="ce-bar"><div class="seg tar-seg" style="margin:0">${[['mes','Mes'],['lista','Próximos']].map(([id,l])=>`<button class="${v===id?'on':''}" onclick="S.cevVista='${id}';render()">${l}</button>`).join('')}</div>
     ${v==='mes'?`<div class="ce-nav"><button class="btn btn-ghost btn-sm" onclick="cevMover(-1)" title="Mes anterior">‹</button><strong>${CEV_MESES[m-1]} ${y}</strong><button class="btn btn-ghost btn-sm" onclick="cevMover(1)" title="Mes siguiente">›</button><button class="btn btn-ghost btn-sm" onclick="cevHoy()">Hoy</button></div>`:''}
-    <div class="esp"></div>${cevPuede()?`<button class="btn btn-primary btn-sm" onclick="cevAbrir()">＋ Añadir</button>`:''}</div>`;
-  const ley=`<div class="ce-ley">${CEV_TIPOS.map(t=>`<span class="ce-tag ce-${t.id}">${incEsc(t.nombre)}</span>`).join('')}</div>`;
+    <div class="esp"></div>${(function(){ const n=cevPendientes().length; return (n||S.cevSoloPend)?`<button class="btn btn-sm ${S.cevSoloPend?'btn-primary':'btn-ghost'}" onclick="S.cevSoloPend=!S.cevSoloPend;render()" title="Ver solo lo pendiente de aprobar">${S.cevSoloPend?'Ver todo':'Pendientes de aprobar ('+n+')'}</button>`:''; })()}${cevPuede()?`<button class="btn btn-primary btn-sm" onclick="cevAbrir()">＋ Añadir</button>`:''}</div>`;
+  const ley=`<div class="ce-ley">${CEV_TIPOS.map(t=>`<span class="ce-tag ce-${t.id}">${incEsc(t.nombre)}</span>`).join('')}<span class="ce-pendtag">Borde discontinuo = pendiente de aprobar</span></div>`;
   return `${JUNTA_CSS}${CEV_CSS}${moduleHeader('Calendario', false)}
   <main><div class="wrap">
     <div class="toolbar" style="margin-bottom:12px"><div><div class="section-title">Calendario</div>
@@ -12485,7 +12490,8 @@ function cevVerModal(){
   return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
     <div class="modal-head"><h2>${incEsc(e.titulo)}</h2><button class="x" onclick="closeModal()">×</button></div>
     <div class="modal-body"><div style="margin-bottom:8px"><span class="ce-tag ce-${cevTipo(e.tipo).id}">${incEsc(cevTipo(e.tipo).nombre)}</span></div>
-      ${fila('Cuándo',cevCuando(e))}${fila('Quién',e.quien)}${fila('Nota',e.nota)}${fila('Apuntado por',e.autor)}
+      ${fila('Estado',cevPend(e)?'Pendiente de aprobar':'Aprobado'+(e.aprobadoPor?' por '+e.aprobadoPor:''))}${fila('Cuándo',cevCuando(e))}${fila('Quién',e.quien)}${fila('Nota',e.nota)}${fila('Apuntado por',e.autor)}
+      ${isAdmin()&&cevPend(e)?(function(){ const ns=e.serieId?cevVivos().filter(x=>x.serieId===e.serieId && cevPend(x)).length:0; return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-sm" style="background:var(--lx-verde,#22A55A);color:#fff" onclick="cevAprobar('${e.id}',false)">✓ Aprobar</button>${ns>1?`<button class="btn btn-ghost btn-sm" onclick="cevAprobar('${e.id}',true)">✓ Aprobar toda la serie (${ns})</button>`:''}</div>`; })():''}
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
         ${cevPuede()?`<button class="btn btn-ghost" style="color:var(--t-fg-C0392B);margin-right:auto" onclick="cevQuitar('${e.id}')">Quitar</button><button class="btn btn-ghost" onclick="cevAbrir('${e.id}')">Cambiar</button>`:''}
         <button class="btn btn-primary" onclick="closeModal()">Cerrar</button></div></div></div></div>`;
@@ -12522,10 +12528,19 @@ function cevGuardar(){
   if(!F.fecha){ toast('Pon el día'); return; }
   if(F.fechaFin && F.fechaFin<F.fecha){ toast('«Hasta» no puede ser antes del día'); return; }
   let e=F.id?(S.calEventos||[]).find(x=>x.id===F.id):null;
-  if(!e){ e={id:juntaId('V'), autor:S.user.nombre, ts:now()}; S.calEventos.push(e); }
+  if(!e){ e={id:juntaId('V'), autor:S.user.nombre, ts:now(), estado:'pendiente'}; S.calEventos.push(e); }
+  else if(!isAdmin()) e.estado='pendiente';
   Object.assign(e,{titulo, tipo:F.tipo, fecha:F.fecha, fechaFin:(F.fechaFin&&F.fechaFin>F.fecha)?F.fechaFin:'', horaIni:F.todoDia?'':(F.horaIni||''), horaFin:F.todoDia?'':(F.horaFin||''),
     quien:String(F.quien||'').trim(), nota:String(F.nota||'').trim()});
   closeModal(); S.cevDia=e.fecha; S.cevMes=e.fecha.slice(0,7); render(); juntaToca(e); toast('Guardado en el calendario');
+}
+function cevAprobar(id, serie){
+  if(!isAdmin()) return;
+  const e=(S.calEventos||[]).find(x=>x.id===id); if(!e) return;
+  const xs = (serie && e.serieId) ? cevVivos().filter(x=>x.serieId===e.serieId && cevPend(x)) : [e];
+  const ahora=juntaUpd();
+  xs.forEach(x=>{ x.estado='aprobado'; x.aprobadoPor=S.user.nombre; x.upd=ahora; });
+  closeModal(); render(); juntaGuardar(); toast(xs.length===1?'Aprobado':(xs.length+' aprobados'));
 }
 async function cevQuitar(id){
   const e=(S.calEventos||[]).find(x=>x.id===id); if(!e || !cevPuede()) return;
