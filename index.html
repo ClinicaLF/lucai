@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1238">
+<meta name="lucai-version" content="2026-10-25-1246">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -9946,7 +9946,7 @@ JUNTA_KEYS.forEach(k=>{ if(!Array.isArray(S[k])) S[k]=[]; });
 
 (function(){
   if(!MODULES.find(x=>x.id==='junta')){
-    MODULES.push({ id:'junta', ini:'R', nombre:'Reunión semanal',
+    MODULES.push({ id:'junta', ini:'R', nombre:'Reuniones',
       desc:'La reunión del equipo de dirección: prioridades del trimestre, asuntos pendientes, tareas que salen y acta.',
       estado:'activo' });
   }
@@ -10431,7 +10431,7 @@ function juntaView(){
   if(S.juntaTab==='cal') S.juntaTab='reunion';
   const tab=S.juntaTab||'reunion';
   const nAs=juntaAsuntosAbiertos().length;
-  const tabs=[['reunion','Reunión'],['prios','Prioridades'],['asuntos','Asuntos'+(nAs?` (${nAs})`:'')],['actas','Actas']];
+  const tabs=[['reunion','Reunión semanal'],['prios','Prioridades'],['asuntos','Asuntos'+(nAs?` (${nAs})`:'')],['actas','Actas']];
   const seg=`<div class="seg tar-seg jt-tabs" style="margin-bottom:14px">${tabs.map(([id,l])=>`<button class="${tab===id?'on':''}" onclick="S.juntaTab='${id}';S.juntaVerActa=null;render()">${l}</button>`).join('')}</div>`;
   let body='';
   if(tab==='prios') body=juntaPriosView();
@@ -10440,11 +10440,11 @@ function juntaView(){
   else body=juntaReunionView();
   const sinEquipo = !juntaMiembros().length ? `<div class="note" style="margin-top:0;margin-bottom:14px">Primero elige quién forma el equipo de la reunión. <button class="btn btn-ghost btn-sm" onclick="juntaAjustesAbrir()" style="margin-left:6px">Elegir</button></div>` : '';
   const err = S.juntaError ? `<div class="note" style="margin-top:0;margin-bottom:14px;border-left-color:#C0392B">Lo último no se ha podido guardar. <button class="btn btn-ghost btn-sm" onclick="juntaGuardar()" style="margin-left:6px">Reintentar</button></div>` : '';
-  return `${JUNTA_CSS}${moduleHeader('Reunión semanal', false)}
+  return `${JUNTA_CSS}${moduleHeader('Reuniones', false)}
   <main><div class="wrap">
     <div class="toolbar" style="margin-bottom:12px">
-      <div><div class="section-title">Reunión semanal</div>
-      <div class="section-sub" style="margin:0">${incEsc(JUNTA_DIAS[+(S.juntaCfg.dia!=null?S.juntaCfg.dia:3)]||'')}${S.juntaCfg.hora?' · '+incEsc(S.juntaCfg.hora):''}${juntaMiembros().length?' · '+incEsc(juntaMiembros().map(n=>juntaCorto(n, juntaMiembros())).join(', ')):''}</div></div>
+      <div><div class="section-title">Reuniones</div>
+      <div class="section-sub" style="margin:0">Reunión semanal: ${incEsc(JUNTA_DIAS[+(S.juntaCfg.dia!=null?S.juntaCfg.dia:3)]||'')}${S.juntaCfg.hora?' · '+incEsc(S.juntaCfg.hora):''}${juntaMiembros().length?' · '+incEsc(juntaMiembros().map(n=>juntaCorto(n, juntaMiembros())).join(', ')):''}</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="juntaRefrescar()">Actualizar</button><button class="btn btn-ghost btn-sm" onclick="juntaAjustesAbrir()">Ajustes</button></div>
     </div>
     ${err}${sinEquipo}${seg}${body}
@@ -11324,7 +11324,7 @@ function lxHomeTop(){
 /* ---------- menú lateral (ordenador) ---------- */
 function lxRailHTML(){
   const ids=['tareas','material','junta','incidencias','equipos','manual'].filter(id=>{ try{ return canAccess(id) && MODULES.some(m=>m.id===id && m.estado!=='pronto'); }catch(_){ return false; } });
-  const LBL={tareas:'Tareas',material:'Almacén',junta:'Reunión',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
+  const LBL={tareas:'Tareas',material:'Almacén',junta:'Reuniones',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
   const it=(lbl,ic,on,click,b)=>`<button class="lx-it${on?' on':''}" onclick="${click}" title="${lbl}">${b?`<span class="lx-b">${b>99?'99+':b}</span>`:''}<svg viewBox="0 0 24 24">${ic||''}</svg>${lbl}</button>`;
   let h=`<button class="lx-logo" onclick="S.tbMore=false;goHome()" title="Inicio">L</button>`;
   h+=it('Inicio',TB_IC.inicio,!S.module,'S.tbMore=false;goHome()',0);
@@ -12210,6 +12210,138 @@ function jcalImportar(){
   manTab=function(t){ _mt.apply(this, arguments); if(t==='reuniones') juntaCargar().then(()=>{ if(S.module==='manual' && S.manTab==='reuniones') render(); }); };
 })();
 /* ===== FIN CALENDARIO DE REUNIONES ===== */
+
+/* ============================================================
+   LUCAI · ACTAS DE EQUIPO Y FORMACIÓN (25/10/2026, David eligió la opción A)
+   Dentro del módulo «Reuniones», pestaña Actas › «Equipo y formación»: quien lleva una reunión de equipo o una
+   formación deja escrito qué se vio, qué problemas salieron, los compromisos (cada uno = una tarea normal, con
+   persona y fecha) y, si hace falta, lo que sube a la reunión semanal (= un asunto pendiente).
+   Se guarda en lucai_estado (clave juntaActasEq) con el guardado del módulo: relee, fusiona por id, nunca borra.
+   Cada acta: {id, fecha, calId, nombre, quien, asistentes[], temas, problemas, subir, compromisos[{texto,para,fecha,
+   tareaId}], asuntoId, autor, ts, upd}. Cambiarla: quien la escribió o Dirección.
+   ============================================================ */
+if(!JUNTA_KEYS.includes('juntaActasEq')) JUNTA_KEYS.push('juntaActasEq');
+if(!Array.isArray(S.juntaActasEq)) S.juntaActasEq=[];
+function jaeVivas(){ return (S.juntaActasEq||[]).filter(a=>a && !a.borrado).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')) || String(b.ts||'').localeCompare(String(a.ts||''))); }
+function jaePuede(a){ return !!S.user && (isAdmin() || !a || a.autor===S.user.nombre); }
+/* lo que se puede elegir en «Qué fue»: lo del calendario menos la semanal de liderazgo (esa tiene su acta propia) */
+function jaeOpciones(){ return jcalVivos().filter(x=>x.cada!=='semana'); }
+const _juntaActasView_eq = juntaActasView;
+juntaActasView = function(){
+  const t=S.juntaActasTipo||'semanal';
+  const seg=`<div class="seg tar-seg" style="margin:0 0 12px">${[['semanal','Reunión semanal'],['eq','Equipo y formación']].map(([id,l])=>`<button class="${t===id?'on':''}" onclick="S.juntaActasTipo='${id}';S.jaeVer=null;S.juntaVerActa=null;render()">${l}</button>`).join('')}</div>`;
+  if(t!=='eq') return (S.juntaVerActa?'':seg) + _juntaActasView_eq();
+  if(S.jaeVer){ const a=(S.juntaActasEq||[]).find(x=>x.id===S.jaeVer && !x.borrado); if(a) return jaeDetalle(a); S.jaeVer=null; }
+  const xs=jaeVivas();
+  const cab=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+    <div class="jt-sub" style="margin:0">Cada responsable apunta aquí la reunión de su equipo o la formación que ha dado.</div>
+    <button class="btn btn-primary btn-sm" onclick="jaeAbrir()">＋ Apuntar reunión o formación</button></div>`;
+  if(!xs.length) return seg+cab+`<div class="jt-card"><div class="muted" style="padding:14px 2px;font-size:13.5px">Aún no hay ninguna apuntada.</div></div>`;
+  return seg+cab+`<div class="jt-card">${xs.map(a=>{ const nc=(a.compromisos||[]).length;
+    return `<div class="jt-row" style="cursor:pointer;align-items:center" onclick="S.jaeVer='${a.id}';render()"><div style="flex:1;min-width:0">
+      <div class="jt-tit">${incEsc(a.nombre||'Reunión')}</div>
+      <div class="jt-sub">${incEsc(juntaFechaLarga(a.fecha))} · ${incEsc(a.quien||'')} · ${(a.asistentes||[]).length} asistentes · ${nc} compromiso${nc===1?'':'s'}${a.asuntoId?' · sube a la semanal':''}</div></div>
+      <span style="color:var(--t-fg-B8A88F);font-size:22px">›</span></div>`; }).join('')}</div>`;
+};
+function jaeDetalle(a){
+  const sec=(t,h)=>`<div class="jt-card"><h3>${t}</h3>${h}</div>`;
+  const vacio='<div class="muted" style="font-size:13px;padding:4px 0 6px">—</div>';
+  const txt=v=>v?`<div style="white-space:pre-wrap;font-size:14px;padding:4px 0 8px;color:var(--t-fg-333F48)">${incEsc(v)}</div>`:vacio;
+  const comp=(a.compromisos||[]).map(c=>{ const t=c.tareaId?juntaTarea(c.tareaId):null; const hecha=t&&t.estado==='Hecha';
+    return `<div class="jt-row" ${t?`style="cursor:pointer" onclick="openTarDet('${t.id}')"`:''}><div style="flex:1;min-width:0"><div class="jt-tit" style="font-size:14px">${incEsc(c.texto)}</div><div class="jt-sub">${incEsc(c.para||'')}${c.fecha?' · '+incEsc(fmtFecha(c.fecha)):''}</div></div>${t?`<span class="jt-chip" style="${hecha?'background:var(--lx-verde-s,#EAF1D8);color:var(--lx-verde,#3f5400)':'background:var(--lx-gris-s,#EEF0F3);color:var(--lx-gris,#3D4754)'}">${incEsc(t.estado||'Pendiente')}</span>`:''}</div>`; }).join('');
+  const as=a.asuntoId?(S.juntaAsuntos||[]).find(x=>x.id===a.asuntoId):null;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" onclick="S.jaeVer=null;render()">‹ Actas</button>
+      <div style="display:flex;gap:8px">${jaePuede(a)?`<button class="btn btn-ghost btn-sm" onclick="jaeAbrir('${a.id}')">Cambiar</button><button class="btn btn-ghost btn-sm" style="color:var(--t-fg-C0392B)" onclick="jaeQuitar('${a.id}')">Quitar</button>`:''}</div></div>
+    <div class="jt-card" style="padding:14px 16px">
+      <div style="font-size:20px;font-weight:700;color:var(--t-fg-333F48)">${incEsc(a.nombre||'Reunión')}</div>
+      <div class="jt-sub">${incEsc(juntaFechaLarga(a.fecha))} · la llevó ${incEsc(a.quien||'—')}</div>
+      <div class="jt-sub">Asistentes: ${incEsc((a.asistentes||[]).join(', ')||'—')}</div></div>
+    ${sec('Qué se ha visto', txt(a.temas))}
+    ${sec('Problemas que han surgido', txt(a.problemas))}
+    ${sec('Compromisos', comp||vacio)}
+    ${a.subir||as?sec('Sube a la reunión semanal', txt(a.subir)+(as?`<div class="jt-sub" style="padding-bottom:8px">Asunto ${as.estado==='resuelto'?'resuelto'+(as.decision?': '+incEsc(as.decision):''):'pendiente en la reunión semanal'}</div>`:'')):''}`;
+}
+function jaeAbrir(id){
+  const a=id?(S.juntaActasEq||[]).find(x=>x.id===id):null;
+  if(a && !jaePuede(a)){ toast('Solo quien la apuntó o Dirección'); return; }
+  const ops=jaeOpciones(); const yo=S.user?String(S.user.nombre||'').split(/\s+/)[0].toLowerCase():'';
+  const mio=ops.find(x=>String(x.quien||'').toLowerCase().split(/\s*,\s*|\s+y\s+|\s+/).includes(yo));
+  F={type:'junta_actaeq', id:a?a.id:'', calId:a?(a.calId||''):(mio?mio.id:(ops[0]?ops[0].id:'')), nombre:a?(a.nombre||''):'', fecha:a?a.fecha:todayStr(),
+     quien:a?(a.quien||''):(S.user?S.user.nombre:''), asistentes:a?(a.asistentes||[]).slice():[], temas:a?(a.temas||''):'', problemas:a?(a.problemas||''):'', subir:a?(a.subir||''):'',
+     compromisos:a?(a.compromisos||[]).map(c=>Object.assign({},c)):[]};
+  if(a && a.calId && !ops.some(x=>x.id===a.calId)) F.calId='';
+  S.modal='junta_actaeq'; render();
+}
+function jaeAsis(i){ const u=appUsers()[i]; if(!u) return; const k=F.asistentes.indexOf(u.nombre); if(k>=0) F.asistentes.splice(k,1); else F.asistentes.push(u.nombre); render(); }
+function jaeTodos(){ const ns=appUsers().map(u=>u.nombre); F.asistentes = F.asistentes.length===ns.length ? [] : ns.slice(); render(); }
+function jaeCompMas(){ F.compromisos.push({texto:'', para:'', fecha:juntaMasDias(todayStr(),7)}); render(); }
+function jaeCompMenos(i){ const c=F.compromisos[i]; if(c && c.tareaId){ toast('Ya es una tarea: se cambia o se borra en Tareas'); return; } F.compromisos.splice(i,1); render(); }
+function jaeModal(){
+  const ops=jaeOpciones(); const us=appUsers(); const ta=(k,ph)=>`<textarea class="inp" rows="3" style="font-family:inherit;resize:vertical" oninput="F.${k}=this.value" placeholder="${incEsc(ph)}">${incEsc(F[k]||'')}</textarea>`;
+  return `<div class="overlay"><div class="modal" style="max-width:680px">
+    <div class="modal-head"><h2>${F.id?'Cambiar acta':'Apuntar reunión o formación'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body lx-mc">
+      <div class="note" style="margin-top:0;margin-bottom:10px">Sin nombres de pacientes: si hace falta, el nº de ficha.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="fld" style="flex:2;min-width:220px;margin-top:0"><label>Qué fue</label><select class="inp" onchange="F.calId=this.value;render()">${ops.map(x=>`<option value="${incEsc(x.id)}" ${F.calId===x.id?'selected':''}>${incEsc(x.nombre)}</option>`).join('')}<option value="" ${!F.calId?'selected':''}>Otra (escribir)</option></select></div>
+        <div class="fld" style="flex:1;min-width:140px;margin-top:0"><label>Fecha</label><input class="inp" type="date" value="${incEsc(F.fecha||'')}" oninput="F.fecha=this.value"></div>
+      </div>
+      ${!F.calId?`<div class="fld"><label>Nombre</label><input class="inp" value="${incEsc(F.nombre||'')}" oninput="F.nombre=this.value" placeholder="Formación de protocolos de esterilización"></div>`:''}
+      <div class="fld"><label>Quién la llevó</label><input class="inp" value="${incEsc(F.quien||'')}" oninput="F.quien=this.value"></div>
+      <div class="fld"><label>Quién vino <button type="button" class="jt-link" style="margin-left:6px" onclick="jaeTodos()">${F.asistentes.length===us.length?'ninguno':'todos'}</button></label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${us.map((u,i)=>`<button type="button" class="btn btn-sm ${F.asistentes.includes(u.nombre)?'btn-primary':'btn-ghost'}" onclick="jaeAsis(${i})">${incEsc(u.nombre)}</button>`).join('')}</div></div>
+      <div class="fld"><label>Qué se ha visto</label>${ta('temas','Temas que se han tratado o de qué ha ido la formación')}</div>
+      <div class="fld"><label>Problemas que han surgido</label>${ta('problemas','Lo que no va bien o preocupa al equipo')}</div>
+      <div class="fld"><label>Compromisos <span class="muted" style="font-weight:400">(cada uno se crea como tarea)</span></label>
+        ${F.compromisos.map((c,i)=>`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;align-items:center">
+          <input class="inp" style="flex:3;min-width:180px" value="${incEsc(c.texto||'')}" oninput="F.compromisos[${i}].texto=this.value" placeholder="Qué se hace" ${c.tareaId?'disabled':''}>
+          <select class="inp" style="flex:2;min-width:130px" onchange="F.compromisos[${i}].para=this.value" ${c.tareaId?'disabled':''}><option value="">¿Quién?</option>${tarUsers().map(n=>`<option ${c.para===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>
+          <input class="inp" type="date" style="flex:1;min-width:130px" value="${incEsc(c.fecha||'')}" oninput="F.compromisos[${i}].fecha=this.value" ${c.tareaId?'disabled':''}>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="jaeCompMenos(${i})" title="${c.tareaId?'Ya es una tarea':'Quitar'}">${c.tareaId?'✓':'×'}</button></div>`).join('')}
+        <button type="button" class="btn btn-ghost btn-sm" onclick="jaeCompMas()">＋ Compromiso</button></div>
+      <div class="fld"><label>Para la reunión semanal <span class="muted" style="font-weight:400">(opcional: lo que el equipo no puede resolver solo)</span></label>${ta('subir','Se apunta como asunto pendiente del jueves')}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="jaeGuardar()">Guardar</button></div>
+    </div></div></div>`;
+}
+function jaeGuardar(){
+  const cal=F.calId?jcalVivos().find(x=>x.id===F.calId):null;
+  const nombre=cal?cal.nombre:String(F.nombre||'').trim();
+  if(!nombre){ toast('Escribe qué fue'); return; }
+  if(!F.fecha){ toast('Pon la fecha'); return; }
+  const comps=F.compromisos.filter(c=>c.tareaId || String(c.texto||'').trim());
+  if(comps.some(c=>!c.tareaId && (!c.para || !c.fecha))){ toast('A algún compromiso le falta la persona o la fecha'); return; }
+  let a=F.id?(S.juntaActasEq||[]).find(x=>x.id===F.id):null;
+  if(!a){ a={id:juntaId('E'), autor:S.user.nombre, ts:now()}; S.juntaActasEq.push(a); }
+  const me=S.user.nombre;
+  const nuevas=comps.filter(c=>!c.tareaId).map(c=>{ const t={ id:uid(), titulo:String(c.texto).trim(), descripcion:'Compromiso de: '+nombre+' del '+fmtFecha(F.fecha)+'.',
+    prioridad:'Media', area:'General', deQuien:me, paraQuien:c.para, participantes:[], horaInicio:'', horaFin:'', color:'', checklist:[],
+    fechaLimite:c.fecha, serieId:null, recurrencia:null, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[] }; c.tareaId=t.id; c.texto=t.titulo; return t; });
+  Object.assign(a,{fecha:F.fecha, calId:cal?cal.id:'', nombre, quien:String(F.quien||'').trim(), asistentes:F.asistentes.slice(), temas:String(F.temas||'').trim(),
+    problemas:String(F.problemas||'').trim(), subir:String(F.subir||'').trim(), compromisos:comps.map(c=>({texto:String(c.texto||'').trim(), para:c.para, fecha:c.fecha, tareaId:c.tareaId}))});
+  if(a.subir && !a.asuntoId){
+    const lin=a.subir.split('\n'); const tit=lin[0].slice(0,140);
+    const s={ id:juntaId('A'), titulo:tit, detalle:(lin.slice(1).join('\n').trim()+(lin.length>1?'\n':'')+'Sube de: '+nombre+' ('+fmtFecha(a.fecha)+', '+(a.quien||me)+').').trim(),
+      autor:me, ts:now(), orden:juntaOrdenUltimo(), estado:'abierto', origen:{actaEq:a.id}, upd:juntaUpd() };
+    S.juntaAsuntos.push(s); a.asuntoId=s.id;
+  }
+  closeModal(); S.jaeVer=a.id; render(); juntaToca(a);
+  if(nuevas.length){
+    nuevas.forEach(t=>S.tareas.unshift(t));
+    srvTarInsertMany(nuevas, nuevas.length===1?'Compromiso creado como tarea':(nuevas.length+' compromisos creados como tareas'));
+    nuevas.forEach(t=>{ if(typeof tgNotify==='function' && t.paraQuien!==me) tgNotify(t.paraQuien, `📋 Hola ${(t.paraQuien||'').split(' ')[0]}, ${me} te ha asignado una tarea:\n\n${t.titulo}\n🟡 Media · 📅 ${fmtFecha(t.fechaLimite)}\n\nLa tienes en Lucai, en Tareas.`); });
+  } else toast('Acta guardada');
+}
+async function jaeQuitar(id){
+  const a=(S.juntaActasEq||[]).find(x=>x.id===id); if(!a || !jaePuede(a)) return;
+  if(!(await lxPregunta('¿Quitar esta acta?\n\nLas tareas de sus compromisos no se borran: siguen en Tareas.'))) return;
+  a.borrado=true; S.jaeVer=null; render(); juntaToca(a); toast('Acta quitada');
+}
+(function(){
+  const _mc=modalContent;
+  modalContent=function(){ if(F && F.type==='junta_actaeq') return jaeModal(); return _mc.apply(this, arguments); };
+})();
+/* ===== FIN ACTAS DE EQUIPO Y FORMACIÓN ===== */
 
 boot();
 
