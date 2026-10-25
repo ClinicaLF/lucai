@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1133">
+<meta name="lucai-version" content="2026-10-25-1212">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -10430,12 +10430,13 @@ function juntaView(){
   if(!S.juntaTrim) S.juntaTrim=juntaTrim();
   const tab=S.juntaTab||'reunion';
   const nAs=juntaAsuntosAbiertos().length;
-  const tabs=[['reunion','Reunión'],['prios','Prioridades'],['asuntos','Asuntos'+(nAs?` (${nAs})`:'')],['actas','Actas']];
-  const seg=`<div class="seg tar-seg" style="margin-bottom:14px">${tabs.map(([id,l])=>`<button class="${tab===id?'on':''}" onclick="S.juntaTab='${id}';S.juntaVerActa=null;render()">${l}</button>`).join('')}</div>`;
+  const tabs=[['reunion','Reunión'],['prios','Prioridades'],['asuntos','Asuntos'+(nAs?` (${nAs})`:'')],['actas','Actas'],['cal','Calendario']];
+  const seg=`<div class="seg tar-seg jt-tabs" style="margin-bottom:14px">${tabs.map(([id,l])=>`<button class="${tab===id?'on':''}" onclick="S.juntaTab='${id}';S.juntaVerActa=null;render()">${l}</button>`).join('')}</div>`;
   let body='';
   if(tab==='prios') body=juntaPriosView();
   else if(tab==='asuntos') body=juntaAsuntosView();
   else if(tab==='actas') body=juntaActasView();
+  else if(tab==='cal') body=juntaCalView();
   else body=juntaReunionView();
   const sinEquipo = !juntaMiembros().length ? `<div class="note" style="margin-top:0;margin-bottom:14px">Primero elige quién forma el equipo de la reunión. <button class="btn btn-ghost btn-sm" onclick="juntaAjustesAbrir()" style="margin-left:6px">Elegir</button></div>` : '';
   const err = S.juntaError ? `<div class="note" style="margin-top:0;margin-bottom:14px;border-left-color:#C0392B">Lo último no se ha podido guardar. <button class="btn btn-ghost btn-sm" onclick="juntaGuardar()" style="margin-left:6px">Reintentar</button></div>` : '';
@@ -12026,6 +12027,181 @@ function lxRecGuardar(u){
     }catch(_){}
   };
 })();
+
+/* ============================================================
+   LUCAI · CALENDARIO DE REUNIONES Y FORMACIONES (25/10/2026)
+   Pestaña «Calendario» de la Reunión semanal: cómo tiene repartidas la clínica sus reuniones y formaciones
+   en el año. Informativo. Los datos son de cada clínica: no van en el código, se guardan en lucai_estado
+   (clave juntaCal) con el mismo guardado del módulo (relee, fusiona por id, nunca borra: borrado:true).
+   Cada elemento: {id, nombre, tipo, cada: semana|mes|meses, meses:[1..12], cuando, dura, quien, con, para,
+   nota, orden, upd}. Sin «cuando» = día por fijar. Edita Dirección; se pueden cargar de un archivo .json.
+   ============================================================ */
+const JCAL_TIPOS=[
+  {id:'dir', nombre:'Equipo directivo'},
+  {id:'eq', nombre:'Reuniones de equipo'},
+  {id:'doc', nombre:'Doctores'},
+  {id:'form', nombre:'Formación'},
+  {id:'per', nombre:'Conversaciones a solas'},
+  {id:'otra', nombre:'Otras'}
+];
+const JCAL_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+if(!JUNTA_KEYS.includes('juntaCal')) JUNTA_KEYS.push('juntaCal');
+if(!Array.isArray(S.juntaCal)) S.juntaCal=[];
+/* con 5 pestañas, en el móvil van en dos líneas en vez de esconderse a la derecha */
+document.head.insertAdjacentHTML('beforeend', '<style id="jc-tabs">@media(max-width:720px){.seg.tar-seg.jt-tabs{flex-wrap:wrap!important;overflow:visible}.seg.tar-seg.jt-tabs button{flex:1 1 auto}}</style>');
+const JCAL_CSS=`<style>
+:root{--jc-dir-s:#E8EEFC;--jc-dir:#1D3E8A;--jc-eq-s:#E3F4EA;--jc-eq:#14603A;--jc-doc-s:#EFEAFB;--jc-doc:#4B3592;--jc-form-s:#FBF0D9;--jc-form:#7A4E00;--jc-per-s:#EEF0F3;--jc-per:#3D4754;--jc-otra-s:#F6EBEF;--jc-otra:#7D2C4A}
+:root[data-tema="noche"]{--jc-dir-s:#1E2A44;--jc-dir:#A9C1FF;--jc-eq-s:#0F2E1C;--jc-eq:#8FE3B4;--jc-doc-s:#2A2342;--jc-doc:#C9B8FF;--jc-form-s:#3A2E12;--jc-form:#FEC84B;--jc-per-s:#262E38;--jc-per:#C9D1DB;--jc-otra-s:#3A1F2B;--jc-otra:#F5A9C4}
+.jc-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.jc-bar .esp{flex:1}
+.jc-h{font-size:13px;font-weight:700;color:var(--t-fg-333F48);margin:4px 0 8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.jc-h small{font-weight:500;color:var(--t-fg-8A949B);font-size:12px}
+.jc-it{border-radius:8px;padding:6px 9px;margin:0 0 6px;cursor:pointer;border-left:3px solid currentColor;line-height:1.35}
+.jc-it b{display:block;font-size:13px;font-weight:700}
+.jc-it span{display:block;font-size:12px;opacity:.92}
+.jc-it .pf{font-style:italic;opacity:.8}
+.jc-it:hover{filter:brightness(.97)}
+.jc-t-dir{background:var(--jc-dir-s);color:var(--jc-dir)}.jc-t-eq{background:var(--jc-eq-s);color:var(--jc-eq)}.jc-t-doc{background:var(--jc-doc-s);color:var(--jc-doc)}
+.jc-t-form{background:var(--jc-form-s);color:var(--jc-form)}.jc-t-per{background:var(--jc-per-s);color:var(--jc-per)}.jc-t-otra{background:var(--jc-otra-s);color:var(--jc-otra)}
+.jc-fila{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px}
+.jc-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.jc-mes{background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-radius:12px;padding:8px 10px;min-height:86px}
+.jc-mes.hoy{border-color:var(--lx-acc,#2563EB);box-shadow:0 0 0 1px var(--lx-acc,#2563EB) inset}
+.jc-mes .n{font-size:13px;font-weight:700;color:var(--t-fg-333F48);margin-bottom:6px;display:flex;justify-content:space-between}
+.jc-mes .n small{font-weight:600;color:var(--lx-acc,#2563EB);font-size:11px}
+.jc-mes .vacio{font-size:12px;color:var(--t-fg-A8B0B6)}
+.jc-ley{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--t-fg-5A6770);margin:10px 0 0}
+.jc-ley i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;border-left:3px solid currentColor}
+.jc-meses{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.jc-meses .btn{padding:6px 0;justify-content:center}
+@media(max-width:900px){.jc-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){.jc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.jc-fila{grid-template-columns:1fr}.jc-meses{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:420px){.jc-grid{grid-template-columns:1fr}}
+</style>`;
+function jcalVivos(){ return (S.juntaCal||[]).filter(x=>x && !x.borrado).sort((a,b)=>(+a.orden||999)-(+b.orden||999) || String(a.nombre||'').localeCompare(String(b.nombre||''))); }
+function jcalTipo(id){ return JCAL_TIPOS.find(t=>t.id===id) || JCAL_TIPOS[JCAL_TIPOS.length-1]; }
+function jcalMesesDe(x){ return (Array.isArray(x.meses)?x.meses:[]).map(Number).filter(m=>m>=1&&m<=12).sort((a,b)=>a-b); }
+function jcalCada(x){
+  if(x.cada==='semana') return 'Cada semana';
+  if(x.cada==='mes') return 'Cada mes';
+  const ms=jcalMesesDe(x); if(!ms.length) return 'Mes por fijar';
+  const corto=ms.map(m=>JCAL_MESES[m-1].slice(0,3).toLowerCase()).join(', ');
+  if(ms.length===1) return 'Cada año ('+JCAL_MESES[ms[0]-1].toLowerCase()+')';
+  if(ms.length===4 && ms.every((m,i)=>i===0 || m-ms[i-1]===3)) return 'Cada trimestre ('+corto+')';
+  return corto.charAt(0).toUpperCase()+corto.slice(1);
+}
+/* «David con Laura, Cristina…»: quién la lleva y con quién */
+function jcalQuien(x){ const q=String(x.quien||'').trim(), c=String(x.con||'').trim(); return q && c ? q+' con '+c : (q||c||'Quién: por fijar'); }
+function jcalItem(x, conCada){
+  const linea=[x.dura?String(x.dura):'', jcalQuien(x)].filter(Boolean).join(' · ');
+  const cuando=String(x.cuando||'').trim();
+  return `<div class="jc-it jc-t-${incEsc(jcalTipo(x.tipo).id)}" onclick="jcalAbrir('${incEsc(x.id)}')" title="${incEsc(x.para||'')}">
+    <b>${incEsc(x.nombre||'Sin nombre')}</b><span>${incEsc(linea)}</span>
+    <span class="${cuando?'':'pf'}">${conCada?incEsc(jcalCada(x))+' · ':''}${cuando?incEsc(cuando):'día por fijar'}</span></div>`;
+}
+function jcalLeyenda(){ const usados=new Set(jcalVivos().map(x=>jcalTipo(x.tipo).id)); return `<div class="jc-ley">${JCAL_TIPOS.filter(t=>usados.has(t.id)).map(t=>`<span class="jc-t-${t.id}" style="background:none"><i class="jc-t-${t.id}"></i><span style="color:var(--t-fg-5A6770)">${incEsc(t.nombre)}</span></span>`).join('')}</div>`; }
+function juntaCalView(){
+  const vista=S.jcalVista||'mapa'; const xs=jcalVivos(); const dir=isAdmin();
+  const bar=`<div class="jc-bar"><div class="seg tar-seg" style="margin:0">${[['mapa','El año'],['lista','Lista por tipo']].map(([id,l])=>`<button class="${vista===id?'on':''}" onclick="S.jcalVista='${id}';render()">${l}</button>`).join('')}</div><div class="esp"></div>
+    ${dir?`<button class="btn btn-ghost btn-sm" onclick="jcalImportar()">Cargar archivo</button><button class="btn btn-primary btn-sm" onclick="jcalAbrir()">＋ Añadir</button>`:''}</div>`;
+  if(!xs.length) return `${JCAL_CSS}${bar}<div class="jt-card" style="padding:18px"><div class="jt-tit">Todavía no hay reuniones en el calendario</div><div class="jt-sub" style="margin-top:6px">Aquí se ve cómo tiene repartidas la clínica sus reuniones y formaciones en el año: qué, cuándo, cuánto dura, quién la lleva y con quién.${dir?' Añádelas una a una o carga el archivo preparado.':' Las añade Dirección.'}</div></div>`;
+  const nota=`<div class="jt-sub" style="margin:10px 0 0">Toca una reunión para ver para qué es${dir?' o cambiarla':''}. «Día por fijar» = aún no tiene día ni hora.</div>`;
+  if(vista==='lista'){
+    return `${JCAL_CSS}${bar}${JCAL_TIPOS.map(t=>{ const g=xs.filter(x=>jcalTipo(x.tipo).id===t.id); if(!g.length) return '';
+      return `<div class="jt-card" style="padding:10px 14px 8px"><div class="jc-h">${incEsc(t.nombre)} <small>${g.length}</small></div>${g.map(x=>jcalItem(x,true)+(x.para?`<div class="jt-sub" style="margin:-3px 0 8px 12px">${incEsc(x.para)}</div>`:'')).join('')}</div>`; }).join('')}${nota}`;
+  }
+  const sem=xs.filter(x=>x.cada==='semana'), mes=xs.filter(x=>x.cada==='mes'), otros=xs.filter(x=>x.cada!=='semana'&&x.cada!=='mes');
+  const sinMes=otros.filter(x=>!jcalMesesDe(x).length);
+  const hoyM=new Date().getMonth()+1;
+  const caja=(tit,sub,arr)=>arr.length?`<div class="jt-card" style="padding:10px 14px 8px"><div class="jc-h">${tit} <small>${sub}</small></div><div class="jc-fila">${arr.map(x=>jcalItem(x,false)).join('')}</div></div>`:'';
+  const grid=`<div class="jc-grid">${JCAL_MESES.map((nm,i)=>{ const m=i+1; const del=otros.filter(x=>jcalMesesDe(x).includes(m));
+    return `<div class="jc-mes ${m===hoyM?'hoy':''}"><div class="n">${nm}${m===hoyM?'<small>este mes</small>':''}</div>${del.length?del.map(x=>jcalItem(x,false)).join(''):'<div class="vacio">Solo lo de cada semana y cada mes</div>'}</div>`; }).join('')}</div>`;
+  return `${JCAL_CSS}${bar}${caja('Cada semana','todo el año',sem)}${caja('Cada mes','todos los meses',mes)}
+    <div class="jc-h" style="margin-top:4px">Por meses <small>lo que no es de cada semana ni de cada mes</small></div>${grid}
+    ${sinMes.length?`<div class="jt-card" style="padding:10px 14px 8px;margin-top:12px"><div class="jc-h">Una vez al año, mes por fijar</div><div class="jc-fila">${sinMes.map(x=>jcalItem(x,false)).join('')}</div></div>`:''}
+    ${jcalLeyenda()}${nota}`;
+}
+function jcalAbrir(id){
+  const x=id ? (S.juntaCal||[]).find(y=>y.id===id) : null;
+  if(id && !x) return;
+  F={type:'junta_cal', id:x?x.id:'', nombre:x?x.nombre||'':'', tipo:x?jcalTipo(x.tipo).id:'dir', cada:x?(x.cada||'meses'):'mes', meses:x?jcalMesesDe(x):[],
+     cuando:x?x.cuando||'':'', dura:x?x.dura||'':'', quien:x?x.quien||'':'', con:x?x.con||'':'', para:x?x.para||'':'', nota:x?x.nota||'':'', orden:x?(x.orden||''):'', ver:!isAdmin()};
+  S.modal='junta_cal'; render();
+}
+function jcalMes(m){ const k=F.meses.indexOf(m); if(k>=0) F.meses.splice(k,1); else F.meses.push(m); F.meses.sort((a,b)=>a-b); render(); }
+function jcalModal(){
+  const fld=(k,l,ph)=>`<div class="fld"><label>${l}</label><input class="inp" value="${incEsc(F[k]||'')}" placeholder="${incEsc(ph||'')}" oninput="F.${k}=this.value"></div>`;
+  if(F.ver){
+    const x={nombre:F.nombre,tipo:F.tipo,cada:F.cada,meses:F.meses,cuando:F.cuando,dura:F.dura,quien:F.quien,con:F.con};
+    const fila=(l,v)=>v?`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--t-bd-F1ECE3)"><div style="width:110px;flex:none;color:var(--t-fg-8A949B);font-size:13px">${l}</div><div style="font-size:14px;color:var(--t-fg-333F48)">${incEsc(v)}</div></div>`:'';
+    return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>${incEsc(F.nombre||'Reunión')}</h2><button class="x" onclick="closeModal()">×</button></div>
+      <div class="modal-body">${fila('Tipo',jcalTipo(F.tipo).nombre)}${fila('Cada cuánto',jcalCada(x))}${fila('Cuándo',F.cuando||'Día por fijar')}${fila('Duración',F.dura)}${fila('Quién la lleva',F.quien)}${fila('Con quién',F.con)}${fila('Para qué',F.para)}${fila('Nota',F.nota)}
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div></div></div>`;
+  }
+  return `<div class="overlay"><div class="modal" style="max-width:620px">
+    <div class="modal-head"><h2>${F.id?'Cambiar reunión':'Nueva reunión o formación'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body lx-mc">
+      ${fld('nombre','Qué es','Reunión de dirección')}
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="fld" style="flex:1;min-width:170px"><label>Tipo</label><select class="inp" onchange="F.tipo=this.value">${JCAL_TIPOS.map(t=>`<option value="${t.id}" ${F.tipo===t.id?'selected':''}>${incEsc(t.nombre)}</option>`).join('')}</select></div>
+        <div class="fld" style="flex:1;min-width:170px"><label>Cada cuánto</label><select class="inp" onchange="F.cada=this.value;render()">${[['semana','Cada semana'],['mes','Cada mes'],['meses','Algunos meses (trimestral, anual…)']].map(([v,l])=>`<option value="${v}" ${F.cada===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      </div>
+      ${F.cada==='meses'?`<div class="fld"><label>Qué meses</label><div class="jc-meses">${JCAL_MESES.map((nm,i)=>`<button type="button" class="btn btn-sm ${F.meses.includes(i+1)?'btn-primary':'btn-ghost'}" onclick="jcalMes(${i+1})">${nm.slice(0,3)}</button>`).join('')}</div></div>`:''}
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:2;min-width:200px">${fld('cuando','Cuándo (vacío = por fijar)','Jueves 12:00-13:30')}</div>
+        <div style="flex:1;min-width:120px">${fld('dura','Duración','1 h')}</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px">${fld('quien','Quién la lleva','David')}</div>
+        <div style="flex:2;min-width:200px">${fld('con','Con quién','Laura, Cristina, Encarna y Noemí')}</div>
+      </div>
+      <div class="fld"><label>Para qué</label><textarea class="inp" rows="2" style="font-family:inherit;resize:vertical" oninput="F.para=this.value">${incEsc(F.para||'')}</textarea></div>
+      ${fld('nota','Nota (opcional)','Fuera de la clínica')}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+        ${F.id?`<button class="btn btn-ghost" style="color:var(--t-fg-C0392B);margin-right:auto" onclick="jcalQuitar()">Quitar</button>`:''}
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="jcalGuardar()">Guardar</button></div>
+    </div></div></div>`;
+}
+function jcalGuardar(){
+  if(!isAdmin()){ toast('Solo Dirección'); return; }
+  const nombre=String(F.nombre||'').trim(); if(!nombre){ toast('Escribe qué es'); return; }
+  if(F.cada==='meses' && !F.meses.length && !F._sinMesOk){ toast('Elige los meses (o deja uno por fijar con «Guardar» otra vez)'); F._sinMesOk=true; return; }
+  let x=F.id ? (S.juntaCal||[]).find(y=>y.id===F.id) : null;
+  if(!x){ x={id:juntaId('cal'), orden:(jcalVivos().reduce((m,y)=>Math.max(m,+y.orden||0),0)+1)}; S.juntaCal.push(x); }
+  Object.assign(x,{nombre, tipo:F.tipo, cada:F.cada, meses:F.cada==='meses'?F.meses.slice():[], cuando:String(F.cuando||'').trim(), dura:String(F.dura||'').trim(),
+    quien:String(F.quien||'').trim(), con:String(F.con||'').trim(), para:String(F.para||'').trim(), nota:String(F.nota||'').trim()});
+  closeModal(); render(); juntaToca(x); toast('Guardado');
+}
+async function jcalQuitar(){
+  const x=(S.juntaCal||[]).find(y=>y.id===F.id); if(!x) return;
+  if(!(await lxPregunta('¿Quitar «'+(x.nombre||'')+'» del calendario?'))) return;
+  x.borrado=true; closeModal(); render(); juntaToca(x); toast('Quitada del calendario');
+}
+/* cargar de un archivo .json ({calendario:[…]} o una lista): añade o actualiza por id; nunca quita nada */
+function jcalImportar(){
+  if(!isAdmin()){ toast('Solo Dirección'); return; }
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=()=>{ const f=inp.files && inp.files[0]; if(!f) return; const r=new FileReader();
+    r.onload=async()=>{
+      let lista;
+      try{ const d=JSON.parse(String(r.result||'')); lista=Array.isArray(d)?d:(d && Array.isArray(d.calendario)?d.calendario:null); }catch(_){ lista=null; }
+      if(!lista || !lista.length){ toast('El archivo no tiene un calendario válido'); return; }
+      const ok=lista.filter(x=>x && x.id && x.nombre);
+      const nuevos=ok.filter(x=>!(S.juntaCal||[]).some(y=>y.id===x.id)).length;
+      if(!(await lxPregunta('¿Cargar '+ok.length+' reuniones y formaciones en el calendario?\n\n'+nuevos+' nuevas y '+(ok.length-nuevos)+' que ya estaban se actualizan. No se quita ninguna.'))) return;
+      const ahora=juntaUpd();
+      ok.forEach(x=>{ const c=Object.assign({}, x, {upd:ahora}); delete c.borrado; const k=S.juntaCal.findIndex(y=>y.id===x.id); if(k>=0) S.juntaCal[k]=c; else S.juntaCal.push(c); });
+      render(); await juntaGuardar(); if(!S.juntaError) toast('Calendario cargado: '+ok.length);
+    };
+    r.readAsText(f, 'utf-8'); };
+  inp.click();
+}
+(function(){
+  const _mc=modalContent;
+  modalContent=function(){ if(F && F.type==='junta_cal') return jcalModal(); return _mc.apply(this, arguments); };
+})();
+/* ===== FIN CALENDARIO DE REUNIONES ===== */
 
 boot();
 
