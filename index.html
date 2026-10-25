@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1212">
+<meta name="lucai-version" content="2026-10-25-1238">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -10428,15 +10428,15 @@ const JUNTA_CSS=`<style>
 </style>`;
 function juntaView(){
   if(!S.juntaTrim) S.juntaTrim=juntaTrim();
+  if(S.juntaTab==='cal') S.juntaTab='reunion';
   const tab=S.juntaTab||'reunion';
   const nAs=juntaAsuntosAbiertos().length;
-  const tabs=[['reunion','Reunión'],['prios','Prioridades'],['asuntos','Asuntos'+(nAs?` (${nAs})`:'')],['actas','Actas'],['cal','Calendario']];
+  const tabs=[['reunion','Reunión'],['prios','Prioridades'],['asuntos','Asuntos'+(nAs?` (${nAs})`:'')],['actas','Actas']];
   const seg=`<div class="seg tar-seg jt-tabs" style="margin-bottom:14px">${tabs.map(([id,l])=>`<button class="${tab===id?'on':''}" onclick="S.juntaTab='${id}';S.juntaVerActa=null;render()">${l}</button>`).join('')}</div>`;
   let body='';
   if(tab==='prios') body=juntaPriosView();
   else if(tab==='asuntos') body=juntaAsuntosView();
   else if(tab==='actas') body=juntaActasView();
-  else if(tab==='cal') body=juntaCalView();
   else body=juntaReunionView();
   const sinEquipo = !juntaMiembros().length ? `<div class="note" style="margin-top:0;margin-bottom:14px">Primero elige quién forma el equipo de la reunión. <button class="btn btn-ghost btn-sm" onclick="juntaAjustesAbrir()" style="margin-left:6px">Elegir</button></div>` : '';
   const err = S.juntaError ? `<div class="note" style="margin-top:0;margin-bottom:14px;border-left-color:#C0392B">Lo último no se ha podido guardar. <button class="btn btn-ghost btn-sm" onclick="juntaGuardar()" style="margin-left:6px">Reintentar</button></div>` : '';
@@ -11088,15 +11088,17 @@ function manualView(){
   const admin=isAdmin();
   if(!MAN.cargado && !MAN.cargando && !MAN.sinTabla && !MAN.error){ manCargar().then(()=>{ if(S.module==='manual') render(); }); }
   const tab=S.manTab||'procesos';
-  const tabs=[['procesos','Procesos'],['puestos','Puestos'],['organigrama','Organigrama'],['mipuesto','Mi puesto'],['buscar','Buscar']];
+  const tabs=[['procesos','Procesos'],['puestos','Puestos'],['organigrama','Organigrama'],['reuniones','Reuniones'],['mipuesto','Mi puesto'],['buscar','Buscar']];
+  const seg=`<div style="margin-bottom:14px"><div class="seg tar-seg jt-tabs">${tabs.map(([id,l])=>`<button class="${tab===id?'on':''}" onclick="manTab('${id}')">${l}</button>`).join('')}</div></div>`;
   const n=MAN.lista.length, ap=MAN.lista.filter(d=>d.estado==='aprobado').length;
   const sub = n ? `${manEsc(MAN.cfg.clinica||'')}${MAN.cfg.generado?' · generado el '+manEsc(MAN.cfg.generado):''} · <span class="man-sello ok">✓ ${ap} aprobados</span> <span class="man-sello pend">● ${n-ap} pendientes</span>` : 'Cómo trabajamos';
   const botones = `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="manRefrescar()">Actualizar</button>${admin?`<button class="btn btn-ghost btn-sm" onclick="manElegirArchivo()" ${MAN.subiendo?'disabled':''}>${MAN.subiendo?'Cargando…':'Cargar manual'}</button>${n?`<button class="btn btn-ghost btn-sm" onclick="manVisible(${MAN.cfg.visible?'false':'true'})" title="Hoy ${MAN.cfg.visible?'lo ve todo el equipo':'solo lo ve Dirección'}">${MAN.cfg.visible?'Visible para el equipo ✓':'Solo Dirección · hacer visible'}</button>`:''}`:''}</div>`;
   let body='';
-  if(MAN.sinTabla) body = `<div class="note" style="margin-top:0">${admin?'Falta preparar la base de datos: ejecuta <b>SQL-manual.sql</b> en Supabase (SQL Editor) y pulsa «Actualizar».':'El manual aún no está disponible.'}</div>`;
+  if(tab==='reuniones' && !S.manDoc) body = seg + juntaCalView();
+  else if(MAN.sinTabla) body = `<div class="note" style="margin-top:0">${admin?'Falta preparar la base de datos: ejecuta <b>SQL-manual.sql</b> en Supabase (SQL Editor) y pulsa «Actualizar».':'El manual aún no está disponible.'}</div>`;
   else if(MAN.error) body = `<div class="note" style="margin-top:0;border-left-color:#C0392B">${manEsc(MAN.error)} <button class="btn btn-ghost btn-sm" onclick="MAN.error='';manRefrescar()" style="margin-left:6px">Reintentar</button></div>`;
   else if(!MAN.cargado) body = `<p class="man-vacio">Cargando el manual…</p>`;
-  else if(!n) body = `<div class="note" style="margin-top:0">${admin?'Aún no hay manual cargado. Pulsa «Cargar manual» y elige el archivo <b>manual.json</b> que genera el instalador.':'Aún no hay manual.'}</div>`;
+  else if(!n) body = `<div class="note" style="margin-top:0">${admin?'Aún no hay manual cargado. Pulsa «Cargar manual» y elige el archivo <b>manual.json</b> que genera el instalador.':'Aún no hay manual.'} <button class="btn btn-ghost btn-sm" style="margin-left:6px" onclick="manTab('reuniones')">Ver las reuniones del año</button></div>`;
   else {
     const d = S.manDoc ? MAN.docs[S.manDoc] : null;
     let cont;
@@ -11106,7 +11108,6 @@ function manualView(){
     else if(d && d.tipo==='rutina') cont=manVRutina(d);
     else if(d && d.tipo==='organigrama') cont=manVOrgDoc(d);
     else cont=({procesos:manVProcesos, puestos:manVPuestos, organigrama:manVOrganigrama, mipuesto:manVMiPuesto, buscar:manVBuscar}[tab]||manVProcesos)();
-    const seg=`<div style="margin-bottom:14px"><div class="seg tar-seg">${tabs.map(([id,l])=>`<button class="${tab===id?'on':''}" onclick="manTab('${id}')">${l}</button>`).join('')}</div></div>`;
     body = seg + cont + `<p class="man-nota">El manual no se edita aquí: se cambia en el método de la clínica y Dirección lo vuelve a cargar.</p>`;
     if(tab==='buscar' && !d) setTimeout(()=>{ manPintarRes(); const i=document.getElementById('manQ'); if(i && document.activeElement!==i){ i.focus(); const v=i.value; i.value=''; i.value=v; } }, 0);
   }
@@ -12030,14 +12031,15 @@ function lxRecGuardar(u){
 
 /* ============================================================
    LUCAI · CALENDARIO DE REUNIONES Y FORMACIONES (25/10/2026)
-   Pestaña «Calendario» de la Reunión semanal: cómo tiene repartidas la clínica sus reuniones y formaciones
+   Pestaña «Reuniones» del Manual (David la quiso allí, «donde está cómo se organiza la clínica»): cómo tiene repartidas la clínica sus reuniones y formaciones
    en el año. Informativo. Los datos son de cada clínica: no van en el código, se guardan en lucai_estado
    (clave juntaCal) con el mismo guardado del módulo (relee, fusiona por id, nunca borra: borrado:true).
    Cada elemento: {id, nombre, tipo, cada: semana|mes|meses, meses:[1..12], cuando, dura, quien, con, para,
-   nota, orden, upd}. Sin «cuando» = día por fijar. Edita Dirección; se pueden cargar de un archivo .json.
+   nota, orden, upd}. Sin «cuando» = día por fijar. Pestaña solo informativa (David, 25/10): tocar una reunión enseña
+   para qué es; los datos los carga Claude (jcalImportar y la ventana de cambiar siguen en el código, sin botón).
    ============================================================ */
 const JCAL_TIPOS=[
-  {id:'dir', nombre:'Equipo directivo'},
+  {id:'dir', nombre:'Equipo de liderazgo'},
   {id:'eq', nombre:'Reuniones de equipo'},
   {id:'doc', nombre:'Doctores'},
   {id:'form', nombre:'Formación'},
@@ -12101,13 +12103,14 @@ function jcalItem(x, conCada){
 }
 function jcalLeyenda(){ const usados=new Set(jcalVivos().map(x=>jcalTipo(x.tipo).id)); return `<div class="jc-ley">${JCAL_TIPOS.filter(t=>usados.has(t.id)).map(t=>`<span class="jc-t-${t.id}" style="background:none"><i class="jc-t-${t.id}"></i><span style="color:var(--t-fg-5A6770)">${incEsc(t.nombre)}</span></span>`).join('')}</div>`; }
 function juntaCalView(){
-  const vista=S.jcalVista||'mapa'; const xs=jcalVivos(); const dir=isAdmin();
+  const vista=S.jcalVista||'mapa'; const xs=jcalVivos();
   const bar=`<div class="jc-bar"><div class="seg tar-seg" style="margin:0">${[['mapa','El año'],['lista','Lista por tipo']].map(([id,l])=>`<button class="${vista===id?'on':''}" onclick="S.jcalVista='${id}';render()">${l}</button>`).join('')}</div><div class="esp"></div>
-    ${dir?`<button class="btn btn-ghost btn-sm" onclick="jcalImportar()">Cargar archivo</button><button class="btn btn-primary btn-sm" onclick="jcalAbrir()">＋ Añadir</button>`:''}</div>`;
-  if(!xs.length) return `${JCAL_CSS}${bar}<div class="jt-card" style="padding:18px"><div class="jt-tit">Todavía no hay reuniones en el calendario</div><div class="jt-sub" style="margin-top:6px">Aquí se ve cómo tiene repartidas la clínica sus reuniones y formaciones en el año: qué, cuándo, cuánto dura, quién la lleva y con quién.${dir?' Añádelas una a una o carga el archivo preparado.':' Las añade Dirección.'}</div></div>`;
-  const nota=`<div class="jt-sub" style="margin:10px 0 0">Toca una reunión para ver para qué es${dir?' o cambiarla':''}. «Día por fijar» = aún no tiene día ni hora.</div>`;
+    </div>`;
+  const intro=`<div class="jt-sub" style="margin:-4px 0 12px">Cómo tiene repartidas la clínica sus reuniones y formaciones durante el año.</div>`;
+  if(!xs.length) return `${JUNTA_CSS}${JCAL_CSS}${intro}${bar}<div class="jt-card" style="padding:18px"><div class="jt-tit">Todavía no hay reuniones en el calendario</div><div class="jt-sub" style="margin-top:6px">Aquí se verá cómo tiene repartidas la clínica sus reuniones y formaciones en el año: qué, cuándo, cuánto dura, quién la lleva, con quién y para qué.</div></div>`;
+  const nota=`<div class="jt-sub" style="margin:10px 0 0">Toca una reunión para ver para qué es. «Día por fijar» = aún no tiene día ni hora.</div>`;
   if(vista==='lista'){
-    return `${JCAL_CSS}${bar}${JCAL_TIPOS.map(t=>{ const g=xs.filter(x=>jcalTipo(x.tipo).id===t.id); if(!g.length) return '';
+    return `${JUNTA_CSS}${JCAL_CSS}${intro}${bar}${JCAL_TIPOS.map(t=>{ const g=xs.filter(x=>jcalTipo(x.tipo).id===t.id); if(!g.length) return '';
       return `<div class="jt-card" style="padding:10px 14px 8px"><div class="jc-h">${incEsc(t.nombre)} <small>${g.length}</small></div>${g.map(x=>jcalItem(x,true)+(x.para?`<div class="jt-sub" style="margin:-3px 0 8px 12px">${incEsc(x.para)}</div>`:'')).join('')}</div>`; }).join('')}${nota}`;
   }
   const sem=xs.filter(x=>x.cada==='semana'), mes=xs.filter(x=>x.cada==='mes'), otros=xs.filter(x=>x.cada!=='semana'&&x.cada!=='mes');
@@ -12116,7 +12119,7 @@ function juntaCalView(){
   const caja=(tit,sub,arr)=>arr.length?`<div class="jt-card" style="padding:10px 14px 8px"><div class="jc-h">${tit} <small>${sub}</small></div><div class="jc-fila">${arr.map(x=>jcalItem(x,false)).join('')}</div></div>`:'';
   const grid=`<div class="jc-grid">${JCAL_MESES.map((nm,i)=>{ const m=i+1; const del=otros.filter(x=>jcalMesesDe(x).includes(m));
     return `<div class="jc-mes ${m===hoyM?'hoy':''}"><div class="n">${nm}${m===hoyM?'<small>este mes</small>':''}</div>${del.length?del.map(x=>jcalItem(x,false)).join(''):'<div class="vacio">Solo lo de cada semana y cada mes</div>'}</div>`; }).join('')}</div>`;
-  return `${JCAL_CSS}${bar}${caja('Cada semana','todo el año',sem)}${caja('Cada mes','todos los meses',mes)}
+  return `${JUNTA_CSS}${JCAL_CSS}${intro}${bar}${caja('Cada semana','todo el año',sem)}${caja('Cada mes','todos los meses',mes)}
     <div class="jc-h" style="margin-top:4px">Por meses <small>lo que no es de cada semana ni de cada mes</small></div>${grid}
     ${sinMes.length?`<div class="jt-card" style="padding:10px 14px 8px;margin-top:12px"><div class="jc-h">Una vez al año, mes por fijar</div><div class="jc-fila">${sinMes.map(x=>jcalItem(x,false)).join('')}</div></div>`:''}
     ${jcalLeyenda()}${nota}`;
@@ -12125,7 +12128,7 @@ function jcalAbrir(id){
   const x=id ? (S.juntaCal||[]).find(y=>y.id===id) : null;
   if(id && !x) return;
   F={type:'junta_cal', id:x?x.id:'', nombre:x?x.nombre||'':'', tipo:x?jcalTipo(x.tipo).id:'dir', cada:x?(x.cada||'meses'):'mes', meses:x?jcalMesesDe(x):[],
-     cuando:x?x.cuando||'':'', dura:x?x.dura||'':'', quien:x?x.quien||'':'', con:x?x.con||'':'', para:x?x.para||'':'', nota:x?x.nota||'':'', orden:x?(x.orden||''):'', ver:!isAdmin()};
+     cuando:x?x.cuando||'':'', dura:x?x.dura||'':'', quien:x?x.quien||'':'', con:x?x.con||'':'', para:x?x.para||'':'', nota:x?x.nota||'':'', orden:x?(x.orden||''):'', ver:!!x};
   S.modal='junta_cal'; render();
 }
 function jcalMes(m){ const k=F.meses.indexOf(m); if(k>=0) F.meses.splice(k,1); else F.meses.push(m); F.meses.sort((a,b)=>a-b); render(); }
@@ -12136,7 +12139,7 @@ function jcalModal(){
     const fila=(l,v)=>v?`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--t-bd-F1ECE3)"><div style="width:110px;flex:none;color:var(--t-fg-8A949B);font-size:13px">${l}</div><div style="font-size:14px;color:var(--t-fg-333F48)">${incEsc(v)}</div></div>`:'';
     return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
       <div class="modal-head"><h2>${incEsc(F.nombre||'Reunión')}</h2><button class="x" onclick="closeModal()">×</button></div>
-      <div class="modal-body">${fila('Tipo',jcalTipo(F.tipo).nombre)}${fila('Cada cuánto',jcalCada(x))}${fila('Cuándo',F.cuando||'Día por fijar')}${fila('Duración',F.dura)}${fila('Quién la lleva',F.quien)}${fila('Con quién',F.con)}${fila('Para qué',F.para)}${fila('Nota',F.nota)}
+      <div class="modal-body">${F.para?`<div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--t-fg-8A949B);font-weight:700;margin-bottom:4px">Para qué</div><div style="font-size:15px;line-height:1.5;color:var(--t-fg-333F48);margin-bottom:12px">${incEsc(F.para)}</div>`:''}${fila('Cada cuánto',jcalCada(x))}${fila('Cuándo',F.cuando||'Día por fijar')}${fila('Duración',F.dura)}${fila('Quién la lleva',F.quien)}${fila('Con quién',F.con)}${fila('Nota',F.nota)}
       <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div></div></div></div>`;
   }
   return `<div class="overlay"><div class="modal" style="max-width:620px">
@@ -12200,6 +12203,11 @@ function jcalImportar(){
 (function(){
   const _mc=modalContent;
   modalContent=function(){ if(F && F.type==='junta_cal') return jcalModal(); return _mc.apply(this, arguments); };
+})();
+/* vive en el Manual (David, 25/10): al abrir la pestaña «Reuniones» se relee lo guardado */
+(function(){
+  const _mt=manTab;
+  manTab=function(t){ _mt.apply(this, arguments); if(t==='reuniones') juntaCargar().then(()=>{ if(S.module==='manual' && S.manTab==='reuniones') render(); }); };
 })();
 /* ===== FIN CALENDARIO DE REUNIONES ===== */
 
