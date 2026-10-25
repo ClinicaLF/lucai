@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-2015">
+<meta name="lucai-version" content="2026-10-25-2020">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4402,7 +4402,8 @@ function tareasView(){
   /* 24/10/2026: Todas, Mías, Recibidas y Emitidas se juntan en «Tareas» con un selector; Registro se quita
      (el tiempo se apunta dentro de cada tarea). El código de las pestañas antiguas sigue ahí. */
   if(['tar_mias','tar_recibidas','tar_emitidas'].includes(S.sub)){ S.tarVista = S.sub==='tar_mias' ? 'todas' : S.sub.replace('tar_',''); S.sub='tar_todas_mias'; }
-  const subs = ['tar_todas_mias','tar_semana','tar_resumen','tar_panel'];
+  /* 25/10/2026 (David): «Mi cerebro» (tar_panel) se oculta; su código y sus datos siguen intactos. */
+  const subs = ['tar_todas_mias','tar_semana','tar_resumen'];
   /* 'Equipo' (el control de todo el equipo) solo lo ve el perfil de control,
      y le sale la primera porque es justo para lo que entra. */
   if(esControlEquipo()) subs.unshift('tar_todas');
