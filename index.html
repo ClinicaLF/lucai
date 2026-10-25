@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1507">
+<meta name="lucai-version" content="2026-10-25-1957">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3011,6 +3011,7 @@ function homeView(){
     temas:'<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 12h5"/>',
     junta:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="9" cy="14.5" r="1.3"/><circle cx="15" cy="14.5" r="1.3"/>',
     calendario:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/>',
+    personas:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.6c2.6-.3 4.6 1.3 5 4.4"/>',
     manual:'<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8 8h8M8 11.5h6"/>'
   };
   /* módulos en uso, en este orden (David, 24/10/2026); los demás quedan ocultos, con sus datos intactos */
@@ -11324,8 +11325,8 @@ function lxHomeTop(){
 
 /* ---------- menú lateral (ordenador) ---------- */
 function lxRailHTML(){
-  const ids=['tareas','material','junta','calendario','incidencias','equipos','manual'].filter(id=>{ try{ return canAccess(id) && MODULES.some(m=>m.id===id && m.estado!=='pronto'); }catch(_){ return false; } });
-  const LBL={tareas:'Tareas',material:'Almacén',junta:'Reuniones',calendario:'Calendario',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
+  const ids=['tareas','material','junta','calendario','personas','incidencias','equipos','manual'].filter(id=>{ try{ return canAccess(id) && MODULES.some(m=>m.id===id && m.estado!=='pronto'); }catch(_){ return false; } });
+  const LBL={tareas:'Tareas',material:'Almacén',junta:'Reuniones',calendario:'Calendario',personas:'Personas',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
   const it=(lbl,ic,on,click,b)=>`<button class="lx-it${on?' on':''}" onclick="${click}" title="${lbl}">${b?`<span class="lx-b">${b>99?'99+':b}</span>`:''}<svg viewBox="0 0 24 24">${ic||''}</svg>${lbl}</button>`;
   let h=`<button class="lx-logo" onclick="S.tbMore=false;goHome()" title="Inicio">L</button>`;
   h+=it('Inicio',TB_IC.inicio,!S.module,'S.tbMore=false;goHome()',0);
@@ -12556,6 +12557,226 @@ async function cevQuitar(id){
   setModule=function(id){ _sm.apply(this, arguments); if(id==='calendario' && S.module==='calendario'){ S.cevDia=null; juntaCargar().then(()=>{ if(S.module==='calendario') render(); }); } };
 })();
 /* ===== FIN CALENDARIO DE LA CLÍNICA ===== */
+
+/* ============================================================
+   LUCAI · PERSONAS: VACACIONES, PERMISOS, CAMBIOS DE TURNO Y AUSENCIAS (25/10/2026)
+   Una sola vía para pedir tiempo libre y avisar de una falta (anexo A10.4 del método). Recorrido (David eligió la B):
+   la persona pide → le llega a quien REVISA (mira que el puesto queda cubierto) → pasa a quien APRUEBA → aprobada o
+   rechazada, y la persona lo ve. El cambio de turno lo confirma antes el compañero. La ausencia imprevista no se
+   aprueba: se avisa y quien revisa marca que está cubierta. Quién revisa y quién aprueba se elige en Ajustes (datos
+   de cada clínica, no en el código); sin nadie que revise, va directa a aprobar; sin nadie que apruebe, aprueba Dirección.
+   Lo aprobado sale en el Calendario como «Fuera: …» (sin el motivo).
+   Se guarda en lucai_estado (perSolicitudes y perCfgL) con el guardado de Reuniones: relee, fusiona por id, nunca borra.
+   Solicitud: {id, tipo, persona, desde, hasta, horaIni, horaFin, con, cambio, motivo, nota, estado, cubierto,
+   historial[{quien, que, ts, nota}], ts, upd}. estado: companero | revisar | aprobar | aprobada | rechazada | anulada |
+   avisada | cubierta.
+   ============================================================ */
+const PER_TIPOS=[
+  {id:'vacaciones', nombre:'Vacaciones', aviso:28, txt:'antes de planificar el trimestre o con 4 semanas'},
+  {id:'permiso', nombre:'Permiso (horas o un día)', aviso:7, txt:'con al menos 7 días'},
+  {id:'cambio', nombre:'Cambio de turno con un compañero', aviso:2, txt:'con al menos 48 horas'},
+  {id:'ausencia', nombre:'Aviso de ausencia (hoy o imprevista)', aviso:0, txt:'en cuanto lo sepas y antes de tu hora de entrada'}
+];
+const PER_MOTIVOS={ permiso:['Médico','Gestión','Asunto propio','Otro'], ausencia:['Enfermedad','Familiar','Baja','Otro'] };
+const PER_ESTADOS={ companero:'Esperando al compañero', revisar:'Pendiente de revisar', aprobar:'Pendiente de aprobar', aprobada:'Aprobada', rechazada:'Rechazada', anulada:'Anulada', avisada:'Avisada', cubierta:'Cubierta' };
+['perSolicitudes','perCfgL'].forEach(k=>{ if(!JUNTA_KEYS.includes(k)) JUNTA_KEYS.push(k); if(!Array.isArray(S[k])) S[k]=[]; });
+(function(){
+  if(!MODULES.find(x=>x.id==='personas')){
+    MODULES.push({ id:'personas', ini:'P', nombre:'Personas', desc:'Pedir vacaciones, permisos y cambios de turno, y avisar de una ausencia.', estado:'activo' });
+  }
+  if(!LUCAI_VISIBLES.includes('personas')){ const i=LUCAI_VISIBLES.indexOf('calendario'); LUCAI_VISIBLES.splice(i>=0?i+1:LUCAI_VISIBLES.length, 0, 'personas'); }
+  if(typeof TB_IC==='object' && TB_IC && !TB_IC.personas) TB_IC.personas='<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.6c2.6-.3 4.6 1.3 5 4.4"/>';
+})();
+const _canAccess_per = canAccess;
+canAccess = function(id){ if(id==='personas') return !!S.user; return _canAccess_per(id); };
+function perCfg(){ return (S.perCfgL||[]).find(x=>x && x.id==='cfg') || {id:'cfg', revisan:[], aprueban:[]}; }
+function perRevisores(){ return (perCfg().revisan||[]).filter(Boolean); }
+function perAprobadores(){ const a=(perCfg().aprueban||[]).filter(Boolean); return a.length ? a : appUsers().filter(u=>u.admin===true || ['Director','Directora'].includes(u.rol)).map(u=>u.nombre); }
+function perEsRevisor(){ return !!S.user && perRevisores().includes(S.user.nombre); }
+function perEsAprobador(){ return !!S.user && (perAprobadores().includes(S.user.nombre) || (!(perCfg().aprueban||[]).length && isAdmin())); }
+function perVeTodo(){ return perEsRevisor() || perEsAprobador() || isAdmin(); }
+function perTipo(id){ return PER_TIPOS.find(t=>t.id===id) || PER_TIPOS[0]; }
+function perVivas(){ return (S.perSolicitudes||[]).filter(x=>x && !x.borrado).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))); }
+function perPorHacer(){
+  if(!S.user) return [];
+  const me=S.user.nombre;
+  return perVivas().filter(x=> (x.estado==='companero' && x.con===me) || (x.estado==='revisar' && perEsRevisor()) || (x.estado==='avisada' && perEsRevisor()) || (x.estado==='aprobar' && perEsAprobador()));
+}
+function perFechas(x){
+  const h=x.horaIni?(' · '+x.horaIni+(x.horaFin?'–'+x.horaFin:'')):'';
+  return (x.hasta && x.hasta>x.desde ? 'Del '+fmtFecha(x.desde)+' al '+fmtFecha(x.hasta) : juntaFechaLarga(x.desde))+h;
+}
+function perCorto(n){ return juntaCorto(n, appUsers().map(u=>u.nombre)); }
+function perAvisar(nombres, texto){ if(typeof tgNotify!=='function') return; [...new Set(nombres||[])].filter(n=>n && n!==(S.user&&S.user.nombre)).forEach(n=>{ try{ tgNotify(n, texto); }catch(_){} }); }
+function perHist(x, que, nota){ if(!Array.isArray(x.historial)) x.historial=[]; x.historial.push({quien:S.user.nombre, que, ts:now(), nota:nota||''}); }
+const PER_CSS=`<style>
+.pe-tag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;margin-right:6px;background:var(--lx-gris-s,#EEF0F3);color:var(--lx-gris,#3D4754)}
+.pe-st{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.pe-st.pend{background:var(--lx-amb-s,#FBF0D2);color:var(--lx-amb,#7A5B00)}
+.pe-st.ok{background:var(--lx-verde-s,#EAF1D8);color:var(--lx-verde,#3f5400)}
+.pe-st.no{background:var(--lx-rojo-s,#F8E1DE);color:var(--lx-rojo,#9B2C20)}
+.pe-st.gris{background:var(--lx-gris-s,#EEF0F3);color:var(--lx-gris,#3D4754)}
+.pe-hist{font-size:12.5px;color:var(--t-fg-5A6770);padding:3px 0}
+</style>`;
+function perStCls(e){ return ({aprobada:'ok', cubierta:'ok', rechazada:'no', anulada:'gris'})[e] || 'pend'; }
+function perFila(x){
+  return `<div class="jt-row" style="cursor:pointer;align-items:center" onclick="perVer('${x.id}')"><div style="flex:1;min-width:0">
+    <div class="jt-tit">${incEsc(perTipo(x.tipo).nombre.split(' (')[0])}${perVeTodo()&&x.persona!==S.user.nombre?' · '+incEsc(x.persona):''}</div>
+    <div class="jt-sub">${incEsc(perFechas(x))}${x.tipo==='cambio'&&x.con?' · con '+incEsc(x.con):''}</div></div>
+    <span class="pe-st ${perStCls(x.estado)}">${incEsc(PER_ESTADOS[x.estado]||x.estado)}</span></div>`;
+}
+function personasView(){
+  const me=S.user.nombre; const tab=S.perTab||'mias';
+  const hacer=perPorHacer();
+  const tabs=[['mias','Mis solicitudes']].concat(hacer.length||perEsRevisor()||perEsAprobador()?[['hacer','Por hacer'+(hacer.length?' ('+hacer.length+')':'')]]:[]).concat(perVeTodo()?[['todas','Todas']]:[]);
+  const t=tabs.some(x=>x[0]===tab)?tab:'mias';
+  const seg=`<div class="seg tar-seg jt-tabs" style="margin-bottom:12px">${tabs.map(([id,l])=>`<button class="${t===id?'on':''}" onclick="S.perTab='${id}';render()">${l}</button>`).join('')}</div>`;
+  let lista;
+  if(t==='hacer') lista=hacer;
+  else if(t==='todas') lista=perVivas();
+  else lista=perVivas().filter(x=>x.persona===me || x.con===me);
+  const vacio={mias:'Aún no has pedido nada. Usa «＋ Pedir».', hacer:'No tienes nada pendiente.', todas:'No hay solicitudes.'}[t];
+  const flujo=`<div class="jt-sub" style="margin:-2px 0 12px">Se pide aquí, nunca de palabra ni por WhatsApp. ${perRevisores().length?'Lo revisa '+incEsc(perRevisores().map(perCorto).join(' o '))+' (que el puesto quede cubierto) y ':''}lo aprueba ${incEsc(perAprobadores().map(perCorto).join(' o ')||'Dirección')}.</div>`;
+  return `${JUNTA_CSS}${PER_CSS}${moduleHeader('Personas', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:12px"><div><div class="section-title">Personas</div>
+      <div class="section-sub" style="margin:0">Vacaciones, permisos, cambios de turno y avisos de ausencia</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="perRefrescar()">Actualizar</button>${isAdmin()?`<button class="btn btn-ghost btn-sm" onclick="perAjustesAbrir()">Ajustes</button>`:''}<button class="btn btn-primary btn-sm" onclick="perPedir()">＋ Pedir</button></div></div>
+    ${flujo}${seg}
+    <div class="jt-card">${lista.length?lista.map(perFila).join(''):`<div class="muted" style="padding:14px 2px;font-size:13.5px">${vacio}</div>`}</div>
+  </div></main>
+  ${S.modal?modalContent():''}
+  ${(typeof iaFloatHtml==='function')?iaFloatHtml():''}`;
+}
+async function perRefrescar(){ toast('Actualizando…'); await juntaCargar(); render(); toast('Al día'); }
+/* ---- pedir ---- */
+function perPedir(){
+  F={type:'per_pedir', tipo:'vacaciones', desde:juntaMasDias(todayStr(),30), hasta:'', diaEntero:true, horaIni:'', horaFin:'', con:'', cambio:'', motivo:'', nota:''};
+  S.modal='per_pedir'; render();
+}
+function perPedirModal(){
+  const tp=perTipo(F.tipo); const us=appUsers().map(u=>u.nombre).filter(n=>n!==S.user.nombre);
+  const fld=(k,l,t,ph)=>`<div class="fld"><label>${l}</label><input class="inp" ${t?`type="${t}"`:''} value="${incEsc(F[k]||'')}" placeholder="${incEsc(ph||'')}" oninput="F.${k}=this.value;${t==='date'?'perAvisoPintar()':''}"></div>`;
+  const varios = F.tipo==='vacaciones' || F.tipo==='ausencia';
+  return `<div class="overlay"><div class="modal" style="max-width:600px">
+    <div class="modal-head"><h2>Pedir o avisar</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body lx-mc">
+      <div class="fld" style="margin-top:0"><label>Qué</label><div style="display:flex;flex-direction:column;gap:6px">${PER_TIPOS.map(x=>`<label style="display:flex;gap:8px;align-items:center;font-size:14px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer"><input type="radio" name="perTipo" ${F.tipo===x.id?'checked':''} onchange="F.tipo='${x.id}';F.motivo='';${x.id==='ausencia'?"F.desde=todayStr();":''}render()"> ${incEsc(x.nombre)}</label>`).join('')}</div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px">${fld('desde',varios?'Desde':'Día','date')}</div>
+        ${varios?`<div style="flex:1;min-width:150px">${fld('hasta','Hasta (si es más de un día)','date')}</div>`:''}
+      </div>
+      ${F.tipo==='permiso'?`<div class="fld"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px"><input type="checkbox" ${F.diaEntero?'checked':''} onchange="F.diaEntero=this.checked;render()"> El día entero</label></div>${F.diaEntero?'':`<div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:120px">${fld('horaIni','Desde las','time')}</div><div style="flex:1;min-width:120px">${fld('horaFin','Hasta las','time')}</div></div>`}`:''}
+      ${F.tipo==='cambio'?`<div class="fld"><label>Con quién</label><select class="inp" onchange="F.con=this.value"><option value="">Elige la persona</option>${us.map(n=>`<option ${F.con===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select></div>${fld('cambio','Qué se cambia','','Mi tarde del 12 por su mañana del 14')}`:''}
+      ${PER_MOTIVOS[F.tipo]?`<div class="fld"><label>Motivo</label><div style="display:flex;flex-wrap:wrap;gap:6px">${PER_MOTIVOS[F.tipo].map(m=>`<button type="button" class="btn btn-sm ${F.motivo===m?'btn-primary':'btn-ghost'}" onclick="F.motivo='${m}';render()">${m}</button>`).join('')}</div><div class="muted" style="font-size:12px;margin-top:4px">Solo el motivo general: no hace falta dar detalles de salud.</div></div>`:''}
+      <div class="fld"><label>Nota <span class="muted" style="font-weight:400">(opcional)</span></label><textarea class="inp" rows="2" style="font-family:inherit;resize:vertical" oninput="F.nota=this.value">${incEsc(F.nota||'')}</textarea></div>
+      <div id="perAviso">${perAvisoHtml()}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="perEnviar()">${F.tipo==='ausencia'?'Avisar':'Enviar'}</button></div>
+    </div></div></div>`;
+}
+function perAvisoHtml(){
+  const tp=perTipo(F.tipo); if(!F.desde) return '';
+  const dias=Math.round((tarDParse(F.desde)-tarDParse(todayStr()))/86400000);
+  if(tp.aviso && dias<tp.aviso) return `<div class="note" style="margin:10px 0 0;border-left-color:#D4A017">Se pide ${incEsc(tp.txt)}. Puedes enviarlo igualmente; quien lo revise lo tendrá en cuenta.</div>`;
+  if(F.tipo==='ausencia') return `<div class="note" style="margin:10px 0 0">Si es una baja médica, el parte va a Administración como siempre.</div>`;
+  return '';
+}
+function perAvisoPintar(){ const el=document.getElementById('perAviso'); if(el) el.innerHTML=perAvisoHtml(); }
+function perEnviar(){
+  if(!F.desde){ toast('Pon el día'); return; }
+  if(F.hasta && F.hasta<F.desde){ toast('«Hasta» no puede ser antes de «Desde»'); return; }
+  if(F.tipo==='cambio' && !F.con){ toast('Elige con quién cambias'); return; }
+  if(PER_MOTIVOS[F.tipo] && !F.motivo){ toast('Elige el motivo'); return; }
+  const me=S.user.nombre;
+  const x={ id:juntaId('P'), tipo:F.tipo, persona:me, desde:F.desde, hasta:(F.hasta&&F.hasta>F.desde)?F.hasta:'', horaIni:(F.tipo==='permiso'&&!F.diaEntero)?(F.horaIni||''):'', horaFin:(F.tipo==='permiso'&&!F.diaEntero)?(F.horaFin||''):'',
+    con:F.tipo==='cambio'?F.con:'', cambio:F.tipo==='cambio'?String(F.cambio||'').trim():'', motivo:F.motivo||'', nota:String(F.nota||'').trim(), ts:now(), historial:[] };
+  const nombre=perTipo(x.tipo).nombre.split(' (')[0].toLowerCase();
+  if(x.tipo==='ausencia'){ x.estado='avisada'; perHist(x,'avisa'); perAvisar(perRevisores().concat(perAprobadores()), `⚠️ ${me} avisa de una ausencia: ${perFechas(x)}${x.motivo?' ('+x.motivo.toLowerCase()+')':''}.\n\nLo tienes en Lucai, en Personas.`); }
+  else if(x.tipo==='cambio'){ x.estado='companero'; perHist(x,'pide'); perAvisar([x.con], `🔁 ${me} te propone un cambio de turno: ${x.cambio||perFechas(x)}.\n\nConfírmalo en Lucai, en Personas.`); }
+  else { x.estado=perRevisores().length?'revisar':'aprobar'; perHist(x,'pide'); perAvisar(x.estado==='revisar'?perRevisores():perAprobadores(), `📅 ${me} pide ${nombre}: ${perFechas(x)}.\n\nLo tienes en Lucai, en Personas.`); }
+  S.perSolicitudes.push(x); closeModal(); S.perTab='mias'; render(); juntaToca(x); toast(x.tipo==='ausencia'?'Aviso enviado':'Solicitud enviada');
+}
+/* ---- ver y decidir ---- */
+function perVer(id){ F={type:'per_ver', id, nota:''}; S.modal='per_ver'; render(); }
+function perVerModal(){
+  const x=(S.perSolicitudes||[]).find(y=>y.id===F.id); if(!x) return '';
+  const me=S.user.nombre;
+  const fila=(l,v)=>v?`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--t-bd-F1ECE3)"><div style="width:100px;flex:none;color:var(--t-fg-8A949B);font-size:13px">${l}</div><div style="font-size:14px;color:var(--t-fg-333F48);white-space:pre-wrap">${incEsc(v)}</div></div>`:'';
+  const QUE={pide:'lo pide', avisa:'avisa', acepta:'acepta el cambio', noacepta:'no acepta el cambio', cubierto:'revisado: queda cubierto', nocubierto:'revisado: no se puede cubrir', aprueba:'aprueba', rechaza:'rechaza', anula:'lo anula', cubre:'marca que está cubierta', cambiaDecision:'cambia la decisión'};
+  let acc='';
+  const nota=`<div class="fld" style="margin-top:12px"><label>Nota <span class="muted" style="font-weight:400">(opcional)</span></label><input class="inp" value="${incEsc(F.nota||'')}" oninput="F.nota=this.value" placeholder="Quién cubre, por qué no…"></div>`;
+  if(x.estado==='companero' && x.con===me) acc=nota+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-ghost" onclick="perAccion('noacepta')">No acepto</button><button class="btn btn-primary" onclick="perAccion('acepta')">Acepto el cambio</button></div>`;
+  else if(x.estado==='revisar' && perEsRevisor()) acc=nota+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-ghost" onclick="perAccion('nocubierto')">No se puede cubrir</button><button class="btn btn-primary" onclick="perAccion('cubierto')">Queda cubierto · pasar a aprobar</button></div>`;
+  else if(x.estado==='aprobar' && perEsAprobador()) acc=nota+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-ghost" style="color:var(--t-fg-C0392B)" onclick="perAccion('rechaza')">Rechazar</button><button class="btn" style="background:var(--lx-verde,#22A55A);color:#fff" onclick="perAccion('aprueba')">✓ Aprobar</button></div>`;
+  else if(x.estado==='avisada' && perEsRevisor()) acc=nota+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-primary" onclick="perAccion('cubre')">Está cubierta</button></div>`;
+  else if((x.estado==='aprobada'||x.estado==='rechazada') && perEsAprobador()) acc=`<div style="margin-top:12px"><button class="btn btn-ghost btn-sm" onclick="perAccion('cambiaDecision')">Cambiar la decisión (vuelve a pendiente de aprobar)</button></div>`;
+  const anular = x.persona===me && ['companero','revisar','aprobar'].includes(x.estado) ? `<button class="btn btn-ghost" style="color:var(--t-fg-C0392B);margin-right:auto" onclick="perAccion('anula')">Anular</button>` : '';
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:540px">
+    <div class="modal-head"><h2>${incEsc(perTipo(x.tipo).nombre.split(' (')[0])}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body"><div style="margin-bottom:8px"><span class="pe-st ${perStCls(x.estado)}">${incEsc(PER_ESTADOS[x.estado]||x.estado)}</span>${x.cubierto===false?' <span class="pe-st no">No se puede cubrir</span>':''}</div>
+      ${fila('Quién',x.persona)}${fila('Cuándo',perFechas(x))}${fila('Con quién',x.con)}${fila('Qué se cambia',x.cambio)}${fila('Motivo',(perVeTodo()||x.persona===me)?x.motivo:'')}${fila('Nota',x.nota)}
+      <div style="margin-top:10px">${(x.historial||[]).map(h=>`<div class="pe-hist">${incEsc(String(h.ts||'').slice(8,10)+'/'+String(h.ts||'').slice(5,7)+' '+String(h.ts||'').slice(11,16))} · ${incEsc(perCorto(h.quien))} ${incEsc(QUE[h.que]||h.que)}${h.nota?': '+incEsc(h.nota):''}</div>`).join('')}</div>
+      ${acc}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">${anular}<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>
+    </div></div></div>`;
+}
+async function perAccion(que){
+  const x=(S.perSolicitudes||[]).find(y=>y.id===F.id); if(!x) return;
+  const me=S.user.nombre; const nota=String(F.nota||'').trim();
+  const nombre=perTipo(x.tipo).nombre.split(' (')[0].toLowerCase(); const cuando=perFechas(x);
+  if(que==='anula'){ if(!(await lxPregunta('¿Anular esta solicitud?'))) return; x.estado='anulada'; }
+  else if(que==='acepta'){ x.estado=perRevisores().length?'revisar':'aprobar'; perAvisar(x.estado==='revisar'?perRevisores():perAprobadores(), `🔁 Cambio de turno de ${x.persona} con ${me}: ${x.cambio||cuando}.\n\nLo tienes en Lucai, en Personas.`); }
+  else if(que==='noacepta'){ x.estado='rechazada'; perAvisar([x.persona], `🔁 ${me} no acepta el cambio de turno (${x.cambio||cuando}).`); }
+  else if(que==='cubierto' || que==='nocubierto'){ x.cubierto=(que==='cubierto'); x.estado='aprobar'; perAvisar(perAprobadores(), `📅 ${x.persona} pide ${nombre}: ${cuando}. ${perCorto(me)}: ${x.cubierto?'queda cubierto':'NO se puede cubrir'}${nota?' ('+nota+')':''}.\n\nApruébalo en Lucai, en Personas.`); }
+  else if(que==='aprueba' || que==='rechaza'){ x.estado=(que==='aprueba')?'aprobada':'rechazada'; perAvisar([x.persona].concat(x.con?[x.con]:[]).concat(perRevisores()), `${que==='aprueba'?'✅':'❌'} ${x.persona}: ${nombre} (${cuando}) ${que==='aprueba'?'aprobado':'rechazado'}${nota?': '+nota:''}.`); }
+  else if(que==='cubre'){ x.estado='cubierta'; }
+  else if(que==='cambiaDecision'){ x.estado='aprobar'; }
+  perHist(x, que, nota); closeModal(); render(); juntaToca(x);
+  toast(({anula:'Anulada', acepta:'Aceptado', noacepta:'No aceptado', cubierto:'Pasa a aprobar', nocubierto:'Pasa a aprobar (sin cubrir)', aprueba:'Aprobada', rechaza:'Rechazada', cubre:'Marcada como cubierta', cambiaDecision:'Vuelve a pendiente de aprobar'})[que]||'Guardado');
+}
+/* ---- ajustes: quién revisa y quién aprueba ---- */
+function perAjustesAbrir(){ if(!isAdmin()) return; const c=perCfg(); F={type:'per_ajustes', revisan:(c.revisan||[]).slice(), aprueban:(c.aprueban||[]).slice()}; S.modal='per_ajustes'; render(); }
+function perAjToggle(k,i){ const n=appUsers()[i] && appUsers()[i].nombre; if(!n) return; const j=F[k].indexOf(n); if(j>=0) F[k].splice(j,1); else F[k].push(n); render(); }
+function perAjustesModal(){
+  const us=appUsers(); const bloque=(k,t,ayuda)=>`<div class="fld"><label>${t}</label><div class="muted" style="font-size:12px;margin-bottom:6px">${ayuda}</div><div style="display:flex;flex-wrap:wrap;gap:6px">${us.map((u,i)=>`<button type="button" class="btn btn-sm ${F[k].includes(u.nombre)?'btn-primary':'btn-ghost'}" onclick="perAjToggle('${k}',${i})">${incEsc(u.nombre)}</button>`).join('')}</div></div>`;
+  return `<div class="overlay"><div class="modal" style="max-width:620px">
+    <div class="modal-head"><h2>Ajustes de Personas</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body">${bloque('revisan','Quién revisa','Mira que el puesto queda cubierto y lo pasa a aprobar. También recibe los avisos de ausencia.')}${bloque('aprueban','Quién aprueba','Decide al final. Si no eliges a nadie, aprueba Dirección.')}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="perAjustesGuardar()">Guardar</button></div></div></div></div>`;
+}
+function perAjustesGuardar(){
+  let c=(S.perCfgL||[]).find(x=>x && x.id==='cfg'); if(!c){ c={id:'cfg'}; S.perCfgL.push(c); }
+  c.revisan=F.revisan.slice(); c.aprueban=F.aprueban.slice(); closeModal(); render(); juntaToca(c); toast('Ajustes guardados');
+}
+/* ---- lo aprobado, en el Calendario como «Fuera: …» (sin el motivo) ---- */
+if(!CEV_TIPOS.find(t=>t.id==='fuera')) CEV_TIPOS.push({id:'fuera', nombre:'Fuera (vacaciones, permisos)'});
+document.head.insertAdjacentHTML('beforeend', '<style id="pe-cev">.ce-fuera{background:var(--lx-gris-s,#EEF0F3);color:var(--lx-gris,#3D4754)}</style>');
+const _cevVivos_per = cevVivos;
+cevVivos = function(){
+  const base=_cevVivos_per();
+  const fuera=perVivas().filter(x=>(x.estado==='aprobada' && x.tipo!=='cambio') || x.estado==='cubierta').map(x=>({ id:'per-'+x.id, virtual:true, titulo:'Fuera: '+perCorto(x.persona)+' ('+(x.tipo==='vacaciones'?'vacaciones':(x.tipo==='permiso'?'permiso':'ausencia'))+')',
+    tipo:'fuera', fecha:x.desde, fechaFin:x.hasta||'', horaIni:x.horaIni||'', horaFin:x.horaFin||'', quien:x.persona, nota:'Viene de Personas.', estado:'aprobado' }));
+  return base.concat(fuera).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)) || String(a.horaIni||'').localeCompare(String(b.horaIni||'')));
+};
+const _cevVer_per = cevVer;
+cevVer = function(id){
+  if(String(id).indexOf('per-')===0){ const x=(S.perSolicitudes||[]).find(y=>'per-'+y.id===id); if(x && (perVeTodo() || x.persona===S.user.nombre)){ perVer(x.id); return; } const e=cevVivos().find(y=>y.id===id); if(e) toast(e.titulo+' · '+cevHora(e)); return; }
+  return _cevVer_per(id);
+};
+/* que no se elija «Fuera» al apuntar a mano en el Calendario: eso sale solo de Personas */
+const _cevEditModal_per = cevEditModal;
+cevEditModal = function(){ const t=CEV_TIPOS; const i=t.findIndex(x=>x.id==='fuera'); const q=i>=0?t.splice(i,1)[0]:null; try{ return _cevEditModal_per(); } finally { if(q) t.push(q); } };
+(function(){
+  const _mc=modalContent;
+  modalContent=function(){ if(F && F.type==='per_pedir') return perPedirModal(); if(F && F.type==='per_ver') return perVerModal(); if(F && F.type==='per_ajustes') return perAjustesModal(); return _mc.apply(this, arguments); };
+  const _av=appView;
+  appView=function(){ if(S.module==='personas'){ if(!canAccess('personas')){ S.module=null; return homeView(); } return personasView(); } return _av.apply(this, arguments); };
+  const _sm=setModule;
+  setModule=function(id){ _sm.apply(this, arguments); if(id==='personas' && S.module==='personas'){ juntaCargar().then(()=>{ if(S.module==='personas') render(); }); } };
+  const _tb=tbBadgeOf;
+  tbBadgeOf=function(id){ if(id==='personas'){ try{ return perPorHacer().length; }catch(_){ return 0; } } return _tb.apply(this, arguments); };
+})();
+/* ===== FIN PERSONAS ===== */
 
 boot();
 
