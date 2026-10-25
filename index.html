@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1246">
+<meta name="lucai-version" content="2026-10-25-1448">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3010,6 +3010,7 @@ function homeView(){
     documentos:'<path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 16.5h6"/>',
     temas:'<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 9h8M8 12h5"/>',
     junta:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="9" cy="14.5" r="1.3"/><circle cx="15" cy="14.5" r="1.3"/>',
+    calendario:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/>',
     manual:'<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8 8h8M8 11.5h6"/>'
   };
   /* módulos en uso, en este orden (David, 24/10/2026); los demás quedan ocultos, con sus datos intactos */
@@ -11323,8 +11324,8 @@ function lxHomeTop(){
 
 /* ---------- menú lateral (ordenador) ---------- */
 function lxRailHTML(){
-  const ids=['tareas','material','junta','incidencias','equipos','manual'].filter(id=>{ try{ return canAccess(id) && MODULES.some(m=>m.id===id && m.estado!=='pronto'); }catch(_){ return false; } });
-  const LBL={tareas:'Tareas',material:'Almacén',junta:'Reuniones',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
+  const ids=['tareas','material','junta','calendario','incidencias','equipos','manual'].filter(id=>{ try{ return canAccess(id) && MODULES.some(m=>m.id===id && m.estado!=='pronto'); }catch(_){ return false; } });
+  const LBL={tareas:'Tareas',material:'Almacén',junta:'Reuniones',calendario:'Calendario',incidencias:'Incidencias',equipos:'Equipos',manual:'Manual'};
   const it=(lbl,ic,on,click,b)=>`<button class="lx-it${on?' on':''}" onclick="${click}" title="${lbl}">${b?`<span class="lx-b">${b>99?'99+':b}</span>`:''}<svg viewBox="0 0 24 24">${ic||''}</svg>${lbl}</button>`;
   let h=`<button class="lx-logo" onclick="S.tbMore=false;goHome()" title="Inicio">L</button>`;
   h+=it('Inicio',TB_IC.inicio,!S.module,'S.tbMore=false;goHome()',0);
@@ -12342,6 +12343,204 @@ async function jaeQuitar(id){
   modalContent=function(){ if(F && F.type==='junta_actaeq') return jaeModal(); return _mc.apply(this, arguments); };
 })();
 /* ===== FIN ACTAS DE EQUIPO Y FORMACIÓN ===== */
+
+/* ============================================================
+   LUCAI · CALENDARIO DE LA CLÍNICA (25/10/2026)
+   Módulo para todo el equipo con los días que importan: reuniones, formaciones y cursos, cierres y festivos,
+   bloqueos de agenda, eventos de empresa (p. ej. la comida de Navidad) y otros. Lo ve todo el que entra en Lucai;
+   apuntan Dirección y el equipo de la reunión semanal (Ajustes de Reuniones). Es un aviso para el equipo: los
+   bloqueos y cierres de agenda se siguen haciendo en el programa de gestión.
+   Se guarda en lucai_estado (clave calEventos) con el guardado de Reuniones: relee, fusiona por id, nunca borra.
+   Cada evento: {id, titulo, tipo, fecha, fechaFin, horaIni, horaFin, quien, nota, autor, ts, upd, borrado}.
+   ============================================================ */
+const CEV_TIPOS=[
+  {id:'reunion', nombre:'Reunión'},
+  {id:'formacion', nombre:'Formación o curso'},
+  {id:'cierre', nombre:'Cierre o festivo'},
+  {id:'bloqueo', nombre:'Bloqueo de agenda'},
+  {id:'empresa', nombre:'Evento de empresa'},
+  {id:'otro', nombre:'Otro'}
+];
+const CEV_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+if(!JUNTA_KEYS.includes('calEventos')) JUNTA_KEYS.push('calEventos');
+if(!Array.isArray(S.calEventos)) S.calEventos=[];
+(function(){
+  if(!MODULES.find(x=>x.id==='calendario')){
+    MODULES.push({ id:'calendario', ini:'C', nombre:'Calendario',
+      desc:'Los días que importan en la clínica: reuniones, cursos, cierres, bloqueos de agenda y eventos.', estado:'activo' });
+  }
+  if(!LUCAI_VISIBLES.includes('calendario')){ const i=LUCAI_VISIBLES.indexOf('junta'); LUCAI_VISIBLES.splice(i>=0?i+1:LUCAI_VISIBLES.length, 0, 'calendario'); }
+  if(typeof TB_IC==='object' && TB_IC && !TB_IC.calendario) TB_IC.calendario='<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/>';
+})();
+const _canAccess_cev = canAccess;
+canAccess = function(id){ if(id==='calendario') return !!S.user; return _canAccess_cev(id); };
+function cevPuede(){ return !!S.user && (isAdmin() || juntaEsMiembro()); }
+function cevTipo(id){ return CEV_TIPOS.find(t=>t.id===id) || CEV_TIPOS[CEV_TIPOS.length-1]; }
+function cevVivos(){ return (S.calEventos||[]).filter(e=>e && !e.borrado && e.fecha).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)) || String(a.horaIni||'').localeCompare(String(b.horaIni||''))); }
+function cevFin(e){ return (e.fechaFin && e.fechaFin>e.fecha) ? e.fechaFin : e.fecha; }
+function cevDelDia(iso){ return cevVivos().filter(e=>e.fecha<=iso && cevFin(e)>=iso); }
+function cevHora(e){ return e.horaIni ? (e.horaIni+(e.horaFin?'–'+e.horaFin:'')) : 'Todo el día'; }
+function cevCuando(e){
+  const f=cevFin(e);
+  const d=f!==e.fecha ? 'Del '+fmtFecha(e.fecha).slice(0,5)+' al '+fmtFecha(f) : juntaFechaLarga(e.fecha);
+  return d+' · '+cevHora(e);
+}
+const CEV_CSS=`<style>
+:root{--ce-reunion-s:#E8EEFC;--ce-reunion:#1D3E8A;--ce-formacion-s:#FBF0D9;--ce-formacion:#7A4E00;--ce-cierre-s:#FBE4E2;--ce-cierre:#9B2C20;--ce-bloqueo-s:#EFEAFB;--ce-bloqueo:#4B3592;--ce-empresa-s:#E3F4EA;--ce-empresa:#14603A;--ce-otro-s:#EEF0F3;--ce-otro:#3D4754}
+:root[data-tema="noche"]{--ce-reunion-s:#1E2A44;--ce-reunion:#A9C1FF;--ce-formacion-s:#3A2E12;--ce-formacion:#FEC84B;--ce-cierre-s:#3A1D1B;--ce-cierre:#F97066;--ce-bloqueo-s:#2A2342;--ce-bloqueo:#C9B8FF;--ce-empresa-s:#0F2E1C;--ce-empresa:#8FE3B4;--ce-otro-s:#262E38;--ce-otro:#C9D1DB}
+.ce-reunion{background:var(--ce-reunion-s);color:var(--ce-reunion)}.ce-formacion{background:var(--ce-formacion-s);color:var(--ce-formacion)}.ce-cierre{background:var(--ce-cierre-s);color:var(--ce-cierre)}
+.ce-bloqueo{background:var(--ce-bloqueo-s);color:var(--ce-bloqueo)}.ce-empresa{background:var(--ce-empresa-s);color:var(--ce-empresa)}.ce-otro{background:var(--ce-otro-s);color:var(--ce-otro)}
+.ce-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.ce-bar .esp{flex:1}
+.ce-nav{display:flex;align-items:center;gap:6px}
+.ce-nav strong{font-size:16px;color:var(--t-fg-333F48);min-width:150px;text-align:center}
+.ce-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--t-bd-line);border-radius:12px;overflow:hidden;background:var(--t-bg-FFFFFF)}
+.ce-dow{font-size:11px;font-weight:700;color:var(--t-fg-8A949B);text-transform:uppercase;letter-spacing:.6px;padding:8px 8px 6px;border-bottom:1px solid var(--t-bd-line)}
+.ce-dia{min-height:104px;padding:6px 6px 4px;border-right:1px solid var(--t-bd-line);border-bottom:1px solid var(--t-bd-line);cursor:pointer;min-width:0}
+.ce-dia:nth-child(7n){border-right:none}
+.ce-dia.fuera{background:var(--t-bg-F7F8FA)}.ce-dia.fuera .n{color:var(--t-fg-A8B0B6)}
+.ce-dia .n{font-size:12px;font-weight:700;color:var(--t-fg-46525B);margin-bottom:3px;display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:11px}
+.ce-dia.hoy .n{background:var(--lx-acc,#2563EB);color:#fff}
+.ce-dia.sel{box-shadow:inset 0 0 0 2px var(--lx-acc,#2563EB)}
+.ce-ch{display:block;font-size:11.5px;font-weight:600;border-radius:5px;padding:2px 6px;margin:0 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.ce-mas{font-size:11px;color:var(--t-fg-8A949B);padding-left:4px}
+.ce-dots{display:none}
+.ce-it{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--t-bd-F1ECE3);cursor:pointer}
+.ce-it:last-child{border-bottom:none}
+.ce-fe{flex:none;width:46px;text-align:center;border-radius:10px;padding:5px 0;background:var(--t-bg-F7F8FA)}
+.ce-fe b{display:block;font-size:18px;color:var(--t-fg-333F48);line-height:1.1}
+.ce-fe span{font-size:10.5px;text-transform:uppercase;color:var(--t-fg-8A949B);font-weight:700}
+.ce-tag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;margin-right:6px}
+.ce-ley{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+@media(max-width:720px){
+  .ce-dia{min-height:54px;padding:4px 2px;text-align:center}
+  .ce-dia .ce-ch,.ce-dia .ce-mas{display:none}
+  .ce-dots{display:flex;justify-content:center;gap:3px;flex-wrap:wrap}
+  .ce-dots i{width:6px;height:6px;border-radius:3px;background:currentColor;display:block}
+  .ce-dow{padding:6px 2px;text-align:center;font-size:10px}
+  .ce-nav strong{min-width:120px;font-size:15px}
+}
+</style>`;
+function cevMesActual(){ if(!S.cevMes){ const d=tarDParse(todayStr()); S.cevMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); } return S.cevMes; }
+function cevMover(n){ const p=cevMesActual().split('-').map(Number); let y=p[0], m=p[1]+n; if(m<1){m=12;y--;} if(m>12){m=1;y++;} S.cevMes=y+'-'+String(m).padStart(2,'0'); S.cevDia=null; render(); }
+function cevHoy(){ S.cevMes=null; S.cevDia=todayStr(); cevMesActual(); render(); }
+function cevChip(e){ return `<span class="ce-ch ce-${cevTipo(e.tipo).id}" onclick="event.stopPropagation();cevVer('${e.id}')" title="${incEsc(e.titulo+' · '+cevHora(e))}">${e.horaIni?incEsc(e.horaIni)+' ':''}${incEsc(e.titulo)}</span>`; }
+function cevFila(e){
+  const d=tarDParse(e.fecha); const dias=['dom','lun','mar','mié','jue','vie','sáb'];
+  return `<div class="ce-it" onclick="cevVer('${e.id}')"><div class="ce-fe"><span>${dias[d.getDay()]}</span><b>${d.getDate()}</b></div>
+    <div style="flex:1;min-width:0"><div class="jt-tit">${incEsc(e.titulo)}</div>
+    <div class="jt-sub"><span class="ce-tag ce-${cevTipo(e.tipo).id}">${incEsc(cevTipo(e.tipo).nombre)}</span>${cevFin(e)!==e.fecha?incEsc('Hasta el '+fmtFecha(cevFin(e)))+' · ':''}${incEsc(cevHora(e))}</div>
+    ${e.quien?`<div class="jt-sub">${incEsc(e.quien)}</div>`:''}</div></div>`;
+}
+function cevMesView(){
+  const [y,m]=cevMesActual().split('-').map(Number); const hoy=todayStr();
+  const ini=new Date(y,m-1,1); const off=(ini.getDay()+6)%7; let d=new Date(y,m-1,1-off);
+  const cells=[]; const semanas=Math.ceil((off+new Date(y,m,0).getDate())/7);
+  for(let i=0;i<semanas*7;i++){
+    const iso=tarIso(d); const fuera=d.getMonth()!==m-1; const evs=cevDelDia(iso);
+    cells.push(`<div class="ce-dia${fuera?' fuera':''}${iso===hoy?' hoy':''}${S.cevDia===iso?' sel':''}" onclick="cevDiaClic('${iso}')"><div class="n">${d.getDate()}</div>
+      ${evs.slice(0,3).map(cevChip).join('')}${evs.length>3?`<div class="ce-mas">+${evs.length-3} más</div>`:''}
+      <div class="ce-dots">${evs.slice(0,4).map(e=>`<i class="ce-${cevTipo(e.tipo).id}" style="background:var(--ce-${cevTipo(e.tipo).id})"></i>`).join('')}</div></div>`);
+    d=new Date(d.getFullYear(), d.getMonth(), d.getDate()+1);
+  }
+  const dow=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(x=>`<div class="ce-dow">${x}</div>`).join('');
+  const sel=S.cevDia ? cevDelDia(S.cevDia) : null;
+  const delDia = S.cevDia ? `<div class="jt-card" style="margin-top:12px;padding:10px 14px 6px"><div class="jc-h" style="font-size:13px;font-weight:700;color:var(--t-fg-333F48);margin:4px 0 4px;display:flex;justify-content:space-between;align-items:center">${incEsc(juntaFechaLarga(S.cevDia))}${cevPuede()?`<button class="btn btn-ghost btn-sm" onclick="cevAbrir(null,'${S.cevDia}')">＋ Añadir este día</button>`:''}</div>${sel.length?sel.map(cevFila).join(''):'<div class="muted" style="font-size:13px;padding:6px 0 10px">Nada apuntado este día.</div>'}</div>` : '';
+  return `<div class="ce-grid">${dow}${cells.join('')}</div>${delDia}`;
+}
+function cevDiaClic(iso){ S.cevDia = (S.cevDia===iso) ? null : iso; render(); }
+function cevListaView(){
+  const hoy=todayStr(); const desde=S.cevPasados ? juntaMasDias(hoy,-90) : hoy; const hasta=juntaMasDias(hoy,180);
+  const xs=cevVivos().filter(e=>cevFin(e)>=desde && e.fecha<=hasta);
+  if(!xs.length) return `<div class="jt-card"><div class="muted" style="padding:14px 2px;font-size:13.5px">No hay nada apuntado para los próximos meses.</div></div>`;
+  const grupos={}; xs.forEach(e=>{ const k=(e.fecha<desde?desde:e.fecha).slice(0,7); (grupos[k]=grupos[k]||[]).push(e); });
+  return Object.keys(grupos).sort().map(k=>{ const p=k.split('-'); return `<div class="jt-card" style="padding:8px 14px 4px"><h3>${CEV_MESES[+p[1]-1]} ${p[0]}</h3>${grupos[k].map(cevFila).join('')}</div>`; }).join('')
+    + `<div style="margin-top:6px"><button class="jt-link" onclick="S.cevPasados=!S.cevPasados;render()">${S.cevPasados?'Ocultar lo pasado':'Ver también lo de los últimos 3 meses'}</button></div>`;
+}
+function calendarioView(){
+  if(!S.cevVista) S.cevVista = (window.innerWidth<=720) ? 'lista' : 'mes';
+  const v=S.cevVista; const [y,m]=cevMesActual().split('-').map(Number);
+  const bar=`<div class="ce-bar"><div class="seg tar-seg" style="margin:0">${[['mes','Mes'],['lista','Próximos']].map(([id,l])=>`<button class="${v===id?'on':''}" onclick="S.cevVista='${id}';render()">${l}</button>`).join('')}</div>
+    ${v==='mes'?`<div class="ce-nav"><button class="btn btn-ghost btn-sm" onclick="cevMover(-1)" title="Mes anterior">‹</button><strong>${CEV_MESES[m-1]} ${y}</strong><button class="btn btn-ghost btn-sm" onclick="cevMover(1)" title="Mes siguiente">›</button><button class="btn btn-ghost btn-sm" onclick="cevHoy()">Hoy</button></div>`:''}
+    <div class="esp"></div>${cevPuede()?`<button class="btn btn-primary btn-sm" onclick="cevAbrir()">＋ Añadir</button>`:''}</div>`;
+  const ley=`<div class="ce-ley">${CEV_TIPOS.map(t=>`<span class="ce-tag ce-${t.id}">${incEsc(t.nombre)}</span>`).join('')}</div>`;
+  return `${JUNTA_CSS}${CEV_CSS}${moduleHeader('Calendario', false)}
+  <main><div class="wrap">
+    <div class="toolbar" style="margin-bottom:12px"><div><div class="section-title">Calendario</div>
+      <div class="section-sub" style="margin:0">Reuniones, cursos, cierres, bloqueos de agenda y eventos de la clínica</div></div>
+      <div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" onclick="cevRefrescar()">Actualizar</button></div></div>
+    ${bar}${v==='mes'?cevMesView():cevListaView()}${ley}
+  </div></main>
+  ${S.modal?modalContent():''}
+  ${(typeof iaFloatHtml==='function')?iaFloatHtml():''}`;
+}
+async function cevRefrescar(){ toast('Actualizando…'); await juntaCargar(); render(); toast('Al día'); }
+function cevVer(id){
+  const e=(S.calEventos||[]).find(x=>x.id===id && !x.borrado); if(!e) return;
+  F={type:'cev_ver', id}; S.modal='cev_ver'; render();
+}
+function cevVerModal(){
+  const e=(S.calEventos||[]).find(x=>x.id===F.id); if(!e){ return ''; }
+  const fila=(l,v)=>v?`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--t-bd-F1ECE3)"><div style="width:100px;flex:none;color:var(--t-fg-8A949B);font-size:13px">${l}</div><div style="font-size:14px;color:var(--t-fg-333F48);white-space:pre-wrap">${incEsc(v)}</div></div>`:'';
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px">
+    <div class="modal-head"><h2>${incEsc(e.titulo)}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body"><div style="margin-bottom:8px"><span class="ce-tag ce-${cevTipo(e.tipo).id}">${incEsc(cevTipo(e.tipo).nombre)}</span></div>
+      ${fila('Cuándo',cevCuando(e))}${fila('Quién',e.quien)}${fila('Nota',e.nota)}${fila('Apuntado por',e.autor)}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+        ${cevPuede()?`<button class="btn btn-ghost" style="color:var(--t-fg-C0392B);margin-right:auto" onclick="cevQuitar('${e.id}')">Quitar</button><button class="btn btn-ghost" onclick="cevAbrir('${e.id}')">Cambiar</button>`:''}
+        <button class="btn btn-primary" onclick="closeModal()">Cerrar</button></div></div></div></div>`;
+}
+function cevAbrir(id, fecha){
+  if(!cevPuede()){ toast('Apuntan Dirección y el equipo de la reunión semanal'); return; }
+  const e=id?(S.calEventos||[]).find(x=>x.id===id):null;
+  F={type:'cev_edit', id:e?e.id:'', titulo:e?e.titulo:'', tipo:e?cevTipo(e.tipo).id:'reunion', fecha:e?e.fecha:(fecha||S.cevDia||todayStr()), fechaFin:e?(e.fechaFin||''):'',
+     todoDia:e?!e.horaIni:false, horaIni:e?(e.horaIni||''):'', horaFin:e?(e.horaFin||''):'', quien:e?(e.quien||''):'', nota:e?(e.nota||''):''};
+  S.modal='cev_edit'; render();
+}
+function cevEditModal(){
+  const fld=(k,l,ph,t)=>`<div class="fld"><label>${l}</label><input class="inp" ${t?`type="${t}"`:''} value="${incEsc(F[k]||'')}" placeholder="${incEsc(ph||'')}" oninput="F.${k}=this.value"></div>`;
+  return `<div class="overlay"><div class="modal" style="max-width:600px">
+    <div class="modal-head"><h2>${F.id?'Cambiar':'Añadir al calendario'}</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body lx-mc">
+      ${fld('titulo','Qué','Comida de Navidad')}
+      <div class="fld"><label>Tipo</label><div style="display:flex;flex-wrap:wrap;gap:6px">${CEV_TIPOS.map(t=>`<button type="button" class="ce-tag ce-${t.id}" style="cursor:pointer;border:2px solid ${F.tipo===t.id?'currentColor':'transparent'};padding:5px 10px;font-size:12px" onclick="F.tipo='${t.id}';render()">${incEsc(t.nombre)}</button>`).join('')}</div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px">${fld('fecha','Día','','date')}</div>
+        <div style="flex:1;min-width:150px">${fld('fechaFin','Hasta (si son varios días)','','date')}</div>
+      </div>
+      <div class="fld"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13.5px"><input type="checkbox" ${F.todoDia?'checked':''} onchange="F.todoDia=this.checked;render()"> Todo el día</label></div>
+      ${F.todoDia?'':`<div style="display:flex;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:120px">${fld('horaIni','Desde','','time')}</div><div style="flex:1;min-width:120px">${fld('horaFin','Hasta','','time')}</div></div>`}
+      ${fld('quien','Quién (a quién afecta o quién va)','Todo el equipo')}
+      <div class="fld"><label>Nota <span class="muted" style="font-weight:400">(opcional)</span></label><textarea class="inp" rows="2" style="font-family:inherit;resize:vertical" oninput="F.nota=this.value" placeholder="Lugar, qué llevar, a quién avisar…">${incEsc(F.nota||'')}</textarea></div>
+      ${F.tipo==='bloqueo'||F.tipo==='cierre'?`<div class="note" style="margin:10px 0 0">Recuerda hacer también el bloqueo o el cierre en la agenda del programa de gestión: esto es solo el aviso para el equipo.</div>`:''}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="cevGuardar()">Guardar</button></div>
+    </div></div></div>`;
+}
+function cevGuardar(){
+  if(!cevPuede()) return;
+  const titulo=String(F.titulo||'').trim(); if(!titulo){ toast('Escribe qué es'); return; }
+  if(!F.fecha){ toast('Pon el día'); return; }
+  if(F.fechaFin && F.fechaFin<F.fecha){ toast('«Hasta» no puede ser antes del día'); return; }
+  let e=F.id?(S.calEventos||[]).find(x=>x.id===F.id):null;
+  if(!e){ e={id:juntaId('V'), autor:S.user.nombre, ts:now()}; S.calEventos.push(e); }
+  Object.assign(e,{titulo, tipo:F.tipo, fecha:F.fecha, fechaFin:(F.fechaFin&&F.fechaFin>F.fecha)?F.fechaFin:'', horaIni:F.todoDia?'':(F.horaIni||''), horaFin:F.todoDia?'':(F.horaFin||''),
+    quien:String(F.quien||'').trim(), nota:String(F.nota||'').trim()});
+  closeModal(); S.cevDia=e.fecha; S.cevMes=e.fecha.slice(0,7); render(); juntaToca(e); toast('Guardado en el calendario');
+}
+async function cevQuitar(id){
+  const e=(S.calEventos||[]).find(x=>x.id===id); if(!e || !cevPuede()) return;
+  if(!(await lxPregunta('¿Quitar «'+e.titulo+'» del calendario?'))) return;
+  e.borrado=true; closeModal(); render(); juntaToca(e); toast('Quitado del calendario');
+}
+(function(){
+  const _mc=modalContent;
+  modalContent=function(){ if(F && F.type==='cev_ver') return cevVerModal(); if(F && F.type==='cev_edit') return cevEditModal(); return _mc.apply(this, arguments); };
+  const _av=appView;
+  appView=function(){ if(S.module==='calendario'){ if(!canAccess('calendario')){ S.module=null; return homeView(); } return calendarioView(); } return _av.apply(this, arguments); };
+  const _sm=setModule;
+  setModule=function(id){ _sm.apply(this, arguments); if(id==='calendario' && S.module==='calendario'){ S.cevDia=null; juntaCargar().then(()=>{ if(S.module==='calendario') render(); }); } };
+})();
+/* ===== FIN CALENDARIO DE LA CLÍNICA ===== */
 
 boot();
 
