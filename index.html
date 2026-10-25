@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1118">
+<meta name="lucai-version" content="2026-10-25-1126">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -11928,6 +11928,43 @@ document.head.insertAdjacentHTML('beforeend', `<style id="lx-css17">
 .lx-asvoz{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--arena-1)}
 .lx-asok{margin-top:8px;font-size:12.5px;font-weight:700;color:var(--lx-verde)}
 </style>`);
+
+/* ============================================================
+   LUCAI · ENLACE DIRECTO A «NUEVA TAREA» (25/10/2026, David: un botón en el iPhone que abra Tareas y cree una tarea)
+   …/lucai/?nueva=tarea            → abre Tareas con la ventana de nueva tarea (después de entrar, si hace falta)
+   …/lucai/?nueva=tarea&texto=…    → además rellena el título (p. ej. desde un Atajo de iPhone que dicta el texto)
+   Se ejecuta una sola vez y se quita de la dirección para que al recargar no se vuelva a abrir.
+   ============================================================ */
+(function(){
+  try{
+    const sp=new URLSearchParams(location.search);
+    if(sp.get('nueva')==='tarea'){
+      window._lxIntent={ tipo:'tarea', texto:(sp.get('texto')||'').trim().slice(0,300) };
+      try{ sessionStorage.setItem('lx_intent', JSON.stringify(window._lxIntent)); }catch(_){}   // por si la app se recarga sola (versión nueva)
+      sp.delete('nueva'); sp.delete('texto');
+      const q=sp.toString(); history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash);
+    } else {
+      try{ const g=sessionStorage.getItem('lx_intent'); if(g) window._lxIntent=JSON.parse(g); }catch(_){}
+    }
+  }catch(_){}
+})();
+function lxIntentRun(){
+  const it=window._lxIntent; if(!it) return;
+  if(!(typeof DEVICE!=='undefined' && DEVICE && S && S.user)) return;   // espera a que se entre
+  if(S.modal) return;                                                    // p. ej. cambio de contraseña obligatorio
+  if(typeof canAccess==='function' && !canAccess('tareas')) { window._lxIntent=null; try{ sessionStorage.removeItem('lx_intent'); }catch(_){} return; }
+  window._lxIntent=null; try{ sessionStorage.removeItem('lx_intent'); }catch(_){}
+  setTimeout(function(){
+    try{ if(typeof lucaiSaludoHide==='function') lucaiSaludoHide(true); }catch(_){}
+    setModule('tareas');
+    openTarea(it.texto ? { titulo: it.texto.charAt(0).toUpperCase()+it.texto.slice(1) } : null);
+    setTimeout(function(){ const i=document.querySelector('.modal input'); if(i){ i.focus(); try{ const n=i.value.length; i.setSelectionRange(n,n); }catch(_){} } }, 80);
+  }, 0);
+}
+(function(){
+  const _tb=lucaiTbPaint;
+  lucaiTbPaint=function(){ _tb.apply(this, arguments); try{ lxIntentRun(); }catch(_){} };
+})();
 
 boot();
 
