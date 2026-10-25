@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-1126">
+<meta name="lucai-version" content="2026-10-25-1133">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -11964,6 +11964,67 @@ function lxIntentRun(){
 (function(){
   const _tb=lucaiTbPaint;
   lucaiTbPaint=function(){ _tb.apply(this, arguments); try{ lxIntentRun(); }catch(_){} };
+})();
+
+/* ============================================================
+   LUCAI · «RECORDARME EN ESTE DISPOSITIVO» SOLO EN MÓVILES (25/10/2026, David)
+   Riesgo: quien coja ese móvil desbloqueado entra como esa persona. Por eso:
+   - solo se ofrece (y solo vale) en móviles: en los ordenadores de la clínica, que comparten cuenta de Chrome,
+     se sigue pidiendo usuario y contraseña siempre;
+   - caduca a los 30 días; «Cerrar sesión» lo borra; si se cambia la contraseña deja de valer (guarda la huella,
+     nunca la contraseña); no vale para quien aún tiene que poner su contraseña (PIN o código provisional).
+   Se guarda solo en ese aparato (localStorage); no viaja con la cuenta de Chrome.
+   ============================================================ */
+const LX_REC_KEY='lucai_recuerdo', LX_REC_DIAS=30;
+function lxEsMovil(){
+  try{ return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||'') && (!window.matchMedia || matchMedia('(pointer:coarse)').matches); }catch(_){ return false; }
+}
+function lxRecLeer(){ try{ const t=JSON.parse(localStorage.getItem(LX_REC_KEY)||'null'); return (t && t.id!=null && t.h && t.exp>Date.now()) ? t : null; }catch(_){ return null; } }
+function lxRecBorrar(){ try{ localStorage.removeItem(LX_REC_KEY); }catch(_){} }
+function lxRecGuardar(u){
+  try{ if(!lxEsMovil() || !u || !u.passHash || u.cambiarPass) return; localStorage.setItem(LX_REC_KEY, JSON.stringify({ id:u.id, h:u.passHash, exp:Date.now()+LX_REC_DIAS*86400000 })); }catch(_){}
+}
+/* casilla en la pantalla de entrada (solo en móviles) */
+(function(){
+  const _lv=loginView;
+  loginView=function(){
+    let h=_lv.apply(this, arguments);
+    if(!lxEsMovil()) return h;
+    const casilla=`<label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--grey);margin:2px 2px 6px;cursor:pointer"><input type="checkbox" id="loginRecordar" ${S.loginRecordar?'checked':''} onchange="S.loginRecordar=this.checked" style="width:18px;height:18px"> Recordarme en este móvil (${LX_REC_DIAS} días)</label>`;
+    const ancla='<div style="color:var(--t-fg-C0392B);font-size:13px;min-height:18px;margin:6px 2px 4px">';
+    return h.includes(ancla) ? h.replace(ancla, casilla+ancla) : h;
+  };
+})();
+/* al entrar: si se marcó, se recuerda */
+(function(){
+  const _dl=doLogin;
+  doLogin=async function(){
+    const rec=!!(S.loginRecordar && lxEsMovil());
+    await _dl.apply(this, arguments);
+    if(S.user){ if(rec) lxRecGuardar(S.user); else lxRecBorrar(); }
+  };
+})();
+/* al cerrar sesión: se olvida */
+(function(){
+  const _lo=logout;
+  logout=function(){ lxRecBorrar(); return _lo.apply(this, arguments); };
+})();
+/* al abrir la app: si este móvil tiene un recuerdo válido, entra solo */
+(function(){
+  const _bt=boot;
+  boot=async function(){
+    await _bt.apply(this, arguments);
+    try{
+      if(S.user || !DEVICE) return;
+      const t=lxRecLeer(); if(!t) return;
+      if(!lxEsMovil()){ lxRecBorrar(); return; }
+      const u=appUsers().find(x=>String(x.id)===String(t.id));
+      if(!u || !u.passHash || u.passHash!==t.h || u.cambiarPass){ lxRecBorrar(); return; }
+      S.user=u; S.module=null; S.alert=''; S.iaOpen=false;
+      if(typeof iaWarmup==='function') iaWarmup();
+      render(); if(typeof resetIdle==='function') resetIdle();
+    }catch(_){}
+  };
 })();
 
 boot();
