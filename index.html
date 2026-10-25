@@ -11854,6 +11854,79 @@ main>.wrap>.toolbar:first-child .section-title,main>.wrap>.toolbar:first-of-type
 @media(max-width:720px){ main>.wrap>.toolbar:first-child .section-title{font-size:21px} }
 </style>`);
 
+/* ============================================================
+   LUCAI · ASUNTO HABLADO (25/10/2026, David: «decir el problema con un audio y que la IA lo ordene en un asunto»)
+   En «Apuntar asunto»: 🎤 Hablar (el navegador pasa la voz a texto, como en Dictar tareas) → «✨ Ordenar con IA»
+   (la misma función quick-task) → rellena Asunto (titular) y Detalle para revisar. Nunca guarda sin pulsar Guardar.
+   ============================================================ */
+let _lxAsRec=null;
+function lxAsMicParar(){ try{ if(_lxAsRec){ _lxAsRec.stop(); } }catch(_){ } }
+function lxAsMic(){
+  if(!JUNTA_SR){ toast('Este navegador no permite dictar con el botón. Usa el micrófono del teclado o Win + H y escríbelo en el recuadro.'); const t=el('jtAsVoz'); if(t) t.focus(); return; }
+  if(_lxAsRec){ lxAsMicParar(); return; }
+  const rec=new JUNTA_SR(); _lxAsRec=rec;
+  rec.lang='es-ES'; rec.continuous=true; rec.interimResults=true;
+  const base=(F.voz||'').trim(); let fin='';
+  rec.onresult=function(ev){
+    let interino='';
+    for(let i=ev.resultIndex;i<ev.results.length;i++){ const r=ev.results[i]; if(r.isFinal) fin+=r[0].transcript+' '; else interino+=r[0].transcript; }
+    F.voz=((base?base+' ':'')+fin+interino).replace(/\s+/g,' ').trim();
+    const ta=el('jtAsVoz'); if(ta){ ta.value=F.voz; ta.scrollTop=ta.scrollHeight; }
+  };
+  rec.onerror=function(e){ if(e && (e.error==='not-allowed'||e.error==='service-not-allowed')) toast('Permite el micrófono en el navegador para dictar.'); else if(e && e.error==='no-speech') toast('No te he oído. Pulsa 🎤 y habla.'); };
+  rec.onend=function(){ if(_lxAsRec===rec) _lxAsRec=null; if(S.modal==='junta_asunto') render(); };
+  try{ rec.start(); render(); }catch(e){ _lxAsRec=null; toast('No se ha podido abrir el micrófono.'); }
+}
+async function lxAsOrdenar(){
+  lxAsMicParar();
+  const txt=(F.voz||'').trim(); if(!txt){ toast('Cuéntalo primero: pulsa 🎤 Hablar o escríbelo'); return; }
+  F.asBusy=true; render();
+  const pregunta='Eres quien prepara la reunión semanal del equipo de dirección de una clínica dental. Convierte este problema, contado de palabra, en un asunto para la reunión. '
+    +'Devuelve SOLO un JSON, sin texto antes ni después, con este formato exacto: {"titulo":"...","detalle":"..."}. '
+    +'"titulo": un titular breve y claro del problema (máximo 80 caracteres, sin punto final). '
+    +'"detalle": de 2 a 4 frases con qué pasa, a quién afecta, los datos que se han dicho y lo que ya se ha probado. '
+    +'No inventes nada que no se haya dicho. No pongas nombres ni datos de pacientes. Texto dictado: «'+txt+'»';
+  let raw='';
+  try{
+    const r=await fetch(IA_FN, { method:'POST', headers:await lucaiFnHeaders(), body: JSON.stringify({ pregunta, contexto:'', usuario:S.user.nombre }) });
+    raw=await r.text();
+    const m=raw.match(/\{[\s\S]*\}/); const js=m?JSON.parse(m[0]):null;
+    const ti=js && String(js.titulo||'').trim();
+    if(!ti) throw new Error('sin titulo');
+    F.titulo=ti.slice(0,140); F.detalle=String(js.detalle||'').trim(); F.asHecho=true;
+  }catch(e){
+    console.error('lxAsOrdenar', e, raw);
+    toast('No he podido ordenarlo. Prueba otra vez o escribe el asunto a mano.');
+  }
+  F.asBusy=false; if(S.modal==='junta_asunto') render();
+}
+juntaAsuntoModal=function(){
+  const oye=!!_lxAsRec;
+  const voz = F.id ? '' : `<div class="lx-asvoz">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button type="button" class="btn ${oye?'':'btn-ghost'}" onclick="lxAsMic()" style="${oye?'background:#D92D20;border-color:#D92D20;color:#fff':''}">${oye?'● Escuchando… pulsa para parar':'🎤 Hablar'}</button>
+        <button type="button" class="btn btn-ghost" onclick="lxAsOrdenar()" ${F.asBusy?'disabled':''}>${F.asBusy?'Ordenando…':'✨ Ordenar con IA'}</button>
+        <span class="muted" style="font-size:12px">Cuenta el problema como te salga; la IA lo deja en titular y detalle.</span>
+      </div>
+      <textarea id="jtAsVoz" class="inp" rows="3" style="font-family:inherit;margin-top:8px" oninput="F.voz=this.value" placeholder="Ej.: se nos están quedando huecos los martes por la tarde porque los pacientes de ortodoncia no confirman…">${incEsc(F.voz||'')}</textarea>
+      <div class="muted" style="font-size:11.5px;margin-top:4px">Sin nombres de pacientes: el texto pasa por la IA.</div>
+      ${F.asHecho?`<div class="lx-asok">✓ Ordenado. Revísalo abajo y pulsa Guardar.</div>`:''}
+    </div>`;
+  return `<div class="overlay"><div class="modal" style="max-width:600px">
+    <div class="modal-head"><h2>${F.id?'Editar asunto':'Apuntar asunto'}</h2><button class="x" onclick="lxAsMicParar();closeModal()">×</button></div>
+    <div class="modal-body">
+      ${F.id?'':`<div class="note" style="margin-top:0;margin-bottom:12px">Asuntos = lo que nos afecta a todos. Si es cosa de dos personas, mejor una tarea.</div>`}
+      ${voz}
+      <div class="fld" style="margin-top:${F.id?0:12}px"><label>Asunto</label><input id="juntaAsTit" class="inp" value="${incEsc(F.titulo||'')}" oninput="setInp('titulo',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();juntaAsuntoGuardar();}" placeholder="Qué hay que tratar, en una frase"></div>
+      <div class="fld"><label>Detalle <span class="muted" style="font-weight:400">(opcional)</span></label><textarea style="font-family:inherit" class="inp" rows="3" oninput="setInp('detalle',this.value)" placeholder="Datos, a quién afecta, qué se ha probado ya">${incEsc(F.detalle||'')}</textarea></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="lxAsMicParar();closeModal()">Cancelar</button><button class="btn btn-primary" onclick="lxAsMicParar();juntaAsuntoGuardar()">Guardar</button></div>
+    </div></div></div>`;
+};
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css17">
+.lx-asvoz{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--arena-1)}
+.lx-asok{margin-top:8px;font-size:12.5px;font-weight:700;color:var(--lx-verde)}
+</style>`);
+
 boot();
 
 </script>
