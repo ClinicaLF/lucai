@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-2324">
+<meta name="lucai-version" content="2026-10-26-2332">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -5457,7 +5457,7 @@ function openTarea(preset){
 function setTarRecurTipo(v){ F.recurTipo=v; if(v==='semanal' && (!F.recurDias||!F.recurDias.length) && F.fechaLimite){ F.recurDias=[tarDow(F.fechaLimite)]; } render(); }
 function tarToggleDia(i){ if(F.type==='tar_nuevo' && F.recurTipo==='diaria'){ F.recurTipo='semanal'; F.recurDias=[0,1,2,3,4,5,6]; } if(!Array.isArray(F.recurDias)) F.recurDias=[]; const k=F.recurDias.indexOf(i); if(k>=0) F.recurDias.splice(k,1); else F.recurDias.push(i); render(); }
 /* 26/10/2026: botones Lun…Dom para elegir los días de una serie (nueva o ya creada) */
-function tarDiasBotones(dias){ return `<div style="display:flex;gap:4px;flex-wrap:wrap">${TAR_DOW.map((d,i)=>`<button type="button" onclick="tarToggleDia(${i})" style="cursor:pointer;border:1px solid ${dias.includes(i)?'var(--t-bd-6E8E00)':'var(--line)'};background:${dias.includes(i)?'var(--t-bg-6E8E00)':'var(--t-bg-FFFFFF)'};color:${dias.includes(i)?'var(--t-fg-FFFFFF)':'var(--t-fg-5A6770)'};border-radius:7px;width:32px;height:30px;font-size:12px;font-weight:600">${d}</button>`).join('')}</div>`; }
+function tarDiasBotones(dias, pre){ pre=pre||'tarToggleDia('; return `<div style="display:flex;gap:4px;flex-wrap:wrap">${TAR_DOW.map((d,i)=>`<button type="button" onclick="${pre}${i})" style="cursor:pointer;border:1px solid ${dias.includes(i)?'var(--t-bd-6E8E00)':'var(--line)'};background:${dias.includes(i)?'var(--t-bg-6E8E00)':'var(--t-bg-FFFFFF)'};color:${dias.includes(i)?'var(--t-fg-FFFFFF)':'var(--t-fg-5A6770)'};border-radius:7px;width:32px;height:30px;font-size:12px;font-weight:600">${d}</button>`).join('')}</div>`; }
 function tarFormBody(){
   const u=tarUsers();
   const puedeFecha = !F.deQuien || F.deQuien===S.user.nombre; // la fecha solo la cambia quien emitió
@@ -10887,7 +10887,7 @@ async function juntaDictarConvertir(){
   const txt=(F.texto||'').trim(); if(!txt){ toast('Dicta o escribe las tareas primero'); return; }
   F.busy=true; render();
   const hoy=todayStr(); const dias=[]; for(let i=0;i<15;i++){ const d=juntaMasDias(hoy,i); dias.push(JUNTA_DIAS[tarDow(d)]+' '+d+(i===0?' (hoy)':(i===1?' (mañana)':''))); }
-  const pregunta='Convierte este dictado en tareas. Calendario: '+dias.join('; ')+'. Personas posibles (usa exactamente estos nombres): '+tarUsers().join(', ')+'. Devuelve SOLO un JSON, sin ningún texto antes ni después, con este formato exacto: {"tareas":[{"titulo":"...","para":"nombre exacto de la lista o vacío","fecha":"AAAA-MM-DD o vacío","detalle":"..."}]}. Reglas: una tarea por cada cosa que alguien tiene que hacer; título corto que empiece por un verbo; la fecha, sacada del calendario (si dicen «antes del viernes», ese viernes); si no dicen fecha, vacío; si no está clara la persona, vacío; no inventes nada. Dictado: «'+txt.replace(/[«»]/g,'"')+'»';
+  const pregunta='Convierte este dictado en tareas. Calendario: '+dias.join('; ')+'. Personas posibles (usa exactamente estos nombres): '+tarUsers().join(', ')+'. Devuelve SOLO un JSON, sin ningún texto antes ni después, con este formato exacto: {"tareas":[{"titulo":"...","para":"nombre exacto de la lista o vacío","fecha":"AAAA-MM-DD o vacío","detalle":"...","repite":"no|diaria|semanal|mensual","dias":[0],"hasta":"AAAA-MM-DD o vacío"}]}. Reglas: POR DEFECTO ES UNA SOLA TAREA: aunque el dictado sea largo, tenga varios pasos, explicaciones o contexto, todo eso va en "detalle" (ordenado y sin inventar) de una sola tarea; solo se separa en varias tareas si se dicen claramente cosas distintas e independientes (para personas distintas, o con fechas distintas, o si dicen «dos tareas», «otra tarea», «otra cosa»); si dudas, una sola; si algo se repite («todos los días», «cada lunes», «de lunes a viernes», «cada mes»), es UNA sola tarea con "repite" (nunca una tarea por cada fecha): "diaria" para todos los días; "semanal" con "dias" = números de los días (0 lunes, 1 martes, 2 miércoles, 3 jueves, 4 viernes, 5 sábado, 6 domingo; «de lunes a viernes» = [0,1,2,3,4]); "mensual" para cada mes; su "fecha" es el primer día que toca (si no la dicen, hoy o el primer día de la lista que toque); "hasta" solo si dicen hasta cuándo; si no se repite, "repite":"no"; título corto que empiece por un verbo; la fecha, sacada del calendario (si dicen «antes del viernes», ese viernes); si no dicen fecha, vacío; si no está clara la persona, vacío; no inventes nada. Dictado: «'+txt.replace(/[«»]/g,'"')+'»';
   let raw='';
   try{
     const r=await fetch(IA_FN, { method:'POST', headers:await lucaiFnHeaders(), body: JSON.stringify({ pregunta, contexto:'', usuario:S.user.nombre }) });
@@ -10895,12 +10895,52 @@ async function juntaDictarConvertir(){
     const m=raw.match(/\{[\s\S]*\}/); const js=m?JSON.parse(m[0]):null;
     const arr=(js && Array.isArray(js.tareas)) ? js.tareas : [];
     if(!arr.length) throw new Error('sin tareas');
-    F.items=arr.map(t=>({ titulo:String(t.titulo||'').trim(), para:juntaCasarPersona(t.para), fecha:/^\d{4}-\d{2}-\d{2}$/.test(String(t.fecha||''))?t.fecha:juntaFechaSiguiente(), detalle:String(t.detalle||'').trim(), ok:true }));
+    F.items=arr.map(t=>({ titulo:String(t.titulo||'').trim(), para:juntaCasarPersona(t.para), fecha:/^\d{4}-\d{2}-\d{2}$/.test(String(t.fecha||''))?t.fecha:juntaFechaSiguiente(), detalle:String(t.detalle||'').trim(), ok:true,
+      repite:(['diaria','semanal','mensual'].includes(t.repite)?t.repite:'no'), dias:(Array.isArray(t.dias)?t.dias.map(Number).filter(d=>d>=0&&d<=6):[]), hasta:/^\d{4}-\d{2}-\d{2}$/.test(String(t.hasta||''))?t.hasta:'' }));
+    // si la IA aun así repite la misma tarea en varias fechas, se juntan en una serie
+    F.items=juntaDictarJuntar(F.items);
   }catch(e){
     console.error('juntaDictar', e, raw);
     toast('No he podido convertirlo. Prueba a dictarlo otra vez, más claro, o crea la tarea a mano.');
   }
   F.busy=false; if(S.modal==='junta_dictar') render();
+}
+/* 26/10/2026: varias tareas iguales (mismo título y persona) en fechas seguidas = una tarea que se repite */
+function juntaDictarJuntar(items){
+  const out=[]; const vistos={};
+  items.forEach(it=>{
+    const k=juntaNorm(it.titulo)+'|'+it.para;
+    if(it.repite==='no' && vistos[k]){ vistos[k].push(it); return; }
+    if(it.repite==='no') vistos[k]=[it];
+    out.push(it);
+  });
+  Object.values(vistos).forEach(g=>{
+    if(g.length<3) { g.slice(1).forEach(x=>out.push(x)); return; }
+    const f=g.map(x=>x.fecha).sort(); const ds=[...new Set(f.map(tarDow))].sort((a,b)=>a-b);
+    const it=g[0]; it.fecha=f[0]; it.repite=ds.length===7?'diaria':'semanal'; it.dias=ds.length===7?[]:ds;
+  });
+  return out;
+}
+/* 26/10/2026: si la IA la ha partido, juntar las marcadas en la primera (las demás pasan al detalle) */
+function juntaDictarUnir(){
+  const its=(F.items||[]).filter(x=>x.ok); if(its.length<2) return;
+  const a=its[0];
+  const partes=[a.detalle].concat(its.slice(1).map(x=>'- '+x.titulo+(x.detalle?': '+x.detalle:''))).filter(Boolean);
+  a.detalle=partes.join('\n');
+  F.items=[a]; render();
+}
+function juntaDictarRepite(i, v){ const it=(F.items||[])[i]; if(!it) return; it.repite=v; if(v==='semanal' && !(it.dias||[]).length && it.fecha) it.dias=[tarDow(it.fecha)]; render(); }
+function juntaDictarDia(i, d){ const it=(F.items||[])[i]; if(!it) return;
+  if(it.repite==='diaria'){ it.repite='semanal'; it.dias=[0,1,2,3,4,5,6]; }
+  if(!Array.isArray(it.dias)) it.dias=[]; const k=it.dias.indexOf(d); if(k>=0) it.dias.splice(k,1); else it.dias.push(d);
+  if(it.dias.length===7){ it.repite='diaria'; it.dias=[]; }
+  render(); }
+function juntaDictarRegla(it){
+  if(!it.repite || it.repite==='no') return null;
+  const r={tipo:it.repite, hasta:it.hasta||null};
+  if(it.repite==='semanal'){ let d=(it.dias||[]).slice(); if(!d.length && it.fecha) d=[tarDow(it.fecha)]; r.dias=d.sort((a,b)=>a-b); }
+  if(it.repite==='mensual') r.diaMes=tarDParse(it.fecha).getDate();
+  return r;
 }
 function juntaDictarSet(i, campo, v){ const it=(F.items||[])[i]; if(!it) return; it[campo]=v; render(); }
 function juntaDictarModal(){
@@ -10921,10 +10961,22 @@ function juntaDictarModal(){
           <select class="inp" style="flex:1;min-width:150px" onchange="juntaDictarSet(${i},'para',this.value)"><option value="">¿Para quién?</option>${us.map(n=>`<option ${it.para===n?'selected':''}>${incEsc(n)}</option>`).join('')}</select>
           <input class="inp" type="date" value="${incEsc(it.fecha)}" onchange="juntaDictarSet(${i},'fecha',this.value)" style="width:160px;flex:0 0 auto">
         </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+          <select class="inp" style="width:185px;flex:0 0 auto" onchange="juntaDictarRepite(${i},this.value)">
+            <option value="no" ${(it.repite||'no')==='no'?'selected':''}>No se repite</option>
+            <option value="diaria" ${it.repite==='diaria'?'selected':''}>🔁 Cada día</option>
+            <option value="semanal" ${it.repite==='semanal'?'selected':''}>🔁 Cada semana</option>
+            <option value="mensual" ${it.repite==='mensual'?'selected':''}>🔁 Cada mes</option>
+          </select>
+          ${(it.repite==='diaria'||it.repite==='semanal')?tarDiasBotones(it.repite==='diaria'?[0,1,2,3,4,5,6]:(it.dias||[]), `juntaDictarDia(${i},`):''}
+          ${it.repite==='mensual'?`<span class="muted" style="font-size:12px">El día ${tarDParse(it.fecha).getDate()} de cada mes</span>`:''}
+        </div>
+        ${(it.repite&&it.repite!=='no')?`<div class="muted" style="font-size:11px;margin-top:4px">Empieza el ${incEsc(fmtFecha(it.fecha))}${it.hasta?' y acaba el '+incEsc(fmtFecha(it.hasta)):''}.</div>`:''}
         ${it.detalle?`<div class="muted" style="font-size:12px;margin-top:5px">${incEsc(it.detalle)}</div>`:''}
       </div>`; }).join('');
     const n=F.items.filter(x=>x.ok).length;
-    cuerpo=`<div class="muted" style="font-size:13px;margin-bottom:10px">Revisa cada tarea: título, persona y fecha. Si no se dijo fecha, queda para la próxima reunión (${incEsc(juntaFechaLarga(juntaFechaSiguiente()))}). Lo que esté en rojo le falta algo.</div>${filas}
+    cuerpo=`<div class="muted" style="font-size:13px;margin-bottom:10px">Revisa cada tarea: título, persona, fecha y si se repite. Si no se dijo fecha, queda para la próxima reunión (${incEsc(juntaFechaLarga(juntaFechaSiguiente()))}). Lo que esté en rojo le falta algo.</div>${filas}
+      ${n>1?`<button type="button" class="btn btn-ghost btn-sm" onclick="juntaDictarUnir()" style="margin-top:10px">⇢ Unir en una sola tarea</button>`:''}
       <div style="display:flex;gap:10px;justify-content:space-between;margin-top:14px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="F.items=null;render()">‹ Volver a dictar</button><button class="btn btn-primary" onclick="juntaDictarCrear()">Crear ${n} tarea${n===1?'':'s'}</button></div>`;
   }
   return `<div class="overlay"><div class="modal" style="max-width:620px">
@@ -10936,14 +10988,26 @@ function juntaDictarCrear(){
   if(!its.length){ toast('No hay ninguna tarea marcada'); return; }
   if(its.some(x=>!x.titulo.trim() || !x.para || !x.fecha)){ toast('A alguna tarea le falta el título, la persona o la fecha'); render(); return; }
   const me=S.user.nombre; const actaId=F._acta;
-  const nuevas=its.map(x=>({ id:uid(), titulo:x.titulo.trim(), descripcion:(x.detalle||'')+(actaId?((x.detalle?'\n':'')+'Sale de la reunión del '+fmtFecha(todayStr())+'.'):''),
-    prioridad:'Media', area:'General', deQuien:me, paraQuien:x.para, participantes:[], horaInicio:'', horaFin:'', color:'', checklist:[],
-    fechaLimite:x.fecha, serieId:null, recurrencia:null, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[] }));
+  const nuevas=[]; const series=[];
+  its.forEach(x=>{
+    const t0={ titulo:x.titulo.trim(), descripcion:(x.detalle||'')+(actaId?((x.detalle?'\n':'')+'Sale de la reunión del '+fmtFecha(todayStr())+'.'):''),
+      prioridad:'Media', area:'General', deQuien:me, paraQuien:x.para, participantes:[], horaInicio:'', horaFin:'', color:'', checklist:[],
+      estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[] };
+    const rule=juntaDictarRegla(x);
+    if(!rule){ nuevas.push(Object.assign({ id:uid(), fechaLimite:x.fecha, serieId:null, recurrencia:null }, t0)); return; }
+    const startGen=(x.fecha>=todayStr())?x.fecha:todayStr();
+    let fechas=tarSerieFechas(rule, startGen, rule.hasta||tarAddDias(todayStr(), TAR_RECUR_HORIZON)); if(!fechas.length) fechas=[x.fecha];
+    const sid='S'+Date.now().toString(36)+Math.floor(Math.random()*1000);
+    fechas.forEach(f=>nuevas.push(Object.assign({}, t0, { id:sid+'_'+f, fechaLimite:f, serieId:sid, recurrencia:rule, vistos:{}, mensajes:[], tiempos:[], adjuntos:[], checklist:[] })));
+    series.push({ sid, titulo:t0.titulo, para:x.para, rule, n:fechas.length, primera:fechas[0] });
+  });
+  const enSerie=new Set(series.map(z=>z.sid));
   nuevas.forEach(t=>S.tareas.unshift(t));
   if(actaId){ const r=(S.juntaActas||[]).find(x=>x.id===actaId); if(r){ if(!Array.isArray(r.tareaIds)) r.tareaIds=[]; nuevas.forEach(t=>{ if(!r.tareaIds.includes(t.id)) r.tareaIds.push(t.id); }); juntaToca(r); } }
   closeModal(); render();
-  srvTarInsertMany(nuevas, nuevas.length===1?'Tarea creada':(nuevas.length+' tareas creadas'));
-  nuevas.forEach(t=>{ if(typeof tgNotify==='function' && t.paraQuien!==me) tgNotify(t.paraQuien, `📋 Hola ${(t.paraQuien||'').split(' ')[0]}, ${me} te ha asignado una tarea:\n\n${t.titulo}\n🟡 Media · 📅 ${fmtFecha(t.fechaLimite)}\n\nLa tienes en Lucai, en Tareas.`); });
+  srvTarInsertMany(nuevas, its.length===1?(series.length?'Serie creada':'Tarea creada'):(its.length+' tareas creadas'));
+  series.forEach(z=>{ if(typeof tgNotify==='function' && z.para!==me) tgNotify(z.para, `🔁 Hola ${(z.para||'').split(' ')[0]}, ${me} te ha asignado una tarea que se repite:\n\n${z.titulo}\n🟡 Media · ${tarRecurLabel(z.rule)} · ${z.n} fechas\n\nLa tienes en Lucai, en Tareas.`); });
+  nuevas.forEach(t=>{ if(t.serieId && enSerie.has(t.serieId)) return; if(typeof tgNotify==='function' && t.paraQuien!==me) tgNotify(t.paraQuien, `📋 Hola ${(t.paraQuien||'').split(' ')[0]}, ${me} te ha asignado una tarea:\n\n${t.titulo}\n🟡 Media · 📅 ${fmtFecha(t.fechaLimite)}\n\nLa tienes en Lucai, en Tareas.`); });
 }
 
 /* ---- enrutado ---- */
