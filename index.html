@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-2346">
+<meta name="lucai-version" content="2026-10-27-0000">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3092,7 +3092,7 @@ function homeView(){
   try{
     const tiles=[];
     if(canAccess('tareas')) tiles.push({v:taPend, rojo:taVenc>0, l:taVenc?`${taVenc} vencida${taVenc===1?'':'s'} · pendientes`:'Tareas pendientes', go:"setModule('tareas')"});
-    if(canAccess('material') && (typeof almRecibe!=='function' || almRecibe())){ const nped=(typeof lowItems==='function')?lowItems().length:0; tiles.push({v:nped, rojo:nped>0, l:'Artículos por pedir', go:"setModule('material')"}); }
+    if(canAccess('material') && (typeof almRecibe!=='function' || almRecibe())){ const nped=(typeof lowItems==='function')?lowItems().length:0; tiles.push({v:nped, rojo:(typeof almAvisosN==='function'?almAvisosN():nped)>0, l:'Artículos por pedir', go:"setModule('material')"}); }
     if(tiles.length<2 && canAccess('comunicaciones')) tiles.push({v:comNL, rojo:comNL>0, l:'Avisos sin leer', go:"setModule('comunicaciones')"});
     if(tiles.length) mk=`<div class="np-mkpis">${tiles.slice(0,2).map(t=>`<button onclick="${t.go}"><div class="k-v${t.rojo?' rojo':''}">${t.v}</div><div class="k-l">${t.l}</div></button>`).join('')}</div>`;
   }catch(_){}
@@ -11587,7 +11587,7 @@ function lxHomeTop(){
   const ring=`<div class="lx-ring" title="Hechas hoy / para hoy"><svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${R}" fill="none" stroke="var(--arena-2)" stroke-width="5"/><circle cx="28" cy="28" r="${R}" fill="none" stroke="#16A34A" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/></svg><span>${tot?`${hechasHoy}/${tot}`:'✓'}</span></div>`;
   const tiles=[];
   const tile=(id,lbl,txt,rojo)=>{ const ic=(typeof TB_IC==='object'&&TB_IC[id])?`<svg viewBox="0 0 24 24">${TB_IC[id]}</svg>`:''; return `<button class="lx-tile" onclick="setModule('${id}')"><span class="ic">${ic}</span><span><b>${lbl}</b><small class="${rojo?'rojo':''}">${txt}</small></span></button>`; };
-  try{ if(canAccess('material')){ const n=(typeof almAvisosN==='function')?almAvisosN():lowItems().length; tiles.push(tile('material','Almacén', n?`${n} por pedir`:((typeof almRecibe!=='function'||almRecibe())?'Todo en orden':'Stock y salidas'), n>0)); } }catch(_){}
+  try{ if(canAccess('material')){ const n=(typeof almAvisosN==='function')?almAvisosN():lowItems().length; const nt=lowItems().length, rec=(typeof almRecibe!=='function'||almRecibe()); tiles.push(tile('material','Almacén', n?`${n} por pedir`:(rec?(nt?`${nt} por pedir · visto`:'Todo en orden'):'Stock y salidas'), n>0)); } }catch(_){}
   try{ if(canAccess('incidencias')){ const n=(S.incidencias||[]).filter(x=>!x.revisada).length; tiles.push(tile('incidencias','Incidencias', n?`${n} sin revisar`:'Nada pendiente', n>0)); } }catch(_){}
   try{ if(canAccess('equipos')){ const n=(S.partes||[]).filter(eqAbierto).length; tiles.push(tile('equipos','Equipos', n?`${n} parte${n===1?'':'s'} abierto${n===1?'':'s'}`:'Sin partes abiertos', false)); } }catch(_){}
   try{ if(canAccess('junta')){ const d=juntaProxima(); const f=d?new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'}).replace('.',''):''; tiles.push(tile('junta','Reunión', f?`${f} · ${(S.juntaCfg&&S.juntaCfg.hora)||''}`:'Sin fecha', false)); } }catch(_){}
@@ -13493,7 +13493,22 @@ lowItems=function(){ return almBajoTodos().filter(a=>!almPedidoDe(a.cod) && !alm
 function almCfg(){ return (S.almCfgL||[]).find(x=>x && x.id==='cfg') || {id:'cfg', avisan:[]}; }
 function almAvisan(){ const a=(almCfg().avisan||[]).filter(Boolean); return a.length ? a : appUsers().filter(u=>u.admin===true || ['Director','Directora'].includes(u.rol)).map(u=>u.nombre); }
 function almRecibe(){ return !!S.user && (almAvisan().includes(S.user.nombre) || (!(almCfg().avisan||[]).length && isAdmin())); }
-function almAvisosN(){ return almRecibe() ? lowItems().length : 0; }
+/* «Entendido» (David, 26/10): cada uno quita SU campana; lo visto vuelve a avisar si entra material de ese artículo y
+   vuelve a bajar, y lo nuevo que baje avisa siempre. Cerrar la ventana sin pulsar nada no quita el aviso. */
+if(!JUNTA_KEYS.includes('almVistosL')) JUNTA_KEYS.push('almVistosL');
+if(!Array.isArray(S.almVistosL)) S.almVistosL=[];
+function almMisVistos(){ return ((S.almVistosL||[]).find(x=>x && S.user && x.id===S.user.nombre) || {}).cods || {}; }
+function almVisto(cod){
+  const ts=almMisVistos()[cod]; if(!ts) return false;
+  return !(S.movimientos||[]).some(m=>m && m.cod===cod && m.tipo==='entrada' && !m.anulado && String(m.ts||'')>String(ts));
+}
+function almAvisosN(){ return almRecibe() ? lowItems().filter(a=>!almVisto(a.cod)).length : 0; }
+function almEntendido(){
+  if(!S.user) return;
+  let r=(S.almVistosL||[]).find(x=>x && x.id===S.user.nombre); if(!r){ r={id:S.user.nombre, cods:{}}; S.almVistosL.push(r); }
+  const t=now(); r.cods=Object.assign({}, r.cods||{}); lowItems().forEach(a=>{ if(!almVisto(a.cod)) r.cods[a.cod]=t; });
+  closeAlert(); juntaToca(r); toast('Aviso quitado. Si baja algo más, volverá a avisar.');
+}
 /* la píldora «por pedir» filtra lo mismo que cuenta */
 const _stockMatch_alm=stockMatch;
 stockMatch=function(a){ if(S.stockPedir){ const ped=S.stockPedir; S.stockPedir=false; const ok=_stockMatch_alm(a); S.stockPedir=ped; return ok && lowItems().includes(a); } return _stockMatch_alm(a); };
@@ -13514,12 +13529,20 @@ stockView=function(){
 };
 /* campana (por pedir y caducidad) solo para quien recibe los avisos */
 const _whoBlock_alm=whoBlock;
-whoBlock=function(showBell){ return _whoBlock_alm(showBell && almRecibe()); };
+whoBlock=function(showBell){
+  let h=_whoBlock_alm(false);
+  if(!(showBell && almRecibe())) return h;
+  const n=almAvisosN(), c=cadItems().length;
+  const b=(n?`<button class="bell" onclick="openAlert('pedir')" title="Pendiente de pedir"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="badge">${n}</span></button>`:'')
+    +(c?`<button class="bell" onclick="openAlert('cad')" title="Caducidad"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="badge">${c}</span></button>`:'');
+  return h.replace('<div class="who">', '<div class="who">'+b);
+};
 /* la ventana «Pendiente de pedir»: lo que falta, con «Ya está gestionado», y aparte lo que ya está en marcha */
 pedirModal=function(){
   const items=lowItems();
   const enMarcha=almBajoTodos().filter(a=>almPedidoDe(a.cod) || almGestDe(a.cod));
-  const fila=(a,der)=>`<div class="alm-pf"><span><strong>${incEsc(a.nombre)}</strong> <span class="muted mono">${a.cod}</span> · ${incEsc(a.proveedor||'sin proveedor')}<span class="tag ${a.stock===0?'inc':'adj'}" style="margin-left:6px">${a.stock} ud. (mín. ${a.min})</span></span>${der}</div>`;
+  const tel=a=>{ const t=a.proveedor && S.proveedoresInfo && S.proveedoresInfo[a.proveedor] && S.proveedoresInfo[a.proveedor].telefono; return t?` <a class="alm-tel" href="tel:${incEsc(String(t).replace(/\s+/g,''))}" title="Llamar a ${incEsc(a.proveedor)}">📞 ${incEsc(t)}</a>`:''; };
+  const fila=(a,der)=>`<div class="alm-pf"><span><strong>${incEsc(a.nombre)}</strong> <span class="muted mono">${a.cod}</span> · ${incEsc(a.proveedor||'sin proveedor')}${tel(a)}<span class="tag ${a.stock===0?'inc':'adj'}" style="margin-left:6px">${a.stock} ud. (mín. ${a.min})</span></span>${der}</div>`;
   const cats=[...new Set(items.map(a=>a.categoria))].sort((a,b)=>a.localeCompare(b));
   const falta=items.length ? cats.map(c=>{ const its=items.filter(a=>a.categoria===c);
       return `<div class="alm-pg"><div class="alm-pgt"><span>${incEsc(c)}</span><span class="muted">${its.length}</span></div>${its.map(a=>fila(a, `<button class="btn btn-ghost btn-sm" onclick="almGestAbrir('${a.cod}')">Ya está gestionado</button>`)).join('')}</div>`; }).join('')
@@ -13532,7 +13555,7 @@ pedirModal=function(){
   return `<div class="overlay"><div class="modal">
     <div class="modal-head"><h2>Pendiente de pedir (${items.length})</h2><button class="x" onclick="closeAlert()">×</button></div>
     <div class="modal-body"><div class="muted" style="font-size:12.5px;margin-bottom:12px">Lo que metes en un pedido deja de avisar solo; cuando lo recibes, si sigue bajo mínimo, vuelve a avisar.</div>${falta}${marcha}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeAlert()">Cerrar</button><button class="btn btn-primary" onclick="closeAlert();setSub('pedidos')">Ir a pedidos</button></div>
+    <div class="modal-foot alm-pie"><button class="btn btn-ghost" onclick="closeAlert()" title="Cierra sin quitar el aviso">Cerrar</button><button class="btn btn-ghost" onclick="closeAlert();setSub('pedidos')">Hacer el pedido</button>${almAvisosN()?`<button class="btn btn-primary" onclick="almEntendido()" title="Quita el aviso de tu campana; si baja algo más, vuelve a avisar">Entendido</button>`:''}</div>
   </div></div>`;
 };
 function almGestAbrir(cod){ const a=art(cod); if(!a) return; S.alert=''; F={type:'alm_gest', cod, hasta:juntaMasDias(todayStr(),7), nota:''}; S.modal='alm_gest'; render(); }
@@ -13591,6 +13614,8 @@ document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-alm-avisos">
 .alm-pgt{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px;margin-bottom:6px}
 .alm-pf{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--t-bd-line);border-radius:9px;margin-bottom:6px;font-size:14px}
 .alm-pf .btn{white-space:nowrap;flex:0 0 auto}
+.alm-tel{font-size:12.5px;font-weight:600;color:var(--lx-azul,#2563EB);text-decoration:none;white-space:nowrap;margin-left:4px}
+@media(max-width:720px){ .alm-pie{flex-wrap:wrap} .alm-pie .btn{flex:1 1 30%} }
 @media(max-width:720px){ .alm-pf{flex-direction:column;align-items:flex-start} }
 </style>`);
 /* ===== FIN AVISO DE «POR PEDIR» ===== */
