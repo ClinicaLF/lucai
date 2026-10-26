@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-2332">
+<meta name="lucai-version" content="2026-10-26-2341">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -505,6 +505,13 @@ function lucaiTemaBtn(){ return '<button class="logout tema-btn" onclick="lucaiT
 .tsw-sin .tsw-sin-l{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
 .tsw-ayuda{font-size:12px;color:var(--t-fg-8A949B);margin:-6px 0 10px}
 @media(max-width:720px){ .tsw-grid{grid-template-columns:repeat(7,150px);overflow-x:auto} }
+/* ficha al pasar el ratón por una tarea de la Semana (26/10/2026) */
+.tsw-pop{position:fixed;z-index:9000;width:320px;max-width:calc(100vw - 24px);background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;font-size:13px;line-height:1.4;color:var(--t-fg-333F48);pointer-events:none;opacity:0;transition:opacity .12s}
+.tsw-pop.on{opacity:1}
+.tsw-pop .pt{font-weight:700;font-size:14px;margin-bottom:6px;word-break:break-word}
+.tsw-pop .pm{font-size:12px;color:var(--t-fg-5A6770);margin-top:3px}
+.tsw-pop .pd{margin-top:8px;white-space:pre-wrap;word-break:break-word;color:var(--t-fg-333F48);max-height:180px;overflow:hidden}
+.tsw-pop .pd.vacio{color:var(--t-fg-8A949B);font-style:italic}
 
 /* === candado de módulos sin acceso === */
 .pill-lock{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--t-fg-8A949B);background:var(--t-bg-EAE3D7);padding:3px 9px;border-radius:20px}
@@ -5114,7 +5121,7 @@ function tarSemanaCols(){
     const mueve = activa && (admin || t.deQuien===me);
     const quien = t.paraQuien===me?'para mí':('para '+(t.paraQuien||'—'));
     const ok = (activa && (recibida||admin)) ? `<button class="ok" title="Marcar hecha" draggable="false" onclick="event.stopPropagation();tarMarcarHecha('${t.id}')">✓</button>` : '';
-    return `<div class="tsw-c" style="border-left-color:${col};${tach}" onclick="openTarDet('${t.id}')" ${mueve?`draggable="true" ondragstart="tarSwDragStart(event,'${t.id}')" ondragend="tarSwDragEnd(event)"`:`title="${activa?'La fecha la cambia quien mandó la tarea':''}"`}>
+    return `<div class="tsw-c" data-tid="${t.id}" style="border-left-color:${col};${tach}" onclick="openTarDet('${t.id}')" ${mueve?`draggable="true" ondragstart="tarSwDragStart(event,'${t.id}')" ondragend="tarSwDragEnd(event)"`:''}>
       <div class="t">${tarNuevosPara(t,me)?'<span style="color:var(--t-fg-6E8E00)">● </span>':''}${t.horaInicio?`<span style="color:var(--t-fg-5A6770);font-weight:700">${incEsc(t.horaInicio)} </span>`:''}${incEsc(t.titulo)}${(t.serieId||t.recurrencia)?' <span title="Recurrente" style="color:var(--t-fg-8A949B)">⟳</span>':''}</div>
       <div class="q"><span class="qq">${incEsc(quien)}${t.estado==='En espera'?' · <span style="color:var(--t-fg-8A5A00);font-weight:600">esperando</span>':''}</span>${ok}</div>
     </div>`;
@@ -5138,7 +5145,7 @@ function tarSemanaCols(){
   </div>`;
   return nav+bloqueSin+`<div class="tsw-grid">${cols.join('')}</div>`;
 }
-function tarSwDragStart(ev,id){ S._tswDrag=id; try{ ev.dataTransfer.setData('text/plain',id); ev.dataTransfer.effectAllowed='move'; }catch(e){} ev.currentTarget.classList.add('drag'); }
+function tarSwDragStart(ev,id){ tswPopOcultar(); S._tswDrag=id; try{ ev.dataTransfer.setData('text/plain',id); ev.dataTransfer.effectAllowed='move'; }catch(e){} ev.currentTarget.classList.add('drag'); }
 function tarSwDragEnd(ev){ ev.currentTarget.classList.remove('drag'); document.querySelectorAll('.tsw-col.over,.tsw-sin.over').forEach(x=>x.classList.remove('over')); }
 function tarSwOver(ev){ if(!S._tswDrag) return; ev.preventDefault(); try{ ev.dataTransfer.dropEffect='move'; }catch(e){} ev.currentTarget.classList.add('over'); }
 function tarSwLeave(ev){ if(!ev.currentTarget.contains(ev.relatedTarget)) ev.currentTarget.classList.remove('over'); }
@@ -5149,6 +5156,55 @@ function tarSwDrop(ev,iso){
   if((t.fechaLimite||'')===(iso||'')) return;
   tarSetFecha(id, iso);
 }
+
+/* Ficha al pasar el ratón (solo ordenador): título entero, detalle, quién, cuándo, estado, pasos y conversación */
+let _tswPopT=null;
+function tswPopOcultar(){ clearTimeout(_tswPopT); const p=document.getElementById('tswPop'); if(p) p.classList.remove('on'); }
+function tswPopHtml(t){
+  const me=S.user&&S.user.nombre;
+  const quien = t.deQuien===t.paraQuien ? (t.paraQuien===me?'Para mí':'De y para '+t.paraQuien)
+    : (t.deQuien===me?'Para '+(t.paraQuien||'—'):'De '+(t.deQuien||'—')+(t.paraQuien===me?' · para mí':' · para '+(t.paraQuien||'—')));
+  const part=tarPartList(t).filter(n=>n!==t.paraQuien);
+  const cuando=[t.fechaLimite?fmtFecha(t.fechaLimite):'Sin fecha', t.horaInicio?(t.horaInicio+(t.horaFin?'–'+t.horaFin:'')):''].filter(Boolean).join(' · ');
+  const est = (typeof tarEspEsta==='function' && tarEspEsta(t)) ? '⏳ '+tarEspTxt(t) : (typeof tarEstadoLabel==='function'?tarEstadoLabel(t.estado):t.estado);
+  const chk=Array.isArray(t.checklist)?t.checklist:[]; const hechos=chk.filter(c=>c&&c.hecho).length;
+  const msgs=(Array.isArray(t.mensajes)?t.mensajes:[]).filter(m=>m&&!m.borrado);
+  const ult=msgs.length?msgs[msgs.length-1]:null;
+  const det=(t.descripcion||'').trim();
+  return `<div class="pt">${incEsc(tarCap(t.titulo||''))}</div>
+    <div class="pm">${incEsc(quien)}${part.length?' · con '+incEsc(part.join(', ')):''}</div>
+    <div class="pm">📅 ${incEsc(cuando)} · ${incEsc(t.prioridad||'Media')} · ${incEsc(est||'')}</div>
+    ${(t.serieId||t.recurrencia)?`<div class="pm">⟳ ${incEsc(tarRecurLabel(t.recurrencia)||'Se repite')}</div>`:''}
+    ${chk.length?`<div class="pm">☑ ${hechos} de ${chk.length} pasos hechos</div>`:''}
+    <div class="pd${det?'':' vacio'}">${det?incEsc(det.length>400?det.slice(0,400)+'…':det):'Sin detalle'}</div>
+    ${ult?`<div class="pm" style="margin-top:8px">💬 ${msgs.length} mensaje${msgs.length===1?'':'s'} · último de ${incEsc(String(ult.autor||ult.de||ult.quien||'—'))}</div>`:''}`;
+}
+function tswPopMostrar(card){
+  const t=(S.tareas||[]).find(x=>x.id===card.getAttribute('data-tid')); if(!t) return;
+  let p=document.getElementById('tswPop');
+  if(!p){ p=document.createElement('div'); p.id='tswPop'; p.className='tsw-pop'; document.body.appendChild(p); }
+  p.innerHTML=tswPopHtml(t);
+  const r=card.getBoundingClientRect(), w=p.offsetWidth, h=p.offsetHeight, vw=window.innerWidth, vh=window.innerHeight;
+  let x=r.right+8; if(x+w>vw-8) x=r.left-w-8; if(x<8) x=Math.max(8, Math.min(vw-w-8, r.left));
+  let y=r.top; if(y+h>vh-8) y=Math.max(8, vh-h-8);
+  p.style.left=x+'px'; p.style.top=y+'px'; p.classList.add('on');
+}
+(function(){
+  if(!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches)) return;
+  document.addEventListener('mouseover', function(ev){
+    const c=ev.target.closest && ev.target.closest('.tsw-c[data-tid]');
+    if(!c){ return; }
+    if(ev.relatedTarget && c.contains(ev.relatedTarget)) return;
+    clearTimeout(_tswPopT); _tswPopT=setTimeout(function(){ if(document.body.contains(c) && !S._tswDrag) tswPopMostrar(c); }, 350);
+  });
+  document.addEventListener('mouseout', function(ev){
+    const c=ev.target.closest && ev.target.closest('.tsw-c[data-tid]');
+    if(c && ev.relatedTarget && c.contains(ev.relatedTarget)) return;
+    if(c) tswPopOcultar();
+  });
+  document.addEventListener('mousedown', tswPopOcultar, true);
+  window.addEventListener('scroll', tswPopOcultar, true);
+})();
 
 /* ---- resumen del día / panel de equipo ---- */
 function setTarResPeriodo(p){ S.tarResPeriodo=p; render(); }
