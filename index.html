@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-1017">
+<meta name="lucai-version" content="2026-10-26-1213">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -1835,9 +1835,10 @@ function undoQuick(){
   window._lastQuick=null;
   render(); toast(`Deshecho · ${a?a.nombre:''} vuelve a ${a?a.stock:''}`);
 }
-function anular(id){
+async function anular(id){
   const m=S.movimientos.find(x=>x.id===id); if(!m||m.anulado) return;
   if(!(m.tipo==='salida'||m.tipo==='merma')){ toast('Solo se anulan salidas y bajas'); return; }
+  if(!await lxPregunta('¿Anular este movimiento?\n\nLas unidades vuelven al stock.')) return;
   const a=art(m.cod); if(a) a.stock+=(m.cant||0);
   m.anulado=true; m.anuladoPor=S.user.nombre; m.anuladoTs=tsFrom(todayStr());
   if(window._lastQuick===m) window._lastQuick=null;
@@ -2172,9 +2173,10 @@ function undoQuick(){
   const a=art(mov.cod);
   srvAnular(mov.id, `Deshecho · ${a?a.nombre:''}`);
 }
-function anular(id){
+async function anular(id){
   const m=S.movimientos.find(x=>x.id===id); if(!m||m.anulado) return;
   if(!(m.tipo==='salida'||m.tipo==='merma')){ toast('Solo se anulan salidas y bajas'); return; }
+  if(!await lxPregunta('¿Anular este movimiento?\n\nLas unidades vuelven al stock.')) return;
   if(window._lastQuick && window._lastQuick.id===id) window._lastQuick=null;
   srvAnular(id, 'Movimiento anulado');
 }
@@ -3679,7 +3681,7 @@ function eqEquipoEditModalContent(){
     </div></div></div>`;
 }
 
-function darBajaEquipo(){ setEquipoActivo(F.id,false); }
+async function darBajaEquipo(){ if(!await lxPregunta('¿Dar de baja este equipo?\n\nDeja de salir en la lista. Se puede reactivar.')) return; setEquipoActivo(F.id,false); }
 function reactivarEquipo(){ setEquipoActivo(F.id,true); }
 function setEquipoActivo(id,activo){
   const e=(S.equipos||[]).find(x=>x.id===id); if(!e) return;
@@ -4403,12 +4405,13 @@ function tareasView(){
      (el tiempo se apunta dentro de cada tarea). El código de las pestañas antiguas sigue ahí. */
   if(['tar_mias','tar_recibidas','tar_emitidas'].includes(S.sub)){ S.tarVista = S.sub==='tar_mias' ? 'todas' : S.sub.replace('tar_',''); S.sub='tar_todas_mias'; }
   /* 25/10/2026 (David): «Mi cerebro» (tar_panel) se oculta; su código y sus datos siguen intactos. */
-  const subs = ['tar_todas_mias','tar_semana','tar_resumen'];
+  /* 26/10/2026 (David): «Ideas» vuelve, para todos (cada uno ve las suyas): es la nevera. */
+  const subs = ['tar_todas_mias','tar_ideas','tar_semana','tar_resumen'];
   /* 'Equipo' (el control de todo el equipo) solo lo ve el perfil de control,
      y le sale la primera porque es justo para lo que entra. */
   if(esControlEquipo()) subs.unshift('tar_todas');
   const sub = subs.includes(S.sub) ? S.sub : subs[0];
-  const lbl = {tar_todas_mias:'Tareas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_panel:'Mi cerebro',tar_ideas:'Ideas'+(typeof ideasPendCount==='function'&&ideasPendCount()?` (${ideasPendCount()})`:''),tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
+  const lbl = {tar_todas_mias:'Tareas',tar_recibidas:'Recibidas',tar_emitidas:'Emitidas',tar_mias:'Mías',tar_panel:'Mi cerebro',tar_ideas:'Ideas',tar_semana:'Semana',tar_cal:'Calendario',tar_registro:'Registro',tar_todas:'Equipo',tar_resumen:'Resumen'};
   const seg = `<div class="seg tar-seg">${subs.map(s=>`<button class="${sub===s?'on':''}" onclick="setSub('${s}')">${lbl[s]}</button>`).join('')}</div>`;
   let body='';
   if(sub==='tar_semana') body=tarSemanaView();
@@ -5267,10 +5270,11 @@ function tarAlDiaCard(){
     <div style="font-size:13px;color:var(--t-fg-8A949B)">${sub}</div>
   </div>`;
 }
-function tarEliminar(id){
+async function tarEliminar(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   if(!(isAdmin() || t.deQuien===S.user.nombre)){ toast('Solo puede eliminarla quien la creó o Dirección'); return; }
   if(t.serieId){ S.tarDelId=id; closeModal(); render(); return; }
+  if(!await lxPregunta('¿Eliminar la tarea "'+(t.titulo||'')+'"?\n\nSe borra para todos y no se puede deshacer.')) return;
   S.tareas=S.tareas.filter(x=>x.id!==id); closeModal(); render();
   srvTarDelete(id, 'Tarea eliminada');
 }
@@ -5353,10 +5357,11 @@ function tarAreaRename(i, val){
   (S.tareas||[]).forEach(t=>{ if((t.area||'General')===old){ t.area=v; srvTarUpdate(t.id, t); } });
   render(); toast('Área renombrada');
 }
-function tarAreaDelete(i){
+async function tarAreaDelete(i){
   const areas=tarAreas().slice(); if(i<0||i>=areas.length) return;
   if(areas[i]==='General'){ toast('No se puede borrar General'); return; }
   if(areas.length<=1){ toast('Debe quedar al menos un área'); return; }
+  if(!await lxPregunta('¿Borrar el área "'+areas[i]+'"?\n\nLas tareas no se borran.')) return;
   areas.splice(i,1); S.tarAreas=areas; _tarPersistAreas(); render(); toast('Área borrada');
 }
 function tarSetColor(c){ F.color=c; render(); }
@@ -5890,11 +5895,12 @@ function tarAddTiempo(id){
   F.tMin=''; F.tNota=''; render();
   srvTarUpdate(id, t, `Tiempo añadido (${tarFmtMin(min)})`);
 }
-function tarDelTiempo(id, idx){
+async function tarDelTiempo(id, idx){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t||!Array.isArray(t.tiempos)) return;
   const me=S.user.nombre;
   if(!(isAdmin()||tarInvolucra(t,me))){ toast('No puedes editar el tiempo de esta tarea'); return; }
   if(idx<0||idx>=t.tiempos.length) return;
+  if(!await lxPregunta('¿Borrar este apunte de tiempo?')) return;
   t.tiempos.splice(idx,1); render(); srvTarUpdate(id, t, 'Apunte de tiempo borrado');
 }
 function openTarEdit(id){
@@ -6695,7 +6701,7 @@ async function iaSend(textoFijo){
   }
 }
 function iaSugerencia(t){ iaSend(t); }
-function iaLimpiar(){ S.iaChat=[]; render(); }
+async function iaLimpiar(){ if(!await lxPregunta('¿Borrar la conversación con el asistente?')) return; S.iaChat=[]; render(); }
 
 function iaFormat(t){
   let s = incEsc(t||'');
@@ -7053,9 +7059,10 @@ function comComentariosHtml(c){
     ${compose}
   </div>`;
 }
-function comEliminar(id){
+async function comEliminar(id){
   const c=(S.comunicaciones||[]).find(x=>x.id===id); if(!c) return;
   if(!(isAdmin()||c.deQuien===S.user.nombre)){ toast('Solo puede borrarla quien la creó o Dirección'); return; }
+  if(!await lxPregunta('¿Eliminar esta comunicación?\n\nSe borra para todos y no se puede deshacer.')) return;
   closeModal(); srvComDelete(id, 'Comunicación eliminada');
 }
 function comDetModalContent(){
@@ -7106,7 +7113,7 @@ function grupoAdd(){
   if(!miembros.length){ toast('Elige al menos un miembro'); return; }
   S.grupos=comGrupos().slice(); S.grupos.push({nombre, miembros}); F.gNombre=''; F.gMiembros=[]; _comPersistGrupos(); render(); toast('Grupo creado');
 }
-function grupoDelete(i){ const g=comGrupos().slice(); if(i<0||i>=g.length) return; g.splice(i,1); S.grupos=g; _comPersistGrupos(); render(); toast('Grupo borrado'); }
+async function grupoDelete(i){ const g=comGrupos().slice(); if(i<0||i>=g.length) return; if(!await lxPregunta('¿Borrar el grupo "'+(x=>String((x&&x.nombre)||x||''))(g[i])+'"?')) return; g.splice(i,1); S.grupos=g; _comPersistGrupos(); render(); toast('Grupo borrado'); }
 function gruposModalContent(){
   const grupos=comGrupos();
   const people=COM_USERS();
@@ -7151,10 +7158,11 @@ function comCatRename(i, val){
   (S.comunicaciones||[]).forEach(c=>{ if((c.categoria||'General')===old){ c.categoria=v; srvComUpdate(c.id, c); } });
   render(); toast('Categoría renombrada');
 }
-function comCatDelete(i){
+async function comCatDelete(i){
   const cats=comCategorias().slice(); if(i<0||i>=cats.length) return;
   if(cats[i]==='General'){ toast('No se puede borrar General'); return; }
   if(cats.length<=1){ toast('Debe quedar al menos una categoría'); return; }
+  if(!await lxPregunta('¿Borrar la categoría "'+cats[i]+'"?\n\nLas comunicaciones no se borran.')) return;
   cats.splice(i,1); S.comCategorias=cats; _comPersistGrupos(); render(); toast('Categoría borrada');
 }
 function comCatsModalContent(){
@@ -7289,8 +7297,9 @@ function doctorAdd(){
   if(list.some(d=>d.toLowerCase()===n.toLowerCase())){ toast('Ese doctor ya está en la lista'); return; }
   list.push(n); S.doctores=list; F.nuevo=''; _usuariosPersist(); render(); toast('Doctor añadido');
 }
-function doctorDel(i){
+async function doctorDel(i){
   const list=appDoctores().slice(); if(list[i]==null) return;
+  if(!await lxPregunta('¿Quitar a "'+(x=>String((x&&x.nombre)||x||''))(list[i])+'" de la lista de doctores?')) return;
   list.splice(i,1); S.doctores=list; _usuariosPersist(); render();
 }
 
@@ -7376,10 +7385,12 @@ async function commitUsuario(){
   if(S.user && S.user.id===F.id){ const me=list.find(u=>u.id===F.id); if(me) S.user=me; }
   openUsuarios(); toast('Usuario guardado');
 }
-function usuarioDelete(id){
+async function usuarioDelete(id){
   if(!isAdmin()) return;
   if(S.user && S.user.id===id){ toast('No puedes borrar tu propio usuario mientras estás dentro'); return; }
   if(appUsers().length<=1){ toast('Debe quedar al menos un usuario'); return; }
+  const uDel=appUsers().find(u=>u.id===id);
+  if(!await lxPregunta('¿Borrar el usuario "'+((uDel&&uDel.nombre)||'')+'"?\n\nDejará de poder entrar en Lucai. No se puede deshacer.')) return;
   S.usuarios=appUsers().filter(u=>u.id!==id); _usuariosPersist(); openUsuarios(); toast('Usuario borrado');
 }
 
@@ -7829,10 +7840,11 @@ function tarAddImagen(id){
   });
 }
 
-function tarDelAdjunto(id, idx){
+async function tarDelAdjunto(id, idx){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t || !Array.isArray(t.adjuntos)) return;
   if(!tarPuedeTocar(t)){ toast('No puedes quitar imágenes'); return; }
   const ref=t.adjuntos[idx]; if(!ref) return;
+  if(!await lxPregunta('¿Quitar esta imagen de la tarea?\n\nNo se puede deshacer.')) return;
   t.adjuntos.splice(idx,1); render(); srvTarUpdate(id, t, 'Imagen quitada');
   try{ sbc.storage.from(TAR_BUCKET).remove([ref.path]); }catch(_){}
 }
@@ -8038,7 +8050,8 @@ function commitAcceso(){
   else { list.push({ id:uid(), nombre, url, icono:F.icono||'🔗', color:F.color||'#EAE3D7' }); }
   S.accesos=list; _usuariosPersist(); closeModal(); render(); toast('Acceso guardado');
 }
-function accesoDel(id){
+async function accesoDel(id){
+  if(!await lxPregunta('¿Eliminar este acceso?\n\nNo se puede deshacer.')) return;
   S.accesos=appAccesos().filter(a=>a.id!==id); _usuariosPersist(); closeModal(); render(); toast('Acceso eliminado');
 }
 const _appView_acc = appView;
@@ -8752,7 +8765,7 @@ function tarIdeasView(){
         ${i.descripcion?`<div class="muted" style="font-size:13px;margin-top:4px;white-space:pre-wrap">${incEsc(i.descripcion)}</div>`:''}
         <div class="muted" style="font-size:12px;margin-top:6px">${chip(i)} &nbsp;·&nbsp; apuntada el ${fmtFecha(i.ts)}</div>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <div class="id-acts" style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn btn-primary btn-sm" onclick="ideaConvertir('${i.id}')">Convertir en tarea</button>
         <button class="btn btn-ghost btn-sm" onclick="openIdea('${i.id}')">Editar</button>
         <button class="btn btn-ghost btn-sm" onclick="ideaResolver('${i.id}','Descartada')">Descartar</button>
@@ -8769,10 +8782,10 @@ function tarIdeasView(){
       <button class="btn btn-ghost btn-sm" onclick="ideaBorrar('${i.id}')">Borrar</button>
     </div>
   </div>`;
-  const vacio=`<div class="muted" style="padding:24px;text-align:center">Tu cartera está vacía. Apunta aquí las ideas y proyectos que no son para ya, y revísalos cuando toque (por ejemplo, cada viernes).</div>`;
+  const vacio=`<div class="muted" style="padding:24px;text-align:center">Tu nevera está vacía. Pulsa «🎤 Dictar ideas» y cuéntala, o escríbela.</div>`;
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px">
-      <div class="note" style="margin:0;flex:1;min-width:220px">Cartera personal: cosas que quieres hacer <b>cuando se pueda</b>, sin fecha ni presión. Revísala periódicamente y decide: convertir en tarea o descartar. Solo la ves tú.</div>
-      <button class="btn btn-primary" onclick="openIdea()">Nueva idea</button>
+      <div class="note" style="margin:0;flex:1;min-width:220px">Tu nevera: ideas y proyectos que no son para ya pero no quieres perder. Revísala de vez en cuando (por ejemplo, los viernes): convertir en tarea, descartar o dejarla. Solo la ves tú.</div>
+      <div class="id-bar"><button class="btn btn-primary" onclick="openIdeaDictar()">🎤 Dictar ideas</button><button class="btn btn-ghost" onclick="openIdea()">Escribir idea</button></div>
     </div>
     ${pend.length?pend.map(card).join(''):vacio}
     ${hist.length?`<div style="margin-top:18px">
@@ -8822,7 +8835,7 @@ function commitIdea(){
   }
   const i={ id:F.id, titulo, descripcion:(F.descripcion||'').trim(), usuario:S.user.nombre,
     importancia:F.importancia||'Normal', estado:'Pendiente', ts:now(), fechaResuelta:null };
-  S.ideas.unshift(i); closeModal(); render(); srvIdeaInsert(i, 'Idea guardada en la cartera');
+  S.ideas.unshift(i); closeModal(); render(); srvIdeaInsert(i, 'Idea guardada en la nevera');
 }
 
 /* ---- convertir / descartar / recuperar / borrar ---- */
@@ -10224,7 +10237,7 @@ function juntaSiguiente(){ const a=juntaActaEnCurso(); if(!a) return; const i=JU
 function juntaSegParte(a, pid){ let s=(a.tiempos&&a.tiempos[pid])||0; if(a.parte===pid && a.parteDesde) s+=(Date.now()-a.parteDesde)/1000; return s; }
 function juntaTitNuevo(){ const a=juntaActaEnCurso(); if(!a) return; if(!Array.isArray(a.titularesLista)) a.titularesLista=[]; a.titularesLista.push({ id:juntaId('H'), quien:'', texto:'' }); render(); juntaToca(a); setTimeout(()=>{ const ins=document.querySelectorAll('.jt-tit-row input'); if(ins.length) ins[ins.length-1].focus(); }, 40); }
 function juntaTitSet(id, campo, v){ const a=juntaActaEnCurso(); if(!a) return; const x=(a.titularesLista||[]).find(y=>y.id===id); if(!x) return; x[campo]=v; juntaToca(a); }
-function juntaTitQuitar(id){ const a=juntaActaEnCurso(); if(!a) return; a.titularesLista=(a.titularesLista||[]).filter(y=>y.id!==id); render(); juntaToca(a); }
+async function juntaTitQuitar(id){ const a=juntaActaEnCurso(); if(!a) return; if(!await lxPregunta('¿Quitar este titular?')) return; a.titularesLista=(a.titularesLista||[]).filter(y=>y.id!==id); render(); juntaToca(a); }
 function juntaTitTexto(a){ const l=(Array.isArray(a.titularesLista)?a.titularesLista:[]).filter(x=>x && (x.texto||'').trim()); return l.map(x=>(x.quien?x.quien+': ':'')+x.texto.trim()); }
 function juntaActaSet(campo, v){ const a=juntaActaEnCurso(); if(!a) return; a[campo]=v; juntaToca(a); }
 function juntaNumSet(nid, v){ const a=juntaActaEnCurso(); if(!a) return; if(!a.numeros) a.numeros={}; a.numeros[nid]=v; render(); juntaToca(a); }
@@ -11587,7 +11600,7 @@ function lxPregunta(msg){
   const partes=String(msg||'').split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
   let ti=partes.findIndex(x=>x.includes('?')); if(ti<0) ti=0;
   const titulo=partes[ti]||'¿Seguro?'; const texto=partes.filter((_,i)=>i!==ti).join('\n\n');
-  const verbo=(titulo.match(/(borrar|eliminar|quitar|descartar)/i)||[])[1];
+  const verbo=(titulo.match(/(borrar|eliminar|quitar|descartar|dar de baja|anular)/i)||[])[1];
   const peligro=!!verbo || /no se puede deshacer/i.test(msg);
   const lbl=verbo ? (verbo.charAt(0).toUpperCase()+verbo.slice(1).toLowerCase()) : 'Aceptar';
   return lxDialogo({titulo, texto, tipo:peligro?'peligro':'pregunta', botones:[{k:null,label:'Cancelar'},{k:true,label:peligro?('Sí, '+lbl.toLowerCase()):lbl,cls:peligro?'peligro':'azul'}]}).then(r=>!!r);
@@ -13096,6 +13109,110 @@ function tarEspHomeHtml(){
   };
 })();
 /* ===== FIN ESPERANDO ===== */
+
+/* ============================================================
+   LUCAI · IDEAS: LA NEVERA, CON DICTADO (26/10/2026, David: «soltar un audio de lo que quiero crear y que se
+   optimice y se deje ahí en esa nevera»)
+   La Cartera de ideas (tar_ideas) vuelve como pestaña «Ideas» de Tareas, para todos; cada uno ve solo las suyas.
+   «🎤 Dictar ideas»: el navegador pasa la voz a texto → «✨ Ordenar con IA» (quick-task) devuelve una o varias ideas
+   (título + detalle, sin inventar) → se revisan y solo se guardan al pulsar Guardar.
+   ============================================================ */
+let _idRec=null;
+function idMicParar(){ try{ if(_idRec){ _idRec.stop(); } }catch(_){ } }
+function idMic(){
+  if(!JUNTA_SR){ toast('Este navegador no permite dictar con el botón. Usa el micrófono del teclado o Win + H y escríbelo en el recuadro.'); const t=el('idVoz'); if(t) t.focus(); return; }
+  if(_idRec){ idMicParar(); return; }
+  const rec=new JUNTA_SR(); _idRec=rec;
+  rec.lang='es-ES'; rec.continuous=true; rec.interimResults=true;
+  const base=(F.voz||'').trim(); let fin='';
+  rec.onresult=function(ev){
+    let interino='';
+    for(let i=ev.resultIndex;i<ev.results.length;i++){ const r=ev.results[i]; if(r.isFinal) fin+=r[0].transcript+' '; else interino+=r[0].transcript; }
+    F.voz=((base?base+' ':'')+fin+interino).replace(/\s+/g,' ').trim();
+    const ta=el('idVoz'); if(ta){ ta.value=F.voz; ta.scrollTop=ta.scrollHeight; }
+  };
+  rec.onerror=function(e){ if(e && (e.error==='not-allowed'||e.error==='service-not-allowed')) toast('Permite el micrófono en el navegador para dictar.'); else if(e && e.error==='no-speech') toast('No te he oído. Pulsa 🎤 y habla.'); };
+  rec.onend=function(){ if(_idRec===rec) _idRec=null; if(F.type==='idea_dictar') render(); };
+  try{ rec.start(); render(); }catch(e){ _idRec=null; toast('No se ha podido abrir el micrófono.'); }
+}
+function openIdeaDictar(){ F={type:'idea_dictar', voz:'', items:null, busy:false}; S.modal='idea_dictar'; render(); setTimeout(()=>{ if(JUNTA_SR) idMic(); }, 150); }
+async function idOrdenar(){
+  idMicParar();
+  const txt=(F.voz||'').trim(); if(!txt){ toast('Cuéntalo primero: pulsa 🎤 Hablar o escríbelo'); return; }
+  F.busy=true; render();
+  const pregunta='Ayudas a una persona del equipo de una clínica dental a guardar sus ideas y proyectos para más adelante (no son tareas para ya). '
+    +'Convierte este texto dictado en una o varias ideas: si habla de cosas distintas, sepáralas; si es una sola, devuelve una. '
+    +'Devuelve SOLO un JSON, sin texto antes ni después, con este formato exacto: {"ideas":[{"titulo":"...","detalle":"..."}]}. '
+    +'"titulo": la idea en una frase breve y clara (máximo 90 caracteres, sin punto final). '
+    +'"detalle": de 1 a 3 frases con el porqué, quién lo haría o los primeros pasos, solo si se han dicho; si no se ha dicho nada más, vacío. '
+    +'Ordena y aclara lo dicho, pero no inventes nada que no se haya dicho. No pongas nombres ni datos de pacientes. Texto dictado: «'+txt+'»';
+  let raw='';
+  try{
+    const r=await fetch(IA_FN, { method:'POST', headers:await lucaiFnHeaders(), body: JSON.stringify({ pregunta, contexto:'', usuario:S.user.nombre }) });
+    raw=await r.text();
+    const m=raw.match(/\{[\s\S]*\}/); let js=m?JSON.parse(m[0]):null;
+    // por si la función contesta entera ({respuesta:"…"}) en vez de en texto
+    if(js && !js.ideas && typeof js.respuesta==='string'){ const m2=js.respuesta.match(/\{[\s\S]*\}/); js=m2?JSON.parse(m2[0]):null; }
+    const arr=(js && Array.isArray(js.ideas)) ? js.ideas : [];
+    const items=arr.map(x=>({ titulo:String(x&&x.titulo||'').trim().slice(0,140), detalle:String(x&&x.detalle||'').trim(), alta:false, ok:true })).filter(x=>x.titulo);
+    if(!items.length) throw new Error('sin ideas');
+    F.items=items;
+  }catch(e){
+    console.error('idOrdenar', e, raw);
+    toast('No he podido ordenarlo. Prueba otra vez o escribe la idea a mano.');
+  }
+  F.busy=false; if(F.type==='idea_dictar') render();
+}
+function idSet(i, campo, v){ const it=(F.items||[])[i]; if(!it) return; it[campo]=v; if(campo==='ok'||campo==='alta') render(); }
+function idGuardar(){
+  const sel=(F.items||[]).filter(x=>x.ok && String(x.titulo||'').trim());
+  if(!sel.length){ toast('Marca al menos una idea con título'); return; }
+  const base=Date.now().toString(36);
+  const nuevas=sel.map((x,k)=>({ id:'I'+base+k+Math.floor(Math.random()*1000), titulo:String(x.titulo).trim(), descripcion:String(x.detalle||'').trim(),
+    usuario:S.user.nombre, importancia:x.alta?'Alta':'Normal', estado:'Pendiente', ts:now(), fechaResuelta:null }));
+  closeModal();
+  (async()=>{
+    try{ const { error } = await sbc.from('tar_ideas').insert(nuevas.map(ideaToRow)); if(error) throw error; }
+    catch(e){ console.error('idGuardar', e); toast('No se han podido guardar las ideas: '+(e.message||e)); return; }
+    await loadFromDB(); render(); toast(nuevas.length===1?'Idea guardada en la nevera':nuevas.length+' ideas guardadas en la nevera');
+  })();
+}
+function ideaDictarModal(){
+  let cuerpo;
+  if(!F.items){
+    const oye=!!_idRec;
+    cuerpo=`<div class="note" style="margin-top:0">Cuéntalo como te salga: qué se te ha ocurrido y, si quieres, por qué. Puedes decir varias ideas seguidas; la IA las separa.</div>
+      <button type="button" class="btn ${oye?'':'btn-ghost'}" onclick="idMic()" style="width:100%;justify-content:center;margin-bottom:10px;padding:12px;font-size:15px;${oye?'background:#D92D20;border-color:#D92D20;color:#fff':''}">${oye?'● Escuchando… pulsa para parar':'🎤 Hablar'}</button>
+      <textarea id="idVoz" class="inp" rows="5" style="font-family:inherit" oninput="F.voz=this.value" placeholder="Ej.: ¿y si recepción llama los martes a los que hicieron la higiene y no han vuelto a pedir cita?">${incEsc(F.voz||'')}</textarea>
+      <div class="muted" style="font-size:11.5px;margin-top:4px">Sin nombres de pacientes: el texto pasa por la IA.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="idMicParar();closeModal()">Cancelar</button><button class="btn btn-primary" onclick="idOrdenar()" ${F.busy?'disabled':''}>${F.busy?'Ordenando…':'✨ Ordenar con IA'}</button></div>`;
+  } else {
+    const n=F.items.filter(x=>x.ok).length;
+    const filas=F.items.map((it,i)=>`<div class="id-dict${it.ok?'':' off'}">
+        <label class="id-chk"><input type="checkbox" ${it.ok?'checked':''} onchange="idSet(${i},'ok',this.checked)"> Guardar esta idea</label>
+        <input class="inp" value="${incEsc(it.titulo)}" oninput="idSet(${i},'titulo',this.value)" placeholder="La idea, en una frase" style="font-weight:600">
+        <textarea class="inp" rows="2" style="font-family:inherit;margin-top:6px" oninput="idSet(${i},'detalle',this.value)" placeholder="Detalle (opcional)">${incEsc(it.detalle)}</textarea>
+        <label class="id-chk" style="margin:6px 0 0"><input type="checkbox" ${it.alta?'checked':''} onchange="idSet(${i},'alta',this.checked)"> Importancia alta</label>
+      </div>`).join('');
+    cuerpo=`<div class="note" style="margin-top:0">Revísalo y cambia lo que quieras. No se guarda nada hasta que pulses Guardar.</div>${filas}
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="F.items=null;render()">← Volver a dictar</button><button class="btn btn-primary" onclick="idGuardar()" ${n?'':'disabled'}>Guardar${n>1?' '+n+' ideas':''}</button></div>`;
+  }
+  return `<div class="overlay"><div class="modal" style="max-width:600px">
+    <div class="modal-head"><h2>Dictar ideas</h2><button class="x" onclick="idMicParar();closeModal()">×</button></div>
+    <div class="modal-body">${cuerpo}</div></div></div>`;
+}
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-ideas">
+.id-dict{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--white)}
+.id-dict.off{opacity:.5}
+.id-chk{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--grey);cursor:pointer;margin-bottom:6px}
+.id-bar{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:720px){ .id-bar{width:100%} .id-bar .btn{flex:1;justify-content:center} .id-acts{width:100%;flex-wrap:nowrap !important} .id-acts .btn{flex:1 1 auto;justify-content:center;white-space:nowrap;padding:7px 8px;font-size:12.5px} }
+</style>`);
+(function(){
+  const _mc=modalContent;
+  modalContent=function(){ if(F.type==='idea_dictar') return ideaDictarModal(); return _mc.apply(this, arguments); };
+})();
+/* ===== FIN IDEAS: LA NEVERA ===== */
 
 boot();
 
