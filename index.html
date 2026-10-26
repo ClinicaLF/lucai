@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-1336">
+<meta name="lucai-version" content="2026-10-26-2324">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4347,7 +4347,7 @@ function tarDow(iso){ const d=tarDParse(iso); return (d.getDay()+6)%7; } // 0=Lu
 function tarRecurLabel(r){
   if(!r||!r.tipo) return '';
   if(r.tipo==='diaria') return 'Cada día';
-  if(r.tipo==='semanal'){ const ds=(r.dias||[]).slice().sort((a,b)=>a-b).map(i=>TAR_DOW[i]); return ds.length? ('Cada semana · '+ds.join(', ')) : 'Cada semana'; }
+  if(r.tipo==='semanal'){ const ds=(r.dias||[]).slice().sort((a,b)=>a-b).map(i=>TAR_DOW[i]); if(ds.length===7) return 'Cada día'; return ds.length? ('Cada semana · '+ds.join(', ')) : 'Cada semana'; }
   if(r.tipo==='mensual') return 'Cada mes · día '+(r.diaMes||'?');
   return '';
 }
@@ -5455,7 +5455,9 @@ function openTarea(preset){
   S.modal='tar_nuevo'; render();
 }
 function setTarRecurTipo(v){ F.recurTipo=v; if(v==='semanal' && (!F.recurDias||!F.recurDias.length) && F.fechaLimite){ F.recurDias=[tarDow(F.fechaLimite)]; } render(); }
-function tarToggleDia(i){ if(!Array.isArray(F.recurDias)) F.recurDias=[]; const k=F.recurDias.indexOf(i); if(k>=0) F.recurDias.splice(k,1); else F.recurDias.push(i); render(); }
+function tarToggleDia(i){ if(F.type==='tar_nuevo' && F.recurTipo==='diaria'){ F.recurTipo='semanal'; F.recurDias=[0,1,2,3,4,5,6]; } if(!Array.isArray(F.recurDias)) F.recurDias=[]; const k=F.recurDias.indexOf(i); if(k>=0) F.recurDias.splice(k,1); else F.recurDias.push(i); render(); }
+/* 26/10/2026: botones Lun…Dom para elegir los días de una serie (nueva o ya creada) */
+function tarDiasBotones(dias){ return `<div style="display:flex;gap:4px;flex-wrap:wrap">${TAR_DOW.map((d,i)=>`<button type="button" onclick="tarToggleDia(${i})" style="cursor:pointer;border:1px solid ${dias.includes(i)?'var(--t-bd-6E8E00)':'var(--line)'};background:${dias.includes(i)?'var(--t-bg-6E8E00)':'var(--t-bg-FFFFFF)'};color:${dias.includes(i)?'var(--t-fg-FFFFFF)':'var(--t-fg-5A6770)'};border-radius:7px;width:32px;height:30px;font-size:12px;font-weight:600">${d}</button>`).join('')}</div>`; }
 function tarFormBody(){
   const u=tarUsers();
   const puedeFecha = !F.deQuien || F.deQuien===S.user.nombre; // la fecha solo la cambia quien emitió
@@ -5486,10 +5488,10 @@ function tarFormBody(){
   let recurDetalle='';
   if(esNuevo && tipo!=='no'){
     let campo='';
-    if(tipo==='semanal'){
-      const dias=Array.isArray(F.recurDias)?F.recurDias:[];
-      campo=`<div class="fld" style="flex:1;min-width:220px;margin-top:0"><label>Días</label>
-        <div style="display:flex;gap:4px;flex-wrap:wrap">${TAR_DOW.map((d,i)=>`<button type="button" onclick="tarToggleDia(${i})" style="cursor:pointer;border:1px solid ${dias.includes(i)?'var(--t-bd-6E8E00)':'var(--line)'};background:${dias.includes(i)?'var(--t-bg-6E8E00)':'var(--t-bg-FFFFFF)'};color:${dias.includes(i)?'var(--t-fg-FFFFFF)':'var(--t-fg-5A6770)'};border-radius:7px;width:32px;height:30px;font-size:12px;font-weight:600">${d}</button>`).join('')}</div></div>`;
+    if(tipo==='semanal' || tipo==='diaria'){
+      const dias=tipo==='diaria'?[0,1,2,3,4,5,6]:(Array.isArray(F.recurDias)?F.recurDias:[]);
+      campo=`<div class="fld" style="flex:1;min-width:220px;margin-top:0"><label>Días <span class="muted" style="font-weight:400">(toca uno para quitarlo)</span></label>
+        ${tarDiasBotones(dias)}</div>`;
     } else if(tipo==='mensual'){
       const dm=F.fechaLimite?tarDParse(F.fechaLimite).getDate():null;
       campo=`<div class="fld" style="flex:1;min-width:160px;margin-top:0"><label>Repetición</label>
@@ -5514,6 +5516,8 @@ function tarFormBody(){
       <div class="fld" style="flex:0 0 155px;min-width:130px"><label>Para cuándo</label>${fechaInp}</div>
     </div>
     <button type="button" class="btn btn-ghost btn-sm" onclick="F.masOpc=!F.masOpc;render()" style="margin-top:12px">${F.masOpc?'▾ Menos opciones':'▸ Más opciones'}${!F.masOpc&&extra?` · ${extra} con datos`:''}</button>
+    ${(F.type==='tar_edit' && F.serieDias)?`<div class="fld"><label>Días en que se repite</label>${tarDiasBotones(Array.isArray(F.recurDias)?F.recurDias:[])}
+      <div class="muted" style="font-size:11px;margin-top:4px">Si cambias los días, se aplica desde esta fecha al pulsar «Esta y siguientes» o «Todas» (las ya hechas no se tocan).</div></div>`:''}
     ${F.masOpc?`<div style="border-left:3px solid var(--t-bd-EAE3D7);padding-left:12px;margin-top:6px">
     <div class="fld"><label>Detalle</label>
       <textarea class="inp" rows="2" oninput="setInp('descripcion',this.value)" placeholder="Contexto, dónde, con qué, lo que haga falta.">${incEsc(F.descripcion||'')}</textarea></div>
@@ -5993,6 +5997,11 @@ function openTarEdit(id){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   if(!(isAdmin()||t.deQuien===S.user.nombre)){ toast('Solo puede editarla quien la creó o Dirección'); return; }
   F={type:'tar_edit', id, titulo:t.titulo||'', descripcion:t.descripcion||'', prioridad:t.prioridad||'Media', area:t.area||'General', fechaLimite:t.fechaLimite||'', paraQuien:t.paraQuien||'', deQuien:t.deQuien||'', horaInicio:t.horaInicio||'', horaFin:t.horaFin||'', color:t.color||'', participantes:Array.isArray(t.participantes)?t.participantes.slice():[]};
+  const _r=t.recurrencia;
+  if(t.serieId && _r && (_r.tipo==='diaria'||_r.tipo==='semanal') && t.deQuien===S.user.nombre){
+    F.serieDias=true; F.recurDias=_r.tipo==='diaria'?[0,1,2,3,4,5,6]:(Array.isArray(_r.dias)&&_r.dias.length?_r.dias.slice():[tarDow(t.fechaLimite)]);
+    F.recurDiasOrig=F.recurDias.slice().sort((a,b)=>a-b).join(',');
+  }
   S.modal='tar_edit'; render();
 }
 function tarEditModalContent(){
@@ -6031,6 +6040,9 @@ function commitTarEdit(scope){
   scope=scope||'una';
   if(!tarValid()) return;
   const t=(S.tareas||[]).find(x=>x.id===F.id); if(!t) return;
+  const _nd=(Array.isArray(F.recurDias)?F.recurDias.slice():[]).sort((a,b)=>a-b);
+  const cambiaDias = scope!=='una' && t.serieId && F.serieDias && _nd.join(',')!==F.recurDiasOrig;
+  if(cambiaDias && !_nd.length){ toast('Elige al menos un día'); return; }
   const cont={ titulo:(F.titulo||'').trim(), descripcion:(F.descripcion||'').trim(), prioridad:F.prioridad||'Media', area:F.area||'General', paraQuien:F.paraQuien, participantes:[...new Set((Array.isArray(F.participantes)?F.participantes:[]).filter(n=>n && n!==F.paraQuien))], horaInicio:F.horaInicio||'', horaFin:F.horaFin||'', color:F.color||'' };
   // aplicar siempre a esta tarea (incluida su fecha, si soy el emisor)
   Object.assign(t, cont);
@@ -6043,13 +6055,44 @@ function commitTarEdit(scope){
   // propagar a la serie (contenido, NO fecha/estado)
   const hermanas=tarSerieHermanas(t.serieId).filter(x=> x.id!==t.id && (scope==='todas' || (x.fechaLimite||'') >= (t.fechaLimite||'')) );
   hermanas.forEach(x=> Object.assign(x, cont));
-  const ids=hermanas.map(x=>x.id);
+  let ids=hermanas.map(x=>x.id);
+  let diasQuitar=[], diasNuevas=[], diasTodas=[], reglaNueva=null;
+  if(cambiaDias){
+    const old=t.recurrencia||{};
+    reglaNueva = _nd.length===7 ? {tipo:'diaria', hasta:old.hasta||null} : {tipo:'semanal', dias:_nd, hasta:old.hasta||null};
+    const hoy=todayStr();
+    const desde = (scope==='todas' || (t.fechaLimite||'')<hoy) ? hoy : t.fechaLimite;
+    const serie=tarSerieHermanas(t.serieId);
+    diasQuitar = serie.filter(x=> (x.fechaLimite||'')>=desde && x.estado!=='Hecha' && !_nd.includes(tarDow(x.fechaLimite))).map(x=>x.id);
+    const yaFechas=new Set(serie.map(x=>x.fechaLimite));
+    const maxF = old.hasta || serie.map(x=>x.fechaLimite).filter(Boolean).sort().slice(-1)[0] || desde;
+    tarSerieFechas(reglaNueva, desde, maxF).forEach(f=>{
+      if(yaFechas.has(f) || f<desde) return;
+      diasNuevas.push({ id:t.serieId+'_'+f, titulo:t.titulo, descripcion:t.descripcion, prioridad:t.prioridad, area:t.area,
+        fechaLimite:f, deQuien:t.deQuien, paraQuien:t.paraQuien, participantes:(t.participantes||[]).slice(), horaInicio:t.horaInicio||'', horaFin:t.horaFin||'', color:t.color||'',
+        serieId:t.serieId, recurrencia:reglaNueva, estado:'Pendiente', ts:now(), fechaHecha:null, mensajes:[], vistos:{}, tiempos:[], adjuntos:[],
+        checklist:(t.checklist||[]).map(c=>({id:c.id, texto:c.texto, hecho:false})) });
+    });
+    const qset=new Set(diasQuitar);
+    serie.forEach(x=>{ if(!qset.has(x.id)) x.recurrencia=reglaNueva; });
+    diasTodas = serie.filter(x=>!qset.has(x.id) && x.id!==t.id).map(x=>x.id);
+    ids = ids.filter(id=>!qset.has(id));
+    S.tareas = S.tareas.filter(x=>!qset.has(x.id));
+    diasNuevas.forEach(x=>S.tareas.push(x));
+  }
+  const tQuitada = diasQuitar.includes(t.id);
   const fields={ titulo:cont.titulo, descripcion:cont.descripcion||null, prioridad:cont.prioridad, area:cont.area, para_quien:cont.paraQuien, participantes:cont.participantes, hora_inicio:cont.horaInicio||null, hora_fin:cont.horaFin||null, color:cont.color||null };
   closeModal(); render();
   // esta tarea por separado (puede llevar fecha distinta), y el resto en lote
   (async()=>{
-    await srvTarUpdate(t.id, t);
+    if(cambiaDias){
+      if(diasQuitar.length) await srvTarDeleteMany(diasQuitar);
+      if(diasNuevas.length) await srvTarInsertMany(diasNuevas);
+      if(diasTodas.length) await srvTarUpdateMany(diasTodas, { recurrencia:reglaNueva });
+    }
+    if(!tQuitada) await srvTarUpdate(t.id, t);
     if(ids.length) await srvTarUpdateMany(ids, fields);
+    if(cambiaDias){ toast(`Días cambiados (${tarRecurLabel(reglaNueva)})${diasQuitar.length?` · ${diasQuitar.length} quitadas`:''}${diasNuevas.length?` · ${diasNuevas.length} nuevas`:''}`); return; }
     toast(scope==='todas'?`Serie actualizada · ${ids.length+1} tareas`:`Actualizadas ${ids.length+1} tareas`);
   })();
 }
