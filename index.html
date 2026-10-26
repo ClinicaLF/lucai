@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-1213">
+<meta name="lucai-version" content="2026-10-26-1226">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -12397,7 +12397,7 @@ function cevVivos(){ return (S.calEventos||[]).filter(e=>e && !e.borrado && e.fe
 function cevFin(e){ return (e.fechaFin && e.fechaFin>e.fecha) ? e.fechaFin : e.fecha; }
 function cevDelDia(iso){ return cevVivos().filter(e=>e.fecha<=iso && cevFin(e)>=iso && (!S.cevSoloPend || cevPend(e))); }
 function cevPend(e){ return e.estado!=='aprobado'; }
-const CEV_GRUPOS=[ {n:'Todos', f:()=>true}, {n:'Dirección y coordinación', re:/Director|Coordinador/i}, {n:'Recepción y atención', re:/Recepci|Atenci/i},
+const CEV_GRUPOS=[ {n:'Todos', f:()=>true}, {n:'Dirección y coordinación', re:/Direc|Coordina|Responsable/i}, {n:'Recepción y atención', re:/Recepci|Atenci/i},
   {n:'Higienistas', re:/Higienista/i}, {n:'Auxiliares', re:/Auxiliar/i}, {n:'Doctores', re:/Doctor/i} ];
 function cevGrupo(g){ return appUsers().filter(u=> g.f ? g.f(u) : g.re.test(String(u.rol||''))).map(u=>u.nombre); }
 function cevAsis(n){ const k=F.asistentes.indexOf(n); if(k>=0) F.asistentes.splice(k,1); else F.asistentes.push(n); render(); }
