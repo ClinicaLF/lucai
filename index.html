@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-1226">
+<meta name="lucai-version" content="2026-10-26-1235">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -5725,7 +5725,7 @@ function tarThreadHtml(t, bare){
   const ICO_IMG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h2l1.2-1.8h7.6L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.3"/></svg>';
   const ICO_CLIP = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.3-8.3a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.6 1.6 0 0 1-2.3-2.3l7.6-7.6"/></svg>';
   const compose = puede ? `${replyBar}<div style="margin-top:10px">
-      <textarea id="tarMsgInput-${t.id}" class="inp" rows="1" placeholder="Escribe un mensaje…" oninput="setInp('msgDraft',this.value);tarAutoGrow(this)" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();tarAddMsg('${t.id}')}else if(event.key==='Escape'){tarReplyCancel()}" style="font-size:16px;min-height:46px;max-height:160px;line-height:1.45;resize:none;overflow-y:auto">${incEsc(F.msgDraft||'')}</textarea>
+      <textarea id="tarMsgInput-${t.id}" class="inp" rows="1" placeholder="${tarMovil()?'Escribe un mensaje…':'Escribe un mensaje… (Intro = enviar · Mayús+Intro = otra línea)'}" oninput="setInp('msgDraft',this.value);tarAutoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.isComposing&&(event.ctrlKey||event.metaKey||(!event.shiftKey&&!tarMovil()))){event.preventDefault();tarAddMsg('${t.id}')}else if(event.key==='Escape'){tarReplyCancel()}" style="font-size:16px;min-height:46px;max-height:160px;line-height:1.45;resize:none;overflow-y:auto">${incEsc(F.msgDraft||'')}</textarea>
       ${emojiPanel}
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
         <button class="btn btn-ghost" onclick="tarToggleEmoji('${t.id}')" title="Emojis para el mensaje" aria-label="Emojis" style="flex:0 0 auto;padding:9px 12px;line-height:0;${emojiOpen?'background:var(--t-bg-F4F0E9);border-color:var(--t-bd-A8B400)':''}">${ICO_EMOJI}</button>
@@ -5775,6 +5775,8 @@ function tarInsertEmoji(e){
   }
 }
 function tarMsgTime(ts){ ts=String(ts||''); const d=ts.slice(0,10).split('-'); const hm=ts.slice(11,16); return (d.length===3?`${d[2]}/${d[1]}`:ts)+(hm?` ${hm}`:''); }
+// En móvil, Intro hace otra línea (como WhatsApp) y se envía con el botón; en ordenador, Intro envía
+function tarMovil(){ try{ return window.matchMedia('(pointer:coarse)').matches; }catch(e){ return false; } }
 function tarAutoGrow(el){ if(!el) return; el.style.height='auto'; el.style.height=Math.min(el.scrollHeight, 160)+'px'; }
 function tarAutoEnCurso(t){ return false; } /* 24/10/2026: un mensaje ya no pasa la tarea a «En curso»; el estado lo cambia quien la hace */
 function tarAddMsg(id){
