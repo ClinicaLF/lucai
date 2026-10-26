@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-25-2048">
+<meta name="lucai-version" content="2026-10-26-0959">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4964,7 +4964,7 @@ function tarBuzonView(modo){
     return `<div class="tar-card${tarVencida(t)?' tar-card-venc':''}" onclick="openTarDet('${t.id}')">
       <div class="tar-card-head">${tarPrioChip(t.prioridad)}<span class="tar-card-fecha">${fechaLbl}</span></div>
       <div class="tar-card-title">${pinBtn}${dir}${incEsc(tarCap(t.titulo))}${tarRecurMark(t)}${tarNvBadge(t)}</div>
-      ${descCard}
+      ${tarEspEsta(t)?`<div class="tar-card-desc">${tarEspLinea(t)}</div>`:descCard}
       ${quick?`<div class="tar-card-actions">${quick}</div>`:''}
     </div>`;
   }).join('');
@@ -5585,8 +5585,8 @@ function tarDetModalContent(){
   const _accItem=(label,oc,danger)=>`<button class="tar-acc-item" onclick="S.tarAccMenu=false;${oc}" style="display:block;width:100%;text-align:left;padding:12px 16px;font-size:14px;font-weight:600;background:none;border:none;border-bottom:1px solid var(--t-bd-F1ECE3);cursor:pointer;color:${danger?'var(--t-fg-C0392B)':'var(--t-fg-333F48)'}">${label}</button>`;
   if((soyPara||admin) && tarActiva(t)){
     if(t.estado==='Pendiente') tarAccItems+=_accItem('Marcar en curso',`tarMarcar('${t.id}','En curso')`);
-    if(t.estado==='En espera') tarAccItems+=_accItem('Reanudar',`tarMarcar('${t.id}','En curso')`);
-    else tarAccItems+=_accItem('Poner en espera',`tarMarcar('${t.id}','En espera')`);
+    if(t.estado==='En espera') tarAccItems+=_accItem('Ya no espero (vuelve a por hacer)',`tarMarcar('${t.id}','Pendiente')`);
+    else tarAccItems+=_accItem('Esperando a otro…',`tarMarcar('${t.id}','En espera')`);
     tarPrimary=`<button class="btn btn-primary" onclick="tarMarcarHecha('${t.id}')">Marcar hecha</button>`;
   }
   if((soyPara||soyDe||admin) && t.estado==='Hecha') tarAccItems+=_accItem('Reabrir',`tarMarcar('${t.id}','Pendiente')`);
@@ -10004,7 +10004,7 @@ async function juntaGuardarYa(){
     S.juntaError=false;
   }catch(e){
     console.error('juntaGuardar', e); S.juntaError=true;
-    toast('No se ha podido guardar en la reunión. Revisa la conexión y vuelve a intentarlo.');
+    toast('No se ha podido guardar. Revisa la conexión y vuelve a intentarlo.');
   }
   if(juntaFirma()!==antes || S.juntaError) render();
 }
@@ -11299,7 +11299,7 @@ function lxModoSel(){
 function lxHomeTop(){
   const me=S.user.nombre, hoy=todayStr();
   const mias=(S.tareas||[]).filter(t=>t.paraQuien===me);
-  const act=mias.filter(tarActiva);
+  const act=mias.filter(t=>tarActiva(t) && t.estado!=='En espera');
   const atr=act.filter(t=>lxGrupo(t)==='atrasadas').length;
   const paraHoy=act.filter(t=>lxGrupo(t)==='hoy').length;
   const hechasHoy=mias.filter(t=>!tarActiva(t) && t.fechaHecha===hoy).length;
@@ -11408,7 +11408,7 @@ tarKpis=function(arr){
   const hoy=act.filter(t=>t.estado!=='En espera' && t.fechaLimite===todayStr()).length;
   const sel=(S.tarBuzF&&S.tarBuzF.kpi)||'';
   const p=(k,n,l,rojo)=>`<button class="lx-pill${sel===k?' on':''}${rojo&&n?' rojo':''}" onclick="setTarKpi('${k}')" title="Filtrar">${`<b>${n}</b>`}${l}</button>`;
-  return `<div class="lx-pills">${p('porhacer',porHacer,'por hacer')}${p('vencidas',venc,venc===1?'vencida':'vencidas',true)}${p('hoy',hoy,'para hoy')}${p('espera',espera,'en espera')}<button class="lx-pill${S.tarVerHechas?' on':''}" onclick="toggleTarHechas()">${S.tarVerHechas?'✓ ':''}Ver hechas</button></div>`;
+  return `<div class="lx-pills">${p('porhacer',porHacer,'por hacer')}${p('vencidas',venc,venc===1?'vencida':'vencidas',true)}${p('hoy',hoy,'para hoy')}${p('espera',espera,'esperando')}<button class="lx-pill${S.tarVerHechas?' on':''}" onclick="toggleTarHechas()">${S.tarVerHechas?'✓ ':''}Ver hechas</button></div>`;
 };
 /* selector + Filtros + Lista/Tabla en una sola fila */
 tarVistaSel=function(){
@@ -12897,6 +12897,206 @@ function cevAvisoEmergente(){
   logout=function(){ S._cevAvisoVisto=false; const x=document.getElementById('cevAvisoPop'); if(x) x.remove(); return _lo.apply(this, arguments); };
 })();
 /* ===== FIN AVISOS DE REUNIONES ===== */
+
+/* ============================================================
+   LUCAI · «ESPERANDO» (26/10/2026, David: «la hago hoy, pero ahora tengo que esperar la respuesta»)
+   El estado «En espera» (en pantalla, «Esperando») pide a quién se espera (texto libre: también alguien de fuera) y
+   qué día se vuelve a mirar (por defecto, 3 días laborables). Ese día sale arriba del Inicio de quien hace la tarea
+   con tres salidas: Ya contestó · Recordar · Aplazar; el resto, contado en una línea.
+   Datos en lucai_estado.tarEsperas (sin SQL): una ficha por tarea (id = id de la tarea), con el guardado de
+   Reuniones (relee, fusiona, nunca borra). Sin ficha, la tarea sigue «En espera» como antes y sale para completarla.
+   ============================================================ */
+if(!JUNTA_KEYS.includes('tarEsperas')) JUNTA_KEYS.push('tarEsperas');
+if(!Array.isArray(S.tarEsperas)) S.tarEsperas=[];
+const TAR_ESP_DIAS=3;
+const LX_IC_RELOJ='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>';
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-esp">
+.lx-esp{color:var(--lx-amb);font-weight:600}
+.lx-esp.rojo{color:var(--lx-rojo)}
+.lx-esph{background:var(--lx-amb-s);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0 0 14px}
+.lx-espt{font-size:13px;font-weight:800;color:var(--lx-amb);margin-bottom:4px}
+.lx-espr{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.lx-espt+.lx-espr{border-top:none}
+.lx-espc{flex:1;min-width:0;cursor:pointer}
+.lx-espc b{display:block;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lx-espc small{display:block;font-size:12.5px;color:var(--grey);margin-top:1px}
+.lx-espb{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}
+.lx-espm{font-size:12.5px;color:var(--grey);padding-top:8px;border-top:1px solid var(--line)}
+.lx-espm a{color:var(--lx-acc);font-weight:700;cursor:pointer}
+.lx-espq{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--white);padding:9px 14px;font-size:13px;color:var(--grey)}
+.lx-espq button{border:none;background:none;color:var(--lx-acc);font-weight:700;cursor:pointer;font-family:inherit;font-size:13px}
+.lx-espd{margin-top:8px;padding:9px 12px;border-radius:10px;background:var(--lx-amb-s);color:var(--lx-amb);display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13.5px}
+.lx-espd.rojo{background:var(--lx-rojo-s);color:var(--lx-rojo)}
+.lx-espd>div:first-child{flex:1;min-width:180px}
+.lx-espd small{display:block;color:var(--grey);font-size:12px;margin-top:1px}
+.lx-espf label{display:block;font-size:12.5px;font-weight:700;color:var(--grey);margin:12px 0 4px}
+.lx-espf .inp{width:100%;margin:0}
+.lx-esp-err{color:var(--lx-rojo);font-size:12.5px;margin-top:8px}
+.lx-esp-err:empty{display:none}
+.lx-cf .bt{flex-wrap:wrap}
+@media(max-width:720px){
+  .lx-espr{flex-direction:column;align-items:stretch;gap:6px}
+  .lx-espb{width:100%}
+  .lx-espb .btn{flex:1 1 auto;justify-content:center;white-space:nowrap}
+}
+</style>`);
+function tarEspLab(iso, n){ let d=iso||todayStr(), k=0; while(k<n){ d=juntaMasDias(d,1); if(tarDow(d)<5) k++; } return d; }
+function tarEsp(id){ return (S.tarEsperas||[]).find(x=>x && x.id===id) || null; }
+function tarEspEsta(t){ return !!t && t.estado==='En espera'; }
+function tarEspToca(t){ if(!tarEspEsta(t)) return false; const e=tarEsp(t.id); return !e || !e.de || !e.mirar || e.mirar<=todayStr(); }
+function tarEspDia(iso){ try{ return new Date(iso+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'}).replace('.',''); }catch(_){ return fmtFecha(iso); } }
+function tarEspVeces(n){ return n ? 'recordado '+n+(n===1?' vez':' veces') : ''; }
+function tarEspTxt(t){
+  const e=tarEsp(t.id);
+  if(!e || !e.de) return 'Esperando · falta decir a quién';
+  const hoy=todayStr();
+  const cuando = !e.mirar ? '' : (e.mirar<hoy ? ' · tocaba mirar el '+tarEspDia(e.mirar) : (e.mirar===hoy ? ' · mirar hoy' : ' · mirar el '+tarEspDia(e.mirar)));
+  return 'Esperando a '+e.de+cuando;
+}
+function tarEspLinea(t){ if(!tarEspEsta(t)) return ''; const x=tarEspTxt(t); return `<span class="lx-esp${tarEspToca(t)?' rojo':''}" title="${incEsc(x)}">⏳ ${incEsc(x)}</span>`; }
+function tarEspGuardar(id, campos){
+  let e=tarEsp(id); if(!e){ e={id}; S.tarEsperas.push(e); }
+  Object.assign(e, campos); juntaToca(e);
+}
+
+/* ventana: «poner» (a quién, cuándo, nota) o «aplazar» (solo cuándo) */
+function tarEspVentana(t, modo){
+  return new Promise(resolve=>{
+    const e=tarEsp(t.id)||{}, hoy=todayStr(), apl=modo==='aplazar';
+    const prev=document.getElementById('lxConfirm'); if(prev) prev.remove();
+    const users=tarUsers().filter(n=>n!==(S.user&&S.user.nombre));
+    const def = (tarEspEsta(t) && e.mirar && e.mirar>hoy) ? e.mirar : tarEspLab(hoy, TAR_ESP_DIAS);
+    const ov=document.createElement('div'); ov.id='lxConfirm'; ov.className='lx-cf-ov';
+    ov.innerHTML=`<div class="lx-cf lx-espf" role="dialog" aria-modal="true"><div class="ic pregunta">${LX_IC_RELOJ}</div>
+      <h3>${apl?'¿Hasta cuándo lo aplazas?':'Esperando a otro'}</h3>
+      <p>${apl?'Ese día vuelve a salir arriba del Inicio.':'Ya has hecho tu parte. Ese día vuelve a salir arriba del Inicio para mirar si han contestado.'}</p>
+      <div class="tt">${incEsc(tarCap(t.titulo||''))}</div>
+      ${apl?'':`<label for="espDe">¿A quién esperas?</label><input class="inp" id="espDe" list="espDeL" autocomplete="off" value="${incEsc(e.de||'')}" placeholder="La gestoría, un proveedor, un compañero…"><datalist id="espDeL">${users.map(n=>`<option value="${incEsc(n)}">`).join('')}</datalist>`}
+      <label for="espMi">¿Cuándo vuelves a mirar?</label><input class="inp" type="date" id="espMi" value="${def}" min="${hoy}">
+      ${apl?'':`<label for="espNo">Nota (opcional)</label><input class="inp" id="espNo" value="${incEsc(e.nota||'')}" placeholder="Qué pediste o qué falta">`}
+      <div class="lx-esp-err" id="espErr"></div>
+      <div class="bt"><button class="btn btn-ghost" data-k="no">Cancelar</button><button class="btn azul" data-k="si">Guardar</button></div></div>`;
+    const q=id=>ov.querySelector('#'+id);
+    const fin=(r)=>{ document.removeEventListener('keydown',tecla,true); ov.remove(); resolve(r); };
+    const ok=()=>{
+      const de=apl?'':String((q('espDe')||{}).value||'').trim();
+      const mirar=String((q('espMi')||{}).value||'');
+      const nota=apl?'':String((q('espNo')||{}).value||'').trim();
+      const err=q('espErr');
+      if(!apl && !de){ err.textContent='Escribe a quién esperas.'; q('espDe').focus(); return; }
+      if(!mirar){ err.textContent='Elige qué día vuelves a mirar.'; q('espMi').focus(); return; }
+      if(mirar<hoy){ err.textContent='El día de mirar no puede ser anterior a hoy.'; q('espMi').focus(); return; }
+      fin({de, mirar, nota});
+    };
+    const tecla=(ev)=>{ if(ev.key==='Escape'){ ev.preventDefault(); ev.stopPropagation(); fin(null); } else if(ev.key==='Enter'){ ev.preventDefault(); ev.stopPropagation(); ok(); } };
+    ov.addEventListener('click',ev=>{ if(ev.target===ov){ fin(null); return; } const b=ev.target.closest('[data-k]'); if(!b) return; if(b.getAttribute('data-k')==='si') ok(); else fin(null); });
+    document.addEventListener('keydown',tecla,true);
+    document.body.appendChild(ov);
+    setTimeout(()=>{ const i=q('espDe')||q('espMi'); if(i) i.focus(); },20);
+  });
+}
+
+/* pasar a «Esperando» (o cambiar a quién / cuándo si ya lo está) */
+const _tarMarcar_esp=tarMarcar;
+async function tarEspPoner(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const r=await tarEspVentana(t,'poner');
+  if(!r){ render(); return; }
+  const prev=tarEsp(id), sigue=tarEspEsta(t) && prev && prev.de;
+  tarEspGuardar(id, {de:r.de, mirar:r.mirar, nota:r.nota, desde:sigue?(prev.desde||todayStr()):todayStr(), por:S.user.nombre, recordado:sigue?(prev.recordado||0):0, borrado:false});
+  if(!tarEspEsta(t)) _tarMarcar_esp(id,'En espera'); else render();
+  toast('Vuelve a salir el '+tarEspDia(r.mirar));
+}
+tarMarcar=function(id, estado){
+  if(estado==='En espera'){ const t=(S.tareas||[]).find(x=>x.id===id); if(t && t.estado!=='En espera'){ tarEspPoner(id); return; } }
+  return _tarMarcar_esp.apply(this, arguments);
+};
+
+/* las tres salidas */
+async function tarEspContesto(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const r=await lxDialogo({titulo:'Ya ha contestado', texto:'¿Qué hacemos con la tarea?', detalle:tarCap(t.titulo||''), tipo:'ok',
+    botones:[{k:null,label:'Cancelar'},{k:'mia',label:'Vuelve a mí'},{k:'sig',label:'Cerrar y crear la siguiente'},{k:'cerrar',label:'Cerrar la tarea',cls:'ok'}]});
+  if(!r) return;
+  if(r==='mia'){ _tarMarcar_esp(id,'Pendiente'); toast('Vuelve a tus tareas por hacer'); return; }
+  lxCerrarDetSi(id); _tarMarcar_esp(id,'Hecha');
+  if(r==='sig') openTarea({paraQuien:S.user.nombre, area:t.area||'General', descripcion:'Sigue de: '+tarCap(t.titulo||'')});
+}
+function tarEspRecordar(id){
+  const e=tarEsp(id)||{}; const m=tarEspLab(todayStr(), TAR_ESP_DIAS);
+  tarEspGuardar(id, {mirar:m, recordado:(e.recordado||0)+1});
+  render(); toast('Apuntado. Vuelve a salir el '+tarEspDia(m));
+}
+async function tarEspAplazar(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const r=await tarEspVentana(t,'aplazar'); if(!r) return;
+  tarEspGuardar(id, {mirar:r.mirar}); render(); toast('Vuelve a salir el '+tarEspDia(r.mirar));
+}
+function tarEspBotones(t, conCambiar){
+  const e=tarEsp(t.id)||{};
+  if(!e.de) return `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();tarEspPoner('${t.id}')">Decir a quién</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();tarEspContesto('${t.id}')">Ya contestó</button>`;
+  return `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();tarEspContesto('${t.id}')">Ya contestó</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();tarEspRecordar('${t.id}')" title="Ya le has insistido: vuelve a salir dentro de ${TAR_ESP_DIAS} días laborables">Recordar</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();tarEspAplazar('${t.id}')" title="Elegir otro día">Aplazar</button>${conCambiar?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();tarEspPoner('${t.id}')">Cambiar</button>`:''}`;
+}
+
+/* Inicio: «Esperando: toca mirar hoy» arriba; el resto, contado */
+function tarEspVerTodas(){
+  S.tarVista='todas';
+  S.tarBuzF=Object.assign({prio:'',cat:'',persona:'',estado:'',q:'',sortDir:'asc',desde:'',hasta:'',kpi:''}, S.tarBuzF||{}, {kpi:'espera'});
+  setModule('tareas');
+}
+function tarEspHomeHtml(){
+  const me=S.user.nombre;
+  const mias=(S.tareas||[]).filter(t=>t.paraQuien===me && tarEspEsta(t));
+  if(!mias.length) return '';
+  const toca=mias.filter(tarEspToca).sort((a,b)=>String((tarEsp(a.id)||{}).mirar||'').localeCompare(String((tarEsp(b.id)||{}).mirar||'')));
+  const resto=mias.length-toca.length;
+  const enPlazo=n=>`${n} esperando respuesta, en plazo`;
+  if(!toca.length) return `<div class="lx-esph lx-espq"><span>⏳ ${enPlazo(resto)}</span><button onclick="tarEspVerTodas()">Ver</button></div>`;
+  const fila=t=>{
+    const e=tarEsp(t.id)||{};
+    const sub=[e.de?'A '+e.de:'Falta decir a quién', e.desde?'desde el '+tarEspDia(e.desde):'', tarEspVeces(e.recordado), e.nota||''].filter(Boolean).join(' · ');
+    return `<div class="lx-espr"><div class="lx-espc" onclick="openTarDet('${t.id}')"><b>${incEsc(tarCap(t.titulo||''))}</b><small>${incEsc(sub)}</small></div><div class="lx-espb">${tarEspBotones(t,false)}</div></div>`;
+  };
+  return `<div class="lx-esph"><div class="lx-espt">⏳ Esperando: toca mirar hoy (${toca.length})</div>${toca.map(fila).join('')}${resto?`<div class="lx-espm">y ${enPlazo(resto)} · <a onclick="tarEspVerTodas()">ver</a></div>`:''}</div>`;
+}
+(function(){
+  const _lht=lxHomeTop;
+  lxHomeTop=function(){
+    const h=_lht.apply(this, arguments); let card=''; try{ card=tarEspHomeHtml(); }catch(e){ console.error('tarEspHome', e); }
+    if(!card) return h;
+    const i=h.indexOf('<div class="lx-tiles">'); const j=i>=0?i:h.indexOf('<div class="lx-h2">Lo tuyo</div>');
+    return j>=0 ? h.slice(0,j)+card+h.slice(j) : card+h;
+  };
+  /* en pantalla se llama «Esperando» (el dato sigue siendo «En espera») */
+  const _lbl=tarEstadoLabel;
+  tarEstadoLabel=function(e){ return e==='En espera' ? 'Esperando' : _lbl.apply(this, arguments); };
+  /* tabla: la segunda línea dice a quién se espera y cuándo se mira */
+  const _dp=tarDescPrevHtml;
+  tarDescPrevHtml=function(t){ if(tarEspEsta(t)){ const x=tarEspTxt(t); return `<span class="lx-dprev" title="${incEsc(x)}">${tarEspLinea(t)}</span>`; } return _dp.apply(this, arguments); };
+  /* lista del Inicio (la usan otras vistas) */
+  const _row=lxRow;
+  lxRow=function(t){ const h=_row.apply(this, arguments); return tarEspEsta(t) ? h.replace(' · En espera', ' · '+tarEspLinea(t)) : h; };
+  /* dentro de la tarea: a quién, desde cuándo y las salidas */
+  const _det=tarDetModalContent;
+  tarDetModalContent=function(){
+    const h=_det.apply(this, arguments);
+    try{
+      const t=(S.tareas||[]).find(x=>x.id===F.id); if(!tarEspEsta(t)) return h;
+      const e=tarEsp(t.id)||{}; const puede=t.paraQuien===S.user.nombre || isAdmin();
+      const sub=[e.desde?'Desde el '+fmtFecha(e.desde):'', tarEspVeces(e.recordado), e.nota||''].filter(Boolean).join(' · ');
+      const box=`<div class="lx-espd${tarEspToca(t)?' rojo':''}"><div><b>⏳ ${incEsc(tarEspTxt(t))}</b>${sub?`<small>${incEsc(sub)}</small>`:''}</div>${puede?`<div class="lx-espb">${tarEspBotones(t,true)}</div>`:''}</div>`;
+      const k=h.indexOf('<div style="flex:0 0 auto;margin-top:8px">');
+      return k>=0 ? h.slice(0,k)+box+h.slice(k) : h;
+    }catch(err){ console.error('tarEspDet', err); return h; }
+  };
+  /* que lo que apunta otro (p. ej. quien hace la tarea que tú mandaste) llegue sin recargar: como mucho, cada minuto */
+  const _lf=loadFromDB;
+  loadFromDB=async function(){
+    await _lf.apply(this, arguments);
+    if(S.module!=='junta' && (!S.module || S.module==='tareas') && Date.now()-(S._espLeido||0)>60000){ S._espLeido=Date.now(); await juntaCargar(); }
+  };
+})();
+/* ===== FIN ESPERANDO ===== */
 
 boot();
 
