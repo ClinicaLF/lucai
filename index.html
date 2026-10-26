@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-2341">
+<meta name="lucai-version" content="2026-10-26-2346">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -507,10 +507,15 @@ function lucaiTemaBtn(){ return '<button class="logout tema-btn" onclick="lucaiT
 @media(max-width:720px){ .tsw-grid{grid-template-columns:repeat(7,150px);overflow-x:auto} }
 /* ficha al pasar el ratón por una tarea de la Semana (26/10/2026) */
 .tsw-pop{position:fixed;z-index:9000;width:320px;max-width:calc(100vw - 24px);background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;font-size:13px;line-height:1.4;color:var(--t-fg-333F48);pointer-events:none;opacity:0;transition:opacity .12s}
+.tsw-pop{border-left:4px solid #2F6FDB}
 .tsw-pop.on{opacity:1}
+html[data-tema="noche"] .tsw-pop{background:#34404F;border-color:#56677C;border-left-color:#5B8FF0;box-shadow:0 12px 34px rgba(0,0,0,.6);color:#EEF2F6}
+html[data-tema="noche"] .tsw-pop .pm{color:#B9C3CE}
+html[data-tema="noche"] .tsw-pop .pd{color:#EEF2F6;border-top-color:#4A5A6E}
+html[data-tema="noche"] .tsw-pop .pd.vacio{color:#8D99A6}
 .tsw-pop .pt{font-weight:700;font-size:14px;margin-bottom:6px;word-break:break-word}
 .tsw-pop .pm{font-size:12px;color:var(--t-fg-5A6770);margin-top:3px}
-.tsw-pop .pd{margin-top:8px;white-space:pre-wrap;word-break:break-word;color:var(--t-fg-333F48);max-height:180px;overflow:hidden}
+.tsw-pop .pd{margin-top:8px;padding-top:8px;border-top:1px solid var(--t-bd-line);white-space:pre-wrap;word-break:break-word;color:var(--t-fg-333F48);max-height:180px;overflow:hidden}
 .tsw-pop .pd.vacio{color:var(--t-fg-8A949B);font-style:italic}
 
 /* === candado de módulos sin acceso === */
@@ -5179,15 +5184,22 @@ function tswPopHtml(t){
     <div class="pd${det?'':' vacio'}">${det?incEsc(det.length>400?det.slice(0,400)+'…':det):'Sin detalle'}</div>
     ${ult?`<div class="pm" style="margin-top:8px">💬 ${msgs.length} mensaje${msgs.length===1?'':'s'} · último de ${incEsc(String(ult.autor||ult.de||ult.quien||'—'))}</div>`:''}`;
 }
+let _tswXY=[0,0];
+function tswPopColocar(){
+  const p=document.getElementById('tswPop'); if(!p || !p.classList.contains('on')) return;
+  const w=p.offsetWidth, h=p.offsetHeight, vw=window.innerWidth, vh=window.innerHeight;
+  let x=_tswXY[0]+14, y=_tswXY[1]+16;
+  if(x+w>vw-8) x=_tswXY[0]-w-14;
+  if(x<8) x=8;
+  if(y+h>vh-8) y=Math.max(8, _tswXY[1]-h-12);
+  p.style.left=x+'px'; p.style.top=y+'px';
+}
 function tswPopMostrar(card){
   const t=(S.tareas||[]).find(x=>x.id===card.getAttribute('data-tid')); if(!t) return;
   let p=document.getElementById('tswPop');
   if(!p){ p=document.createElement('div'); p.id='tswPop'; p.className='tsw-pop'; document.body.appendChild(p); }
   p.innerHTML=tswPopHtml(t);
-  const r=card.getBoundingClientRect(), w=p.offsetWidth, h=p.offsetHeight, vw=window.innerWidth, vh=window.innerHeight;
-  let x=r.right+8; if(x+w>vw-8) x=r.left-w-8; if(x<8) x=Math.max(8, Math.min(vw-w-8, r.left));
-  let y=r.top; if(y+h>vh-8) y=Math.max(8, vh-h-8);
-  p.style.left=x+'px'; p.style.top=y+'px'; p.classList.add('on');
+  p.classList.add('on'); tswPopColocar();
 }
 (function(){
   if(!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches)) return;
@@ -5202,6 +5214,7 @@ function tswPopMostrar(card){
     if(c && ev.relatedTarget && c.contains(ev.relatedTarget)) return;
     if(c) tswPopOcultar();
   });
+  document.addEventListener('mousemove', function(ev){ _tswXY=[ev.clientX, ev.clientY]; tswPopColocar(); }, {passive:true});
   document.addEventListener('mousedown', tswPopOcultar, true);
   window.addEventListener('scroll', tswPopOcultar, true);
 })();
