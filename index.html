@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-0959">
+<meta name="lucai-version" content="2026-10-26-1017">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -12964,14 +12964,13 @@ function tarEspVentana(t, modo){
   return new Promise(resolve=>{
     const e=tarEsp(t.id)||{}, hoy=todayStr(), apl=modo==='aplazar';
     const prev=document.getElementById('lxConfirm'); if(prev) prev.remove();
-    const users=tarUsers().filter(n=>n!==(S.user&&S.user.nombre));
     const def = (tarEspEsta(t) && e.mirar && e.mirar>hoy) ? e.mirar : tarEspLab(hoy, TAR_ESP_DIAS);
     const ov=document.createElement('div'); ov.id='lxConfirm'; ov.className='lx-cf-ov';
     ov.innerHTML=`<div class="lx-cf lx-espf" role="dialog" aria-modal="true"><div class="ic pregunta">${LX_IC_RELOJ}</div>
       <h3>${apl?'¿Hasta cuándo lo aplazas?':'Esperando a otro'}</h3>
       <p>${apl?'Ese día vuelve a salir arriba del Inicio.':'Ya has hecho tu parte. Ese día vuelve a salir arriba del Inicio para mirar si han contestado.'}</p>
       <div class="tt">${incEsc(tarCap(t.titulo||''))}</div>
-      ${apl?'':`<label for="espDe">¿A quién esperas?</label><input class="inp" id="espDe" list="espDeL" autocomplete="off" value="${incEsc(e.de||'')}" placeholder="La gestoría, un proveedor, un compañero…"><datalist id="espDeL">${users.map(n=>`<option value="${incEsc(n)}">`).join('')}</datalist>`}
+      ${apl?'':`<label for="espDe">¿A quién esperas?</label><input class="inp" id="espDe" autocomplete="off" value="${incEsc(e.de||'')}" placeholder="Escríbelo: la asesoría, un proveedor, Noemí…">`}
       <label for="espMi">¿Cuándo vuelves a mirar?</label><input class="inp" type="date" id="espMi" value="${def}" min="${hoy}">
       ${apl?'':`<label for="espNo">Nota (opcional)</label><input class="inp" id="espNo" value="${incEsc(e.nota||'')}" placeholder="Qué pediste o qué falta">`}
       <div class="lx-esp-err" id="espErr"></div>
