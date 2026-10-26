@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-1243">
+<meta name="lucai-version" content="2026-10-26-1250">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -3056,7 +3056,7 @@ function homeView(){
   try{
     const tiles=[];
     if(canAccess('tareas')) tiles.push({v:taPend, rojo:taVenc>0, l:taVenc?`${taVenc} vencida${taVenc===1?'':'s'} · pendientes`:'Tareas pendientes', go:"setModule('tareas')"});
-    if(canAccess('material')){ const nped=(typeof lowItems==='function')?lowItems().length:0; tiles.push({v:nped, rojo:nped>0, l:'Artículos por pedir', go:"setModule('material')"}); }
+    if(canAccess('material') && (typeof almRecibe!=='function' || almRecibe())){ const nped=(typeof lowItems==='function')?lowItems().length:0; tiles.push({v:nped, rojo:nped>0, l:'Artículos por pedir', go:"setModule('material')"}); }
     if(tiles.length<2 && canAccess('comunicaciones')) tiles.push({v:comNL, rojo:comNL>0, l:'Avisos sin leer', go:"setModule('comunicaciones')"});
     if(tiles.length) mk=`<div class="np-mkpis">${tiles.slice(0,2).map(t=>`<button onclick="${t.go}"><div class="k-v${t.rojo?' rojo':''}">${t.v}</div><div class="k-l">${t.l}</div></button>`).join('')}</div>`;
   }catch(_){}
@@ -11327,7 +11327,7 @@ function lxHomeTop(){
   const ring=`<div class="lx-ring" title="Hechas hoy / para hoy"><svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${R}" fill="none" stroke="var(--arena-2)" stroke-width="5"/><circle cx="28" cy="28" r="${R}" fill="none" stroke="#16A34A" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/></svg><span>${tot?`${hechasHoy}/${tot}`:'✓'}</span></div>`;
   const tiles=[];
   const tile=(id,lbl,txt,rojo)=>{ const ic=(typeof TB_IC==='object'&&TB_IC[id])?`<svg viewBox="0 0 24 24">${TB_IC[id]}</svg>`:''; return `<button class="lx-tile" onclick="setModule('${id}')"><span class="ic">${ic}</span><span><b>${lbl}</b><small class="${rojo?'rojo':''}">${txt}</small></span></button>`; };
-  try{ if(canAccess('material')){ const n=lowItems().length; tiles.push(tile('material','Almacén', n?`${n} bajo mínimo`:'Todo en orden', n>0)); } }catch(_){}
+  try{ if(canAccess('material')){ const n=(typeof almAvisosN==='function')?almAvisosN():lowItems().length; tiles.push(tile('material','Almacén', n?`${n} por pedir`:((typeof almRecibe!=='function'||almRecibe())?'Todo en orden':'Stock y salidas'), n>0)); } }catch(_){}
   try{ if(canAccess('incidencias')){ const n=(S.incidencias||[]).filter(x=>!x.revisada).length; tiles.push(tile('incidencias','Incidencias', n?`${n} sin revisar`:'Nada pendiente', n>0)); } }catch(_){}
   try{ if(canAccess('equipos')){ const n=(S.partes||[]).filter(eqAbierto).length; tiles.push(tile('equipos','Equipos', n?`${n} parte${n===1?'':'s'} abierto${n===1?'':'s'}`:'Sin partes abiertos', false)); } }catch(_){}
   try{ if(canAccess('junta')){ const d=juntaProxima(); const f=d?new Date(d+'T00:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'}).replace('.',''):''; tiles.push(tile('junta','Reunión', f?`${f} · ${(S.juntaCfg&&S.juntaCfg.hora)||''}`:'Sin fecha', false)); } }catch(_){}
@@ -13216,6 +13216,125 @@ document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-ideas">
   modalContent=function(){ if(F.type==='idea_dictar') return ideaDictarModal(); return _mc.apply(this, arguments); };
 })();
 /* ===== FIN IDEAS: LA NEVERA ===== */
+
+/* ============================================================
+   LUCAI · AVISO DE «POR PEDIR» QUE SE QUITA SOLO (David, 26/10/2026, opción C)
+   1) Lo que ya está en un pedido sin recibir no avisa («en camino»); al recibirlo, si sigue bajo mínimo, vuelve.
+   2) «Ya está gestionado» hasta una fecha (lo pide otro, se cambia de marca…): no avisa hasta ese día; si sigue bajo, vuelve.
+   3) La campana, el número del menú y el recuadro del Inicio solo para quien se elige en Almacén › ⋯ › Avisos de pedir
+      (sin nadie elegido: Dirección). El resto sigue viendo el stock en rojo en la lista.
+   Se guarda en lucai_estado (almGestL y almCfgL) con el guardado de Reuniones: relee, fusiona por id, nunca borra.
+   ============================================================ */
+['almGestL','almCfgL'].forEach(k=>{ if(!JUNTA_KEYS.includes(k)) JUNTA_KEYS.push(k); if(!Array.isArray(S[k])) S[k]=[]; });
+function almBajoTodos(){ return activeArts().filter(a=>a.aviso!==false && a.stock<=a.min); }
+function almPedidoDe(cod){ return (S.pedidos||[]).find(p=>p && p.estado!=='recibido' && (p.lineas||[]).some(l=>l.cod===cod)) || null; }
+function almGestDe(cod){ const g=(S.almGestL||[]).find(x=>x && x.id===cod); return (g && g.hasta && g.hasta>=todayStr()) ? g : null; }
+lowItems=function(){ return almBajoTodos().filter(a=>!almPedidoDe(a.cod) && !almGestDe(a.cod)); };
+function almCfg(){ return (S.almCfgL||[]).find(x=>x && x.id==='cfg') || {id:'cfg', avisan:[]}; }
+function almAvisan(){ const a=(almCfg().avisan||[]).filter(Boolean); return a.length ? a : appUsers().filter(u=>u.admin===true || ['Director','Directora'].includes(u.rol)).map(u=>u.nombre); }
+function almRecibe(){ return !!S.user && (almAvisan().includes(S.user.nombre) || (!(almCfg().avisan||[]).length && isAdmin())); }
+function almAvisosN(){ return almRecibe() ? lowItems().length : 0; }
+/* la píldora «por pedir» filtra lo mismo que cuenta */
+const _stockMatch_alm=stockMatch;
+stockMatch=function(a){ if(S.stockPedir){ const ped=S.stockPedir; S.stockPedir=false; const ok=_stockMatch_alm(a); S.stockPedir=ped; return ok && lowItems().includes(a); } return _stockMatch_alm(a); };
+/* en la lista de stock, junto al código: «en camino» o «gestionado hasta…» */
+function almEtiqueta(a){
+  if(!(a.aviso!==false && a.stock<=a.min)) return '';
+  if(almPedidoDe(a.cod)) return ' <span class="alm-et">en camino</span>';
+  const g=almGestDe(a.cod); if(g) return ` <span class="alm-et" title="${incEsc(g.nota||'')}">gestionado hasta ${fmtFecha(g.hasta)}</span>`;
+  return '';
+}
+const _stockView_alm=stockView;
+stockView=function(){
+  let h=_stockView_alm();
+  almBajoTodos().forEach(a=>{ const t=almEtiqueta(a); if(!t) return;
+    h=h.split(`<span class="muted mono">${a.cod}</span>`).join(`<span class="muted mono">${a.cod}</span>${t}`);
+    h=h.split(`<div class="alm-sub">${a.cod} · `).join(`<div class="alm-sub">${a.cod}${t} · `); });
+  return h;
+};
+/* campana (por pedir y caducidad) solo para quien recibe los avisos */
+const _whoBlock_alm=whoBlock;
+whoBlock=function(showBell){ return _whoBlock_alm(showBell && almRecibe()); };
+/* la ventana «Pendiente de pedir»: lo que falta, con «Ya está gestionado», y aparte lo que ya está en marcha */
+pedirModal=function(){
+  const items=lowItems();
+  const enMarcha=almBajoTodos().filter(a=>almPedidoDe(a.cod) || almGestDe(a.cod));
+  const fila=(a,der)=>`<div class="alm-pf"><span><strong>${incEsc(a.nombre)}</strong> <span class="muted mono">${a.cod}</span> · ${incEsc(a.proveedor||'sin proveedor')}<span class="tag ${a.stock===0?'inc':'adj'}" style="margin-left:6px">${a.stock} ud. (mín. ${a.min})</span></span>${der}</div>`;
+  const cats=[...new Set(items.map(a=>a.categoria))].sort((a,b)=>a.localeCompare(b));
+  const falta=items.length ? cats.map(c=>{ const its=items.filter(a=>a.categoria===c);
+      return `<div class="alm-pg"><div class="alm-pgt"><span>${incEsc(c)}</span><span class="muted">${its.length}</span></div>${its.map(a=>fila(a, `<button class="btn btn-ghost btn-sm" onclick="almGestAbrir('${a.cod}')">Ya está gestionado</button>`)).join('')}</div>`; }).join('')
+    : '<div class="muted" style="margin-bottom:12px">Nada por pedir. Todo en orden.</div>';
+  const marcha=enMarcha.length ? `<div class="alm-pg"><div class="alm-pgt"><span>Ya en marcha (no avisan)</span><span class="muted">${enMarcha.length}</span></div>${enMarcha.map(a=>{
+      const p=almPedidoDe(a.cod), g=almGestDe(a.cod);
+      const der=p ? `<span class="muted" style="font-size:12.5px;white-space:nowrap">En camino · pedido del ${fmtFecha(p.ts)}</span>`
+        : `<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><span class="muted" style="font-size:12.5px">Gestionado hasta el ${fmtFecha(g.hasta)}${g.por?' · '+incEsc(g.por):''}${g.nota?' · '+incEsc(g.nota):''}</span><button class="btn btn-ghost btn-sm" onclick="almGestQuitar('${a.cod}')">Volver a avisar</button></span>`;
+      return fila(a, der); }).join('')}</div>` : '';
+  return `<div class="overlay"><div class="modal">
+    <div class="modal-head"><h2>Pendiente de pedir (${items.length})</h2><button class="x" onclick="closeAlert()">×</button></div>
+    <div class="modal-body"><div class="muted" style="font-size:12.5px;margin-bottom:12px">Lo que metes en un pedido deja de avisar solo; cuando lo recibes, si sigue bajo mínimo, vuelve a avisar.</div>${falta}${marcha}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeAlert()">Cerrar</button><button class="btn btn-primary" onclick="closeAlert();setSub('pedidos')">Ir a pedidos</button></div>
+  </div></div>`;
+};
+function almGestAbrir(cod){ const a=art(cod); if(!a) return; S.alert=''; F={type:'alm_gest', cod, hasta:juntaMasDias(todayStr(),7), nota:''}; S.modal='alm_gest'; render(); }
+function almGestModal(){
+  const a=art(F.cod)||{nombre:F.cod};
+  return `<div class="overlay"><div class="modal lx-mc" style="max-width:460px">
+    <div class="modal-head"><h2>Ya está gestionado</h2><button class="x" onclick="closeModal();openAlert('pedir')">×</button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:12px"><strong>${incEsc(a.nombre)}</strong> <span class="muted mono">${F.cod}</span></div>
+      <div class="fld"><label>No avisar hasta el</label><input type="date" class="inp" value="${F.hasta}" min="${todayStr()}" onchange="setInp('hasta',this.value)"></div>
+      <div class="fld"><label>Qué se ha hecho (opcional)</label><input class="inp" value="${incEsc(F.nota)}" placeholder="p. ej. lo pide el doctor, cambiamos de marca…" oninput="setInp('nota',this.value)"></div>
+      <div class="muted" style="font-size:12px">Ese día, si sigue por debajo del mínimo, vuelve a avisar.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal();openAlert('pedir')">Cancelar</button><button class="btn btn-primary" onclick="almGestGuardar()">Guardar</button></div>
+    </div></div></div>`;
+}
+function almGestGuardar(){
+  if(!F.hasta || F.hasta<todayStr()){ toast('Elige una fecha de hoy en adelante'); return; }
+  let g=(S.almGestL||[]).find(x=>x && x.id===F.cod); if(!g){ g={id:F.cod}; S.almGestL.push(g); }
+  g.hasta=F.hasta; g.nota=String(F.nota||'').trim(); g.por=S.user.nombre; g.ts=now();
+  closeModal(); S.alert='pedir'; render(); juntaToca(g); toast('Hecho: no avisa hasta el '+fmtFecha(F.hasta));
+}
+async function almGestQuitar(cod){
+  const g=(S.almGestL||[]).find(x=>x && x.id===cod); if(!g) return;
+  g.hasta=''; g.por=S.user.nombre; g.ts=now(); render(); juntaToca(g); toast('Vuelve a avisar');
+}
+/* Ajustes: quién recibe los avisos (Dirección) */
+function almAjAbrir(){ if(!isAdmin()) return; F={type:'alm_aj', avisan:(almCfg().avisan||[]).slice()}; S.modal='alm_aj'; render(); }
+function almAjToggle(i){ const n=appUsers()[i] && appUsers()[i].nombre; if(!n) return; const j=F.avisan.indexOf(n); if(j>=0) F.avisan.splice(j,1); else F.avisan.push(n); render(); }
+function almAjModal(){
+  const us=appUsers();
+  return `<div class="overlay"><div class="modal" style="max-width:620px">
+    <div class="modal-head"><h2>Avisos de pedir</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-body"><div class="fld"><label>Quién recibe los avisos</label><div class="muted" style="font-size:12px;margin-bottom:6px">Ven la campana del Almacén (por pedir y caducidad), el número en el menú y el aviso del Inicio. Los demás siguen viendo el stock en rojo en la lista. Si no eliges a nadie, los recibe Dirección.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${us.map((u,i)=>`<button type="button" class="btn btn-sm ${F.avisan.includes(u.nombre)?'btn-primary':'btn-ghost'}" onclick="almAjToggle(${i})">${incEsc(u.nombre)}</button>`).join('')}</div></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="almAjGuardar()">Guardar</button></div></div></div></div>`;
+}
+function almAjGuardar(){
+  let c=(S.almCfgL||[]).find(x=>x && x.id==='cfg'); if(!c){ c={id:'cfg'}; S.almCfgL.push(c); }
+  c.avisan=F.avisan.slice(); closeModal(); render(); juntaToca(c); toast('Guardado');
+}
+(function(){
+  const _mc=modalContent;
+  modalContent=function(){ if(F.type==='alm_gest') return almGestModal(); if(F.type==='alm_aj') return almAjModal(); return _mc.apply(this, arguments); };
+  const _mv=materialView;
+  materialView=function(){
+    let h=_mv.apply(this, arguments);
+    if(isAdmin()) h=h.replace('<button onclick="exportStock()">Exportar a Excel</button></div>', '<button onclick="exportStock()">Exportar a Excel</button><button onclick="almAjAbrir()">Avisos de pedir…</button></div>');
+    return h;
+  };
+  const _tb=tbBadgeOf;
+  tbBadgeOf=function(id){ if(id==='material'){ try{ return almAvisosN(); }catch(_){ return 0; } } return _tb.apply(this, arguments); };
+})();
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-alm-avisos">
+.alm-et{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px;margin-left:4px;background:var(--lx-gris-s,#EEF0F3);color:var(--lx-gris,#3D4754);white-space:nowrap;font-family:inherit}
+.alm-pg{margin-bottom:14px}
+.alm-pgt{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px;margin-bottom:6px}
+.alm-pf{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--t-bd-line);border-radius:9px;margin-bottom:6px;font-size:14px}
+.alm-pf .btn{white-space:nowrap;flex:0 0 auto}
+@media(max-width:720px){ .alm-pf{flex-direction:column;align-items:flex-start} }
+</style>`);
+/* ===== FIN AVISO DE «POR PEDIR» ===== */
+
 
 boot();
 
