@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-26-1250">
+<meta name="lucai-version" content="2026-10-26-1336">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -481,6 +481,30 @@ function lucaiTemaBtn(){ return '<button class="logout tema-btn" onclick="lucaiT
 .inctable-tar .tar-c-estado{width:1%;white-space:nowrap}
 .inctable-tar .tar-c-act{width:1%;white-space:nowrap;text-align:right}
 @media(max-width:720px){ .inctable{min-width:0} .inctable .col-hide-m{display:none} }
+
+/* === Tareas › Semana en columnas (lunes a domingo, arrastrar para cambiar la fecha) === */
+.tsw-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:stretch}
+.tsw-col{background:var(--t-bg-FAF8F3);border:1px solid var(--line);border-radius:10px;padding:8px 6px;min-height:340px;display:flex;flex-direction:column;gap:6px;transition:background .12s,border-color .12s}
+.tsw-col.hoy{background:var(--t-bg-F4F0E9);border-color:var(--t-bd-B8A88F)}
+.tsw-col.finde{opacity:.92}
+.tsw-col.over,.tsw-sin.over{background:rgba(47,111,219,.12);border-color:#2F6FDB;border-style:dashed}
+.tsw-h{display:flex;align-items:baseline;justify-content:space-between;gap:4px;padding:0 4px 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;color:var(--t-fg-8A949B)}
+.tsw-col.hoy .tsw-h{color:var(--t-fg-333F48)}
+.tsw-h .n{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0}
+.tsw-c{background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-left:3px solid #8A949B;border-radius:7px;padding:6px 7px;cursor:pointer;font-size:12.5px;line-height:1.3;user-select:none;-webkit-user-select:none}
+.tsw-c[draggable="true"]{cursor:grab}
+.tsw-c[draggable="true"]:active{cursor:grabbing}
+.tsw-c.drag{opacity:.4}
+.tsw-c .t{font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.tsw-c .q{font-size:11px;color:var(--t-fg-8A949B);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;display:flex;align-items:center;gap:4px}
+.tsw-c .q span.qq{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tsw-c .ok{border:1px solid var(--t-bd-line);background:transparent;border-radius:50%;width:18px;height:18px;line-height:15px;font-size:11px;padding:0;color:var(--t-fg-8A949B);cursor:pointer;flex-shrink:0}
+.tsw-c .ok:hover{border-color:#6E8E00;color:#6E8E00}
+.tsw-vacio{font-size:11.5px;color:var(--t-fg-8A949B);padding:4px;text-align:center}
+.tsw-sin{background:var(--t-bg-FAF8F3);border:1px dashed var(--t-bd-line);border-radius:10px;padding:8px 10px;margin-bottom:10px;min-height:44px}
+.tsw-sin .tsw-sin-l{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
+.tsw-ayuda{font-size:12px;color:var(--t-fg-8A949B);margin:-6px 0 10px}
+@media(max-width:720px){ .tsw-grid{grid-template-columns:repeat(7,150px);overflow-x:auto} }
 
 /* === candado de módulos sin acceso === */
 .pill-lock{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--t-fg-8A949B);background:var(--t-bg-EAE3D7);padding:3px 9px;border-radius:20px}
@@ -5018,6 +5042,7 @@ function tarTodasView(){
 }
 
 function tarSemanaView(){
+  if(window.innerWidth>720) return tarSemanaCols();
   const me=S.user.nombre, admin=isAdmin();
   const mias=(S.tareas||[]).filter(t=> t.paraQuien===me || t.deQuien===me || tarPartList(t).includes(me));
   const mon=tarMonday(S.tarWeek);
@@ -5064,6 +5089,65 @@ function tarSemanaView(){
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">${sinFecha.map(tarjeta).join('')}</div>
     </div>` : '';
   return nav+bandas.join('')+bloqueSinFecha;
+}
+
+/* Semana en columnas (ordenador): lunes a domingo; se arrastra una tarea a otro día (o a «Sin fecha») para cambiar
+   su fecha. Solo se pueden arrastrar las que puedes cambiar: las que mandaste tú (o todas si eres Dirección). */
+function tarSemanaCols(){
+  const me=S.user.nombre, admin=isAdmin();
+  const mias=(S.tareas||[]).filter(t=> t.paraQuien===me || t.deQuien===me || tarPartList(t).includes(me));
+  const mon=tarMonday(S.tarWeek);
+  const dom=new Date(mon); dom.setDate(mon.getDate()+6);
+  const rango=`${mon.getDate()}/${mon.getMonth()+1} – ${dom.getDate()}/${dom.getMonth()+1}`;
+  const nav=`<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn btn-ghost btn-sm" onclick="tarWeekNav(-1)">‹ Semana anterior</button>
+    <div style="font-weight:700">${S.tarWeek===0?'Esta semana':rango} <span class="muted" style="font-weight:400;font-size:13px">(${rango})</span></div>
+    <button class="btn btn-ghost btn-sm" onclick="tarWeekNav(1)">Semana siguiente ›</button>
+    ${S.tarWeek!==0?`<button class="btn btn-ghost btn-sm" onclick="tarWeekNav(0,true)">Hoy</button>`:''}
+  </div>
+  <div class="tsw-ayuda">Arrastra una tarea a otro día para cambiar su fecha. Solo se mueven las que mandaste tú${admin?' (Dirección, todas)':''}.</div>`;
+  const ordenar=(a,b)=>{ const av=tarActiva(a)?0:1,bv=tarActiva(b)?0:1; if(av!==bv) return av-bv; const h=String(a.horaInicio||'99').localeCompare(String(b.horaInicio||'99')); if(h) return h; return TAR_PRIOS.indexOf(a.prioridad)-TAR_PRIOS.indexOf(b.prioridad); };
+  const tarjeta=(t)=>{
+    const col = t.estado==='Hecha' ? '#6E8E00' : t.prioridad==='Alta' ? '#C0392B' : t.prioridad==='Media' ? '#B8860B' : '#8A949B';
+    const tach = t.estado==='Hecha' ? 'text-decoration:line-through;opacity:.55' : '';
+    const activa = tarActiva(t), recibida = t.paraQuien===me;
+    const mueve = activa && (admin || t.deQuien===me);
+    const quien = t.paraQuien===me?'para mí':('para '+(t.paraQuien||'—'));
+    const ok = (activa && (recibida||admin)) ? `<button class="ok" title="Marcar hecha" draggable="false" onclick="event.stopPropagation();tarMarcarHecha('${t.id}')">✓</button>` : '';
+    return `<div class="tsw-c" style="border-left-color:${col};${tach}" onclick="openTarDet('${t.id}')" ${mueve?`draggable="true" ondragstart="tarSwDragStart(event,'${t.id}')" ondragend="tarSwDragEnd(event)"`:`title="${activa?'La fecha la cambia quien mandó la tarea':''}"`}>
+      <div class="t">${tarNuevosPara(t,me)?'<span style="color:var(--t-fg-6E8E00)">● </span>':''}${t.horaInicio?`<span style="color:var(--t-fg-5A6770);font-weight:700">${incEsc(t.horaInicio)} </span>`:''}${incEsc(t.titulo)}${(t.serieId||t.recurrencia)?' <span title="Recurrente" style="color:var(--t-fg-8A949B)">⟳</span>':''}</div>
+      <div class="q"><span class="qq">${incEsc(quien)}${t.estado==='En espera'?' · <span style="color:var(--t-fg-8A5A00);font-weight:600">esperando</span>':''}</span>${ok}</div>
+    </div>`;
+  };
+  const drop=(iso)=>`ondragover="tarSwOver(event)" ondragleave="tarSwLeave(event)" ondrop="tarSwDrop(event,'${iso}')"`;
+  const cols=[];
+  for(let i=0;i<7;i++){
+    const d=new Date(mon); d.setDate(mon.getDate()+i); const iso=tarIso(d);
+    const esHoy=iso===todayStr();
+    const dia=mias.filter(t=>t.fechaLimite===iso).sort(ordenar);
+    const nAct=dia.filter(tarActiva).length;
+    cols.push(`<div class="tsw-col${esHoy?' hoy':''}${i>4?' finde':''}" ${drop(iso)}>
+      <div class="tsw-h"><span>${TAR_DOW[i]} ${d.getDate()}${esHoy?' <span style="color:var(--t-fg-6E8E00)">· hoy</span>':''}</span><span class="n">${nAct||''}</span></div>
+      ${dia.length?dia.map(tarjeta).join(''):'<div class="tsw-vacio">—</div>'}
+    </div>`);
+  }
+  const sinFecha=mias.filter(t=>!t.fechaLimite && tarActiva(t)).sort(ordenar);
+  const bloqueSin=`<div class="tsw-sin" ${drop('')}>
+    <div class="tsw-h" style="padding-left:0"><span>Sin fecha</span><span class="n">${sinFecha.length||''}</span></div>
+    ${sinFecha.length?`<div class="tsw-sin-l">${sinFecha.map(tarjeta).join('')}</div>`:'<div class="tsw-vacio" style="text-align:left">Nada sin fecha. Arrastra aquí una tarea para quitarle la fecha.</div>'}
+  </div>`;
+  return nav+bloqueSin+`<div class="tsw-grid">${cols.join('')}</div>`;
+}
+function tarSwDragStart(ev,id){ S._tswDrag=id; try{ ev.dataTransfer.setData('text/plain',id); ev.dataTransfer.effectAllowed='move'; }catch(e){} ev.currentTarget.classList.add('drag'); }
+function tarSwDragEnd(ev){ ev.currentTarget.classList.remove('drag'); document.querySelectorAll('.tsw-col.over,.tsw-sin.over').forEach(x=>x.classList.remove('over')); }
+function tarSwOver(ev){ if(!S._tswDrag) return; ev.preventDefault(); try{ ev.dataTransfer.dropEffect='move'; }catch(e){} ev.currentTarget.classList.add('over'); }
+function tarSwLeave(ev){ if(!ev.currentTarget.contains(ev.relatedTarget)) ev.currentTarget.classList.remove('over'); }
+function tarSwDrop(ev,iso){
+  ev.preventDefault(); ev.currentTarget.classList.remove('over');
+  const id=S._tswDrag; S._tswDrag=null; if(!id) return;
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  if((t.fechaLimite||'')===(iso||'')) return;
+  tarSetFecha(id, iso);
 }
 
 /* ---- resumen del día / panel de equipo ---- */
