@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-27-1053">
+<meta name="lucai-version" content="2026-10-27-1226">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -6388,13 +6388,11 @@ function nnEnabled(){ return nnSupported() && Notification.permission==='granted
 function _nnSeen(){
   try{ const s=localStorage.getItem(NN_SEEN_KEY); return new Set(s?JSON.parse(s):[]); }catch(_){ return new Set(); }
 }
-function _nnSeenAdd(id){
-  try{
-    const set=_nnSeen(); set.add(id);
-    // limito a últimos 500 ids para no inflar el storage
-    const arr=[...set]; const tail = arr.slice(-500);
-    localStorage.setItem(NN_SEEN_KEY, JSON.stringify(tail));
-  }catch(_){}
+function _nnSeenAdd(id){ _nnSeenGuardar(new Set([..._nnSeen(), id])); }
+/* Guarda la lista de una vez. Antes se cortaba en 500 y, con más tareas y mensajes que eso, al abrir la app
+   (o al recargarse sola tras una actualización) volvía a avisar de cosas antiguas (27/10/2026). */
+function _nnSeenGuardar(set){
+  try{ const arr=[...set]; localStorage.setItem(NN_SEEN_KEY, JSON.stringify(arr.slice(-20000))); }catch(_){}
 }
 
 /* Lanza una notificación si: el permiso está concedido, el usuario no la ha desactivado,
@@ -6480,17 +6478,23 @@ function nnDetectar(){
 
     // Primera pasada tras cargar: marcar TODO lo existente como ya visto, sin notificar.
     // Así sólo notificas lo que llegue de aquí en adelante, no lo que ya estaba en BD al abrir.
+    // Si las tareas aún no han llegado, se espera a la siguiente vuelta (si no, todo parecería nuevo después).
+    // La lista guardada se rehace con lo que existe ahora: no crece sin fin y no hace falta cortarla.
     if(_nnPrimeraPasada){
+      if(!(S.tareas||[]).length) return;
+      const base=new Set();
       (S.tareas||[]).forEach(t=>{
-        _nnSeenAdd('tar:'+t.id);
-        (t.mensajes||[]).forEach(m=>_nnSeenAdd('msg:'+t.id+':'+(m.ts||'')+':'+(m.de||'')));
+        base.add('tar:'+t.id);
+        (t.mensajes||[]).forEach(m=>base.add('msg:'+t.id+':'+(m.ts||'')+':'+(m.de||'')));
       });
+      _nnSeenGuardar(base);
       _nnPrimeraPasada = false;
       try{ if(window.console) console.log('[Lucai notif] Detector listo. Sólo se avisará de novedades a partir de ahora.'); }catch(_){}
       return;
     }
 
-    let nuevos = 0;
+    let nuevos = 0, cambio = false;
+    const _nnMarca = id => { seen.add(id); cambio = true; };
     (S.tareas||[]).forEach(t=>{
       const involucrado = (t.paraQuien===me) || (Array.isArray(t.participantes) && t.participantes.includes(me));
       if(!involucrado) return;
@@ -6498,7 +6502,7 @@ function nnDetectar(){
       // Tarea nueva donde participo (y no la creé yo)
       const tk = 'tar:'+t.id;
       if(!seen.has(tk)){
-        _nnSeenAdd(tk);
+        _nnMarca(tk);
         if(t.deQuien && t.deQuien!==me){
           const esMia = (t.paraQuien===me);
           const titulo = esMia ? `📋 Nueva tarea: ${t.titulo}` : `👥 Te han incluido en: ${t.titulo}`;
@@ -6512,13 +6516,14 @@ function nnDetectar(){
       (t.mensajes||[]).forEach(m=>{
         const mk = 'msg:'+t.id+':'+(m.ts||'')+':'+(m.de||'');
         if(seen.has(mk)) return;
-        _nnSeenAdd(mk);
+        _nnMarca(mk);
         if(!m.de || m.de===me) return;
         const cuerpo = (m.texto||'').slice(0,140) || '(adjunto)';
         appNotify(`💬 ${m.de} en "${t.titulo}"`, cuerpo, {tag:'msg:'+t.id, tarId:t.id});
         nuevos++;
       });
     });
+    if(cambio) _nnSeenGuardar(seen);
     if(nuevos>0){ try{ console.log('[Lucai notif] Detectados', nuevos, 'evento(s) nuevo(s).'); }catch(_){} }
   }catch(e){ try{ console.warn('[Lucai notif] nnDetectar', e); }catch(_){} }
 }
