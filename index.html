@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-27-0951">
+<meta name="lucai-version" content="2026-10-27-0959">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -4346,7 +4346,7 @@ function tarLimiteCell(t){
 }
 function tarFechaEdit(t){
   if(t.estado==='Hecha') return tarLimiteCell(t);
-  if(!(isAdmin() || (S.user && t.deQuien===S.user.nombre))) return tarLimiteCell(t);
+  if(!tarPuedeFecha(t)) return tarLimiteCell(t);
   const d=tarDiasRest(t);
   const hint = t.fechaLimite ? (d<0?`<span style="color:var(--t-fg-C0392B);font-weight:700;font-size:11px">vencida</span>`:(d===0?`<span style="color:var(--t-fg-B8860B);font-weight:700;font-size:11px">hoy</span>`:(d<=2?`<span style="color:var(--t-fg-B8860B);font-size:11px">${d} d</span>`:''))) : '';
   return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap" onclick="event.stopPropagation()">
@@ -4515,7 +4515,7 @@ function tarDragUp(ev){ document.removeEventListener('pointermove',tarDragMove);
   const t=(S.tareas||[]).find(x=>x.id===D.id); const p=D.prev; if(!t||!p){ render(); return; }
   let msg = D.mode==='resize' ? 'Duración cambiada' : 'Tarea movida';
   t.horaInicio=_mh(p.s); t.horaFin=_mh(p.e);
-  if(D.mode==='move' && p.d && p.d!==t.fechaLimite){ if(t.deQuien===S.user.nombre){ t.fechaLimite=p.d; } else { msg='Hora cambiada (la fecha solo la cambia quien la creó)'; } }
+  if(D.mode==='move' && p.d && p.d!==t.fechaLimite){ if(tarPuedeFecha(t)){ t.fechaLimite=p.d; } else { msg='Hora cambiada (la fecha la cambian quien hace la tarea o quien la mandó)'; } }
   render(); srvTarUpdate(t.id, t, msg);
 }
 function tarCalNuevaEnGrid(d, ev, r0, hourH){ if(_calSuppress){ _calSuppress=false; return; } let mins=r0; try{ const y=(ev&&ev.offsetY!=null)?ev.offsetY:0; mins=r0 + Math.round((y/hourH*60)/15)*15; }catch(_){}; const hi=_mh(mins); openTarea({fechaLimite:d, horaInicio:hi, horaFin:_mh(mins+30)}); }
@@ -5076,8 +5076,8 @@ function tarSemanaView(){
     const quien = t.paraQuien===me?'para mí':('para '+t.paraQuien);
     const activa = tarActiva(t), recibida = t.paraQuien===me;
     let btns='';
-    if(activa && tarEspCelda(t)){ if(t.paraQuien===me||admin) btns += `<button class="btn btn-ghost btn-sm" title="Volver a mirar un día más tarde" onclick="event.stopPropagation();tarEspMas1('${t.id}')">+1d</button>`; }
-    else if(activa && (t.deQuien===me||admin)) btns += `<button class="btn btn-ghost btn-sm" title="Posponer un día" onclick="event.stopPropagation();tarPosponer('${t.id}',1)">+1d</button>`;
+    if(activa && tarEspCelda(t)){ if(tarPuedeFecha(t)) btns += `<button class="btn btn-ghost btn-sm" title="Volver a mirar un día más tarde" onclick="event.stopPropagation();tarEspMas1('${t.id}')">+1d</button>`; }
+    else if(activa && tarPuedeFecha(t)) btns += `<button class="btn btn-ghost btn-sm" title="Posponer un día" onclick="event.stopPropagation();tarPosponer('${t.id}',1)">+1d</button>`;
     if(activa && (recibida||admin)) btns += `<button class="btn btn-ghost btn-sm" title="Marcar hecha" onclick="event.stopPropagation();tarMarcarHecha('${t.id}')">Hecha</button>`;
     return `<div onclick="openTarDet('${t.id}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-left:3px solid ${col};border-radius:8px;padding:7px 10px;${tach}">
       <div style="flex:1;min-width:0">
@@ -5129,7 +5129,7 @@ function tarSemanaCols(){
     const tach = t.estado==='Hecha' ? 'text-decoration:line-through;opacity:.55' : '';
     const activa = tarActiva(t), recibida = t.paraQuien===me;
     const espM = tarEspCelda(t)!=='';
-    const mueve = activa && (admin || (espM ? t.paraQuien===me : t.deQuien===me));
+    const mueve = activa && tarPuedeFecha(t);
     const quien = t.paraQuien===me?'para mí':('para '+(t.paraQuien||'—'));
     const ok = (activa && (recibida||admin)) ? `<button class="ok" title="Marcar hecha" draggable="false" onclick="event.stopPropagation();tarMarcarHecha('${t.id}')">✓</button>` : '';
     return `<div class="tsw-c" data-tid="${t.id}" style="border-left-color:${col};${tach}" onclick="openTarDet('${t.id}')" ${mueve?`draggable="true" ondragstart="tarSwDragStart(event,'${t.id}')" ondragend="tarSwDragEnd(event)"`:''}>
@@ -5362,13 +5362,15 @@ function tarAddDias(fechaStr, n){
 function tarPosponer(id, n){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   const me=S.user.nombre;
-  if(!(isAdmin()||t.deQuien===me)){ toast('La fecha la cambia quien mandó la tarea. Pídeselo por el chat de la tarea.'); return; }
+  if(!tarPuedeFecha(t)){ toast('La fecha la cambian quien hace la tarea o quien la mandó.'); return; }
   t.fechaLimite = tarAddDias(t.fechaLimite, n||1); render(); srvTarUpdate(id, t, `Pospuesta a ${fmtFecha(t.fechaLimite)}`);
 }
+/* la fecha de entrega (y el día de mirar de una tarea esperando) la cambian quien la hace, quien la mandó o Dirección (David, 27/10/2026) */
+function tarPuedeFecha(t){ const me=S.user&&S.user.nombre; return !!t && (isAdmin() || t.deQuien===me || t.paraQuien===me); }
 function tarSetFecha(id, val){
   const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
   const me=S.user.nombre;
-  if(!(isAdmin()||t.deQuien===me)){ toast('La fecha la cambia quien mandó la tarea. Pídeselo por el chat de la tarea.'); render(); return; }
+  if(!tarPuedeFecha(t)){ toast('La fecha la cambian quien hace la tarea o quien la mandó.'); render(); return; }
   t.fechaLimite = val||''; render(); srvTarUpdate(id, t, val?`Fecha cambiada a ${fmtFecha(val)}`:'Fecha quitada');
 }
 
