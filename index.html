@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-27-1226">
+<meta name="lucai-version" content="2026-10-27-1240">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -611,6 +611,9 @@ html[data-tema="noche"] .tsw-pop .pd.vacio{color:#8D99A6}
   .tar-det-actions > *{ flex:1 1 0 }
   .tar-det-actions > .btn-primary{ flex:1.3 1 0 }
   .tar-det-actions .btn{ width:100%; justify-content:center; white-space:nowrap; padding-left:8px; padding-right:8px; font-size:13.5px }
+  /* «Dejar sin leer» en su propia fila, encima de los 3 botones */
+  .tar-det-actions:has(.tar-sinleer){ flex-wrap:wrap }
+  .tar-det-actions > .tar-sinleer{ flex:1 0 100%; margin-right:0 !important; order:-1 }
 }
 
 /* --- TAREAS · lista como TARJETAS en móvil (tabla solo en escritorio) --- */
@@ -4275,10 +4278,10 @@ async function srvTarUpdate(id, t, okMsg){
       remMsg.forEach(m=>{ if(!seen.has(k(m))){ _msgs.push(m); seen.add(k(m)); } });
       _msgs.sort((a,b)=> String((a&&a.ts)||'').localeCompare(String((b&&b.ts)||'')));
       const remVis = (cur.data.vistos && typeof cur.data.vistos==='object' && !Array.isArray(cur.data.vistos)) ? cur.data.vistos : (function(){ try{ return cur.data.vistos?JSON.parse(cur.data.vistos):{}; }catch(_){ return {}; } })();
-      Object.keys(remVis||{}).forEach(p=>{ if(!_vistos[p] || String(remVis[p])>String(_vistos[p])) _vistos[p]=remVis[p]; });
+      Object.keys(remVis||{}).forEach(p=>{ if(p===t._sinLeer) return; if(!_vistos[p] || String(remVis[p])>String(_vistos[p])) _vistos[p]=remVis[p]; });
     }
   }catch(_){}
-  t.mensajes = _msgs; t.vistos = _vistos;
+  t.mensajes = _msgs; t.vistos = _vistos; delete t._sinLeer;
   try{
     const { error } = await sbc.from('tar_tareas').update({
       titulo:t.titulo, descripcion:t.descripcion||null, prioridad:t.prioridad,
@@ -5747,6 +5750,20 @@ function openTarDet(id){
   }
 }
 function tarDetTab(tab){ F.detTab=tab; render(); }
+/* «Dejar sin leer» (David, 27/10/2026: «como en los correos, marcar como no leído»): el último mensaje de otra persona
+   vuelve a contar como nuevo (● y número), hasta que se vuelva a abrir la tarea. Solo cambia vistos[yo]. */
+function tarDejarSinLeer(id){
+  const t=(S.tareas||[]).find(x=>x.id===id); if(!t) return;
+  const me=S.user.nombre;
+  const ms=(t.mensajes||[]).filter(m=>m && m.ts).slice().sort((a,b)=>String(a.ts).localeCompare(String(b.ts)));
+  let k=-1; ms.forEach((m,i)=>{ if(m.de && m.de!==me) k=i; });
+  if(k<0){ toast('No hay mensajes de otros en esta tarea'); return; }
+  if(!t.vistos||typeof t.vistos!=='object'||Array.isArray(t.vistos)) t.vistos={};
+  t.vistos[me]=k>0 ? String(ms[k-1].ts) : '';
+  t._sinLeer=me;   // que el guardado no lo vuelva a poner como leído
+  srvTarUpdate(id, t);
+  closeModal(); render(); toast('Queda sin leer: seguirá saliendo como mensaje nuevo');
+}
 function tarToggleAccMenu(){ S.tarAccMenu=!S.tarAccMenu; render(); }
 function tarDetModalContent(){
   const t=(S.tareas||[]).find(x=>x.id===F.id)||{};
@@ -5813,6 +5830,7 @@ function tarDetModalContent(){
       <div style="flex:1 1 auto;min-height:160px;overflow-y:auto">${tabBody}</div>
       <div class="tar-det-actions" style="flex:0 0 auto;display:flex;gap:10px;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid var(--t-bd-line)">
         ${tarAccBackdrop}
+        ${(t.mensajes||[]).some(m=>m && m.de && m.de!==me) ? `<button class="btn btn-ghost tar-sinleer" onclick="tarDejarSinLeer('${t.id}')" title="Sigue saliendo como mensaje nuevo hasta que la vuelvas a abrir" style="margin-right:auto">✉ Dejar sin leer</button>` : ''}
         ${tarPrimary}
         ${tarAccMenu}
         <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
