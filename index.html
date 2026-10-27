@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lucai">
-<meta name="lucai-version" content="2026-10-27-1240">
+<meta name="lucai-version" content="2026-10-27-1442">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -12349,6 +12349,98 @@ function lxRecGuardar(u){
 })();
 
 /* ============================================================
+   LUCAI · TABLET COMPARTIDA Y «SALIR» DE UN TOQUE (27/10/2026, David)
+   Una tablet que usa todo el equipo se marca una vez abriendo la app con ?tablet=compartida
+   (?tablet=personal lo quita). Se guarda solo en ese aparato (localStorage lucai_compartida). En ella:
+   - no sale «Recordarme» ni vale un recuerdo guardado: siempre usuario y contraseña;
+   - a los 5 minutos sin tocarla se cierra la sesión (aviso 30 s antes, «Sigo aquí»), salvo en Reuniones
+     (la reunión del jueves tiene ratos largos sin tocar) o mientras se dicta;
+   - al cerrar sesión se cierran también las ventanas abiertas, para que el siguiente no vea nada del anterior.
+   Botón «Salir» de un toque: en el menú lateral, en todos los aparatos; en la barra de abajo, solo en la tablet compartida.
+   ============================================================ */
+const LX_COMP_KEY='lucai_compartida', LX_COMP_MIN=5, LX_COMP_AVISO=30;
+function lxCompartida(){ try{ return localStorage.getItem(LX_COMP_KEY)==='1'; }catch(_){ return false; } }
+(function(){
+  try{
+    const q=new URLSearchParams(location.search), v=(q.get('tablet')||'').toLowerCase();
+    if(!v) return;
+    if(v==='compartida'){ localStorage.setItem(LX_COMP_KEY,'1'); try{ localStorage.removeItem(LX_REC_KEY); }catch(_){} window._lxCompAviso='Esta tablet queda como compartida: siempre pide usuario y contraseña y la sesión se cierra sola a los '+LX_COMP_MIN+' minutos sin tocarla.'; }
+    else if(v==='personal'){ localStorage.removeItem(LX_COMP_KEY); window._lxCompAviso='Este aparato vuelve a ser personal.'; }
+    q.delete('tablet');
+    history.replaceState(null,'',location.pathname+(q.toString()?'?'+q.toString():'')+location.hash);
+  }catch(_){}
+})();
+/* en la tablet compartida no cuenta como móvil personal: sin «Recordarme» y sin entrar solo */
+(function(){
+  const _em=lxEsMovil;
+  lxEsMovil=function(){ return !lxCompartida() && _em.apply(this, arguments); };
+})();
+/* cerrar sesión deja la pantalla limpia (ventanas, asistente, menú «Más») */
+function lxSalir(){
+  try{ juntaMicParar(); }catch(_){}
+  try{ S.modal=null; F={}; S.iaOpen=false; S.tbMore=false; S.loginName=''; S.loginErr=''; S.loginRecordar=false; }catch(_){}
+  try{ document.querySelectorAll('.overlay,#lxConfirm').forEach(o=>o.remove()); }catch(_){}
+  lxCompAvisoQuitar();
+  logout();
+}
+/* botón «Salir» en el menú lateral (todos) y en la barra de abajo (solo tablet compartida) */
+const LX_IC_SALIR='<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>';
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-salir">
+.lx-rail .lx-it.lx-salir{color:var(--t-fg-C0392B)}
+.lx-rail .lx-it.lx-salir svg{stroke:var(--t-fg-C0392B)}
+@media(min-width:721px){ .lx-rail .lx-it.lx-salir{position:sticky;bottom:0;flex-shrink:0;background:var(--white)} }
+@media(min-width:721px) and (max-height:860px){ .lx-rail{gap:1px} .lx-rail .lx-it{padding:5px 2px 4px;gap:2px} .lx-logo{width:34px;height:34px;margin-bottom:6px} }
+.lucai-tb button.lx-salir{color:var(--t-fg-C0392B)}
+.lucai-tb button.lx-salir svg{stroke:var(--t-fg-C0392B)}
+.lx-idle{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:3000;background:var(--white);color:var(--ink);
+  border:2px solid var(--lx-acc,#2563EB);border-radius:14px;box-shadow:0 14px 40px rgba(16,24,40,.25);padding:14px 16px;
+  display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);font-size:15px;font-weight:600}
+.lx-idle .btn{white-space:nowrap}
+body.has-tb .lx-idle{bottom:86px}
+@media (max-width:560px){ .lx-idle{flex-wrap:wrap;width:calc(100vw - 32px);gap:10px} .lx-idle>span{flex:1 1 100%} .lx-idle .btn{flex:1} }
+</style>`);
+(function(){
+  const _rh=lxRailHTML;
+  lxRailHTML=function(){
+    return _rh.apply(this, arguments)+`<button class="lx-it lx-salir" onclick="lxSalir()" title="Cerrar sesión"><svg viewBox="0 0 24 24">${LX_IC_SALIR}</svg>Salir</button>`;
+  };
+  const _th=lucaiTbHTML;
+  lucaiTbHTML=function(){
+    const h=_th.apply(this, arguments);
+    if(!lxCompartida()) return h;
+    const i=h.indexOf('</div>');
+    return i<0 ? h : h.slice(0,i)+`<button class="lx-salir" onclick="lxSalir()"><svg viewBox="0 0 24 24">${LX_IC_SALIR}</svg>Salir</button>`+h.slice(i);
+  };
+})();
+/* cierre solo por inactividad (solo tablet compartida) */
+let _lxUltimo=Date.now();
+function lxCompAvisoQuitar(){ const a=document.getElementById('lxIdle'); if(a) a.remove(); }
+function lxCompSigo(){ _lxUltimo=Date.now(); lxCompAvisoQuitar(); }
+['pointerdown','touchstart','keydown','wheel','input'].forEach(ev=>document.addEventListener(ev, ()=>{ _lxUltimo=Date.now(); if(ev!=='input') lxCompAvisoQuitar(); }, {capture:true, passive:true}));
+setInterval(function(){
+  try{
+    if(!lxCompartida() || !S.user || !DEVICE){ lxCompAvisoQuitar(); return; }
+    if(S.module==='junta' || (typeof _juntaRec!=='undefined' && _juntaRec)){ _lxUltimo=Date.now(); lxCompAvisoQuitar(); return; }
+    const quieto=(Date.now()-_lxUltimo)/1000, quedan=Math.ceil(LX_COMP_MIN*60-quieto);
+    if(quedan<=0){ const n=(S.user.nombre||'').split(' ')[0]; lxSalir(); toast('Sesión de '+n+' cerrada: nadie tocaba la tablet.'); return; }
+    if(quedan<=LX_COMP_AVISO){
+      let a=document.getElementById('lxIdle');
+      if(!a){ a=document.createElement('div'); a.id='lxIdle'; a.className='lx-idle'; document.body.appendChild(a);
+        a.innerHTML=`<span>⏱ La sesión de ${incEsc((S.user.nombre||'').split(' ')[0])} se cierra en <b id="lxIdleS"></b> s</span><button class="btn btn-primary" onclick="lxCompSigo()">Sigo aquí</button><button class="btn btn-ghost" onclick="lxSalir()">Salir ya</button>`; }
+      const s=document.getElementById('lxIdleS'); if(s) s.textContent=quedan;
+    } else lxCompAvisoQuitar();
+  }catch(_){}
+}, 1000);
+/* aviso al marcar o desmarcar la tablet */
+(function(){
+  const _bt=boot;
+  boot=async function(){
+    await _bt.apply(this, arguments);
+    if(window._lxCompAviso){ const m=window._lxCompAviso; window._lxCompAviso=null; setTimeout(()=>toast(m),300); }
+  };
+})();
+
+/* ============================================================
    LUCAI · CALENDARIO DE REUNIONES Y FORMACIONES (25/10/2026)
    Pestaña «Reuniones» del Manual (David la quiso allí, «donde está cómo se organiza la clínica»): cómo tiene repartidas la clínica sus reuniones y formaciones
    en el año. Informativo. Los datos son de cada clínica: no van en el código, se guardan en lucai_estado
@@ -12693,7 +12785,7 @@ if(!Array.isArray(S.calEventos)) S.calEventos=[];
   if(typeof TB_IC==='object' && TB_IC && !TB_IC.calendario) TB_IC.calendario='<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/>';
 })();
 const _canAccess_cev = canAccess;
-canAccess = function(id){ if(id==='calendario') return !!S.user; return _canAccess_cev(id); };
+canAccess = function(id){ return _canAccess_cev(id); }; /* el Calendario respeta el permiso como los demás (27/10/2026) */
 function cevPuede(){ return !!S.user && (isAdmin() || juntaEsMiembro()); }
 function cevTipo(id){ return CEV_TIPOS.find(t=>t.id===id) || CEV_TIPOS[CEV_TIPOS.length-1]; }
 function cevVivos(){ return (S.calEventos||[]).filter(e=>e && !e.borrado && e.fecha).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)) || String(a.horaIni||'').localeCompare(String(b.horaIni||''))); }
@@ -13150,7 +13242,7 @@ if(!Array.isArray(S.cevVistosL)) S.cevVistosL=[];
 function cevClaveVisto(e){ return e.id+'@'+e.fecha+'|'+(e.fechaFin||'')+'|'+(e.horaIni||'')+'|'+(e.horaFin||''); }
 function cevMiVistoDoc(){ const me=S.user&&S.user.nombre; return (S.cevVistosL||[]).find(x=>x && x.id==='v-'+me) || null; }
 function cevMisNuevas(){
-  if(!S.user) return [];
+  if(!S.user || !canAccess('calendario')) return [];
   const me=S.user.nombre, hoy=todayStr(); const d=cevMiVistoDoc(); const vistos=new Set((d&&d.ids)||[]);
   return (S.calEventos||[]).filter(e=>e && !e.borrado && e.estado==='aprobado' && Array.isArray(e.asistentes) && e.asistentes.includes(me) && cevFin(e)>=hoy && !vistos.has(cevClaveVisto(e)));
 }
