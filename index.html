@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-27-1525">
+<meta name="lucai-version" content="2026-10-28-0826">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -13078,10 +13078,10 @@ function perFila(x){
     <span class="pe-st ${perStCls(x.estado)}">${incEsc(PER_ESTADOS[x.estado]||x.estado)}</span></div>`;
 }
 function personasView(){
-  const me=S.user.nombre; const tab=S.perTab||'mias';
+  const me=S.user.nombre; const tab=S.perTab||'horario';
   const hacer=perPorHacer();
-  const tabs=[['mias','Mis solicitudes']].concat(hacer.length||perEsRevisor()||perEsAprobador()?[['hacer','Por hacer'+(hacer.length?' ('+hacer.length+')':'')]]:[]).concat(perVeTodo()?[['todas','Todas']]:[]);
-  const t=tabs.some(x=>x[0]===tab)?tab:'mias';
+  const tabs=[['horario','Horario'],['mias','Mis solicitudes']].concat(hacer.length||perEsRevisor()||perEsAprobador()?[['hacer','Por hacer'+(hacer.length?' ('+hacer.length+')':'')]]:[]).concat(perVeTodo()?[['todas','Todas']]:[]);
+  const t=tabs.some(x=>x[0]===tab)?tab:'horario';
   const seg=`<div class="seg tar-seg jt-tabs" style="margin-bottom:12px">${tabs.map(([id,l])=>`<button class="${t===id?'on':''}" onclick="S.perTab='${id}';render()">${l}</button>`).join('')}</div>`;
   let lista;
   if(t==='hacer') lista=hacer;
@@ -13092,15 +13092,15 @@ function personasView(){
   return `${JUNTA_CSS}${PER_CSS}${moduleHeader('Personas', false)}
   <main><div class="wrap">
     <div class="toolbar" style="margin-bottom:12px"><div><div class="section-title">Personas</div>
-      <div class="section-sub" style="margin:0">Vacaciones, permisos, cambios de turno y avisos de ausencia</div></div>
+      <div class="section-sub" style="margin:0">Horario, vacaciones, permisos, cambios de turno y avisos de ausencia</div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="perRefrescar()">Actualizar</button>${isAdmin()?`<button class="btn btn-ghost btn-sm" onclick="perAjustesAbrir()">Ajustes</button>`:''}<button class="btn btn-primary btn-sm" onclick="perPedir()">＋ Pedir</button></div></div>
-    ${flujo}${seg}
-    <div class="jt-card">${lista.length?lista.map(perFila).join(''):`<div class="muted" style="padding:14px 2px;font-size:13.5px">${vacio}</div>`}</div>
+    ${t==='horario'?'':flujo}${seg}
+    ${t==='horario'?horarioHtml():`<div class="jt-card">${lista.length?lista.map(perFila).join(''):`<div class="muted" style="padding:14px 2px;font-size:13.5px">${vacio}</div>`}</div>`}
   </div></main>
   ${S.modal?modalContent():''}
   ${(typeof iaFloatHtml==='function')?iaFloatHtml():''}`;
 }
-async function perRefrescar(){ toast('Actualizando…'); await juntaCargar(); render(); toast('Al día'); }
+async function perRefrescar(){ toast('Actualizando…'); await Promise.all([juntaCargar(), horCargar()]); render(); toast('Al día'); }
 /* ---- pedir ---- */
 function perPedir(){
   F={type:'per_pedir', para:S.user.nombre, tipo:'vacaciones', desde:juntaMasDias(todayStr(),30), hasta:'', diaEntero:true, horaIni:'', horaFin:'', con:'', cambio:'', motivo:'', nota:''};
@@ -13235,11 +13235,155 @@ cevEditModal = function(){ const t=CEV_TIPOS; const i=t.findIndex(x=>x.id==='fue
   const _av=appView;
   appView=function(){ if(S.module==='personas'){ if(!canAccess('personas')){ S.module=null; return homeView(); } return personasView(); } return _av.apply(this, arguments); };
   const _sm=setModule;
-  setModule=function(id){ _sm.apply(this, arguments); if(id==='personas' && S.module==='personas'){ juntaCargar().then(()=>{ if(S.module==='personas') render(); }); } };
+  setModule=function(id){ _sm.apply(this, arguments); if(id==='personas' && S.module==='personas'){ Promise.all([juntaCargar(), horCargar()]).then(()=>{ if(S.module==='personas') render(); }); } };
   const _tb=tbBadgeOf;
   tbBadgeOf=function(id){ if(id==='personas'){ try{ return perPorHacer().length; }catch(_){ return 0; } } return _tb.apply(this, arguments); };
 })();
 /* ===== FIN PERSONAS ===== */
+
+/* ============================================================
+   LUCAI · HORARIO DEL EQUIPO (28/10/2026) — pestaña «Horario» de Personas
+   La app SOLO LEE. Los datos los deja cada día el script `Lucai Tareas\horario\leer_horario.py` (tarea de Windows) en
+   lucai_estado.data.horarioEquipo, leyendo el Excel de horarios de la clínica (Drive). Ninguna otra parte de la app
+   toca esa clave (juntaGuardar y persistNow conservan el resto de la fila).
+   Formato: { v:1, excelModificado, comprobado, generado, turnos:{m:[ini,fin], t:[ini,fin]},
+     dias:{ 'AAAA-MM-DD': { m:[hueco], t:[hueco] } }, notas:{ 'lunes ISO':[texto] }, avisos:[texto] }
+   hueco = { p:'Box 3'|'Recepción'|'Despacho'|'Otro puesto', g:[nombre de usuario de Lucai], a:'Mantenimiento'|'Flúor'|
+     'Invisalign'|'Sin agenda', d:['Nombre: anotación'] }. Un día sin entrada = el Excel no lo tiene (festivo o sin rellenar).
+   ============================================================ */
+S.horario = S.horario || null;
+async function horCargar(){
+  try{
+    const { data, error } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
+    if(error) throw error;
+    const h = data && data.data && data.data.horarioEquipo;
+    S.horario = (h && h.dias) ? h : null; S.horOk = true; S.horErr = false;
+  }catch(e){ console.error('horCargar', e); S.horErr = true; }
+}
+const HOR_DIAS=['Lunes','Martes','Miércoles','Jueves','Viernes'];
+const HOR_MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const HOR_MESES_L=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+/* nombre corto; «Juan Pablo» es un nombre compuesto (su usuario es juanpablo), no nombre + apellido */
+function horNom(n){ const u=appUsers().find(x=>x.nombre===n); return (u && String(u.usuario||'').toLowerCase()===String(n).toLowerCase().replace(/\s+/g,'')) ? n : perCorto(n); }
+function horLunes(iso){ return juntaMasDias(iso, -tarDow(iso)); }
+function horCorta(iso){ const d=tarDParse(iso); return d.getDate()+' '+HOR_MESES[d.getMonth()]; }
+function horSemanaTxt(lun){
+  const a=tarDParse(lun), b=tarDParse(juntaMasDias(lun,4));
+  return a.getMonth()===b.getMonth() ? a.getDate()+' – '+b.getDate()+' de '+HOR_MESES_L[b.getMonth()] : a.getDate()+' '+HOR_MESES[a.getMonth()]+' – '+b.getDate()+' '+HOR_MESES[b.getMonth()];
+}
+function horHoras(t){ const T=(S.horario&&S.horario.turnos&&S.horario.turnos[t])||[]; const q=x=>String(x||'').replace(/^0/,''); return T.length?q(T[0])+'–'+q(T[1]):''; }
+function horMio(iso, t){ const d=S.horario.dias[iso]; const me=S.user&&S.user.nombre; return d&&me ? (d[t]||[]).filter(h=>(h.g||[]).includes(me)) : []; }
+function horEstoy(){ const me=S.user&&S.user.nombre; return !!me && Object.values(S.horario.dias).some(d=>['m','t'].some(t=>(d[t]||[]).some(h=>(h.g||[]).includes(me)))); }
+function horSet(k,v){ S[k]=v; render(); }
+function horSemana(n){
+  const f=juntaMasDias(horLunes(S.horFecha||todayStr()), 7*n); S.horFecha=f; render();
+}
+/* qué se enseña de un hueco cuando es el mío: «Box 3 · con Mª Ríos · Mantenimiento» */
+function horMiTexto(h){
+  const me=S.user.nombre; const otros=(h.g||[]).filter(n=>n!==me).map(perCorto);
+  const nota=(h.d||[]).filter(x=>x.indexOf(me+': ')===0).map(x=>x.slice(me.length+2));
+  return [h.p, otros.length?'con '+otros.join(' y '):'', h.a||'', nota.length?'('+nota.join(', ')+')':''].filter(Boolean).map(incEsc).join(' · ');
+}
+function horVistaMi(lun, hoy){
+  const filas=HOR_DIAS.map((nom,i)=>{
+    const iso=juntaMasDias(lun,i); const d=S.horario.dias[iso];
+    let cuerpo;
+    if(!d) cuerpo=`<div class="muted" style="font-size:13px;padding:2px 0">Sin horario en el Excel (festivo o sin rellenar)</div>`;
+    else {
+      const m=horMio(iso,'m'), t=horMio(iso,'t');
+      const tn=(lbl,hs,k)=>`<div class="ho-tn"><span class="ho-h">${lbl}<small>${horHoras(k)}</small></span><span class="${hs.length?'ho-yo':'muted'}">${hs.length?hs.map(horMiTexto).join(' · '):'No trabajas'}</span></div>`;
+      cuerpo=tn('Mañana',m,'m')+tn('Tarde',t,'t');
+    }
+    return `<div class="ho-dia${iso===hoy?' ho-hoy':''}"><div class="ho-f"><b>${nom.slice(0,3)}</b><span>${horCorta(iso)}</span></div><div style="flex:1;min-width:0">${cuerpo}</div></div>`;
+  }).join('');
+  const aviso=horEstoy()?'':`<div class="muted" style="font-size:13px;padding:10px 2px 2px">No apareces en el horario cargado (puede ser normal si tu trabajo no entra en este cuadrante). Mira «Por día» o «Equipo».</div>`;
+  return `<div class="jt-card" style="padding-top:4px">${filas}${aviso}</div>`;
+}
+function horVistaDia(lun, hoy){
+  const sel=(S.horFecha && horLunes(S.horFecha)===lun) ? S.horFecha : (hoy>=lun && hoy<=juntaMasDias(lun,4) ? hoy : lun);
+  const tabs=`<div class="ho-days">${HOR_DIAS.map((nom,i)=>{ const iso=juntaMasDias(lun,i); return `<button class="${iso===sel?'on':''}${iso===hoy?' hoy':''}" onclick="horSet('horFecha','${iso}')"><b>${nom.slice(0,3)}</b><span>${tarDParse(iso).getDate()}</span></button>`; }).join('')}</div>`;
+  const d=S.horario.dias[sel]; const me=S.user.nombre;
+  let cuerpo;
+  if(!d) cuerpo=`<div class="muted" style="padding:14px 2px;font-size:13.5px">El Excel no tiene horario para este día (festivo o sin rellenar).</div>`;
+  else cuerpo=['m','t'].map(t=>{
+    const hs=d[t]||[];
+    const filas=hs.length?hs.map(h=>`<div class="jt-row" style="padding:8px 0"><div class="ho-pu">${incEsc(h.p)}</div><div style="flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center">${(h.g||[]).map(n=>`<span class="ho-n${n===me?' ho-yo':''}">${incEsc(horNom(n))}</span>`).join('')}${h.a?`<span class="pe-tag" style="margin:0">${incEsc(h.a)}</span>`:''}${(h.d||[]).map(x=>`<span class="muted" style="font-size:12px">${incEsc(x)}</span>`).join('')}</div></div>`).join(''):`<div class="muted" style="padding:10px 2px;font-size:13.5px">Nadie en este turno.</div>`;
+    return `<div class="jt-card" style="margin-bottom:10px"><h3>${t==='m'?'Mañana':'Tarde'} <span class="muted" style="font-weight:500;font-size:12.5px">${horHoras(t)}</span></h3>${filas}</div>`;
+  }).join('');
+  return `${tabs}<div class="section-sub" style="margin:10px 0 8px;font-weight:700">${incEsc(juntaFechaLarga(sel))}</div>${cuerpo}`;
+}
+function horVistaEquipo(lun, hoy){
+  const per={}; // nombre -> día -> {m:[puestos], t:[puestos]}
+  for(let i=0;i<5;i++){ const iso=juntaMasDias(lun,i); const d=S.horario.dias[iso]; if(!d) continue;
+    ['m','t'].forEach(t=>(d[t]||[]).forEach(h=>(h.g||[]).forEach(n=>{ ((per[n]=per[n]||{})[i]=per[n][i]||{m:[],t:[]})[t].push(h.p); }))); }
+  const nombres=Object.keys(per).sort((a,b)=>horNom(a).localeCompare(horNom(b),'es'));
+  const me=S.user.nombre;
+  const cab=`<tr><th></th>${HOR_DIAS.map((nom,i)=>{ const iso=juntaMasDias(lun,i); return `<th class="${iso===hoy?'hoy':''}" onclick="S.horFecha='${iso}';horSet('horVista','dia')" style="cursor:pointer">${nom.slice(0,3)}<small>${tarDParse(iso).getDate()}</small></th>`; }).join('')}</tr>`;
+  const filas=nombres.map(n=>`<tr class="${n===me?'yo':''}"><td class="nom">${incEsc(horNom(n))}</td>${[0,1,2,3,4].map(i=>{ const c=per[n][i]; if(!c) return '<td></td>'; return `<td title="${incEsc(['m','t'].filter(t=>c[t].length).map(t=>(t==='m'?'Mañana: ':'Tarde: ')+c[t].join(', ')).join(' · '))}">${c.m.length?'<span class="b m">M</span>':''}${c.t.length?'<span class="b t">T</span>':''}</td>`; }).join('')}</tr>`).join('');
+  if(!nombres.length) return `<div class="jt-card"><div class="muted" style="padding:14px 2px;font-size:13.5px">El Excel no tiene horario para esta semana.</div></div>`;
+  return `<div class="jt-card" style="padding:8px 8px 10px"><table class="ho-eq">${cab}${filas}</table><div class="muted" style="font-size:12px;padding:8px 6px 0"><span class="b m">M</span> mañana ${horHoras('m')} · <span class="b t">T</span> tarde ${horHoras('t')}. Toca un día para ver los puestos.</div></div>`;
+}
+function horarioHtml(){
+  const H=S.horario;
+  if(!H) return `<div class="jt-card"><div class="muted" style="padding:14px 2px;font-size:13.5px">${S.horErr?'No se ha podido cargar el horario. Prueba con «Actualizar».':(S.horOk?'Todavía no hay horario cargado.':'Cargando el horario…')}</div></div>`;
+  const hoy=todayStr(); const fechas=Object.keys(H.dias).sort();
+  const hoyF=tarDow(hoy)>=5 ? juntaMasDias(hoy, 7-tarDow(hoy)) : hoy;
+  let f=S.horFecha || hoyF;
+  if(f<fechas[0]) f=fechas[0]; if(f>fechas[fechas.length-1]) f=fechas[fechas.length-1];
+  const lun=horLunes(f); const prim=horLunes(fechas[0]), ult=horLunes(fechas[fechas.length-1]);
+  const vista=S.horVista || (horEstoy()?'mi':'dia');
+  const seg=`<div class="seg tar-seg jt-tabs" style="margin-bottom:12px;display:flex;max-width:420px">${[['mi','Mi horario'],['dia','Por día'],['eq','Equipo']].map(([id,l])=>`<button class="${vista===id?'on':''}" onclick="horSet('horVista','${id}')">${l}</button>`).join('')}</div>`;
+  const nav=`<div class="ho-nav"><button class="btn btn-ghost btn-sm" ${lun<=prim?'disabled':''} onclick="horSemana(-1)">‹</button><div class="tit">${horSemanaTxt(lun)}</div><button class="btn btn-ghost btn-sm" ${lun>=ult?'disabled':''} onclick="horSemana(1)">›</button><button class="btn btn-ghost btn-sm" onclick="S.horFecha='';render()">Hoy</button></div>`;
+  const cuerpo = vista==='mi' ? horVistaMi(lun,hoy) : (vista==='eq' ? horVistaEquipo(lun,hoy) : horVistaDia(lun,hoy));
+  const notas=(H.notas&&H.notas[lun]||[]).map(x=>`<div class="jt-sub" style="padding:2px 0">• ${incEsc(x)}</div>`).join('');
+  // ¿está al día? el script lo comprueba cada mañana; si hace más de 2 días que no lo consigue, se avisa a todos
+  const comp=String(H.comprobado||H.generado||'').slice(0,10);
+  const atraso=comp ? Math.round((tarDParse(hoy)-tarDParse(comp))/86400000) : 99;
+  const alerta=atraso>2 ? `<div class="note" style="margin:0 0 12px;border-left-color:#D4A017">Este horario no se ha podido actualizar desde el ${incEsc(fmtFecha(comp))}. Puede haber cambios que aún no se ven aquí: pregunta en Dirección.</div>` : '';
+  const avisos=(isAdmin() && (H.avisos||[]).length) ? `<details style="margin-top:10px"><summary class="muted" style="font-size:12.5px;cursor:pointer">Para Dirección: ${H.avisos.length} cosas del Excel por confirmar</summary>${H.avisos.map(x=>`<div class="jt-sub" style="padding:2px 0">• ${incEsc(x)}</div>`).join('')}</details>` : '';
+  return `${HOR_CSS}${alerta}${seg}${nav}${cuerpo}
+    ${notas?`<div class="jt-card" style="margin-top:10px"><h3>Notas del cuadrante de esta semana</h3>${notas}</div>`:''}
+    <div class="muted" style="font-size:12px;margin-top:8px">Sale del Excel de horarios de la clínica (guardado el ${incEsc(fmtFecha(H.excelModificado||''))}); se vuelve a leer cada mañana. Si algo no cuadra, avisa a Dirección.</div>${avisos}`;
+}
+const HOR_CSS=`<style>
+.ho-nav{display:flex;align-items:center;gap:8px;margin:0 0 12px}
+.ho-nav .tit{flex:1;text-align:center;font-weight:700;color:var(--t-fg-333F48);font-size:14.5px}
+.ho-nav .btn[disabled]{opacity:.35;pointer-events:none}
+.ho-dia{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--t-bd-F1ECE3)}
+.ho-dia:last-of-type{border-bottom:none}
+.ho-f{flex:0 0 52px;display:flex;flex-direction:column;line-height:1.25}
+.ho-f b{font-size:14.5px;color:var(--t-fg-333F48)}
+.ho-f span{font-size:12px;color:var(--t-fg-5A6770)}
+.ho-hoy .ho-f b{color:var(--lx-acc,#2563EB)}
+.ho-hoy{box-shadow:inset 3px 0 0 var(--lx-acc,#2563EB);padding-left:9px;margin-left:-12px}
+.ho-tn{display:flex;gap:10px;align-items:baseline;padding:3px 0;font-size:14px;color:var(--t-fg-333F48)}
+.ho-h{flex:0 0 74px;font-size:12.5px;color:var(--t-fg-5A6770);display:flex;flex-direction:column;line-height:1.2}
+.ho-h small{font-size:11px;opacity:.8}
+.ho-yo{background:var(--lx-accs,#EFF4FF);color:var(--lx-acc2,#1D4ED8);border-radius:7px;padding:2px 8px;font-weight:700}
+.ho-n{font-size:14px;color:var(--t-fg-333F48);padding:1px 0}
+.ho-n.ho-yo{padding:2px 8px}
+.ho-pu{flex:0 0 96px;font-weight:700;font-size:13.5px;color:var(--t-fg-5A6770)}
+.ho-days{display:flex;gap:6px;margin-bottom:6px}
+.ho-days button{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 0;border-radius:11px;border:1px solid var(--t-bd-line);background:var(--t-bg-FFFFFF);color:var(--t-fg-333F48);font-family:inherit;cursor:pointer}
+.ho-days button b{font-size:12px;font-weight:700}
+.ho-days button span{font-size:16px;font-weight:700}
+.ho-days button.hoy b{color:var(--lx-acc,#2563EB)}
+.ho-days button.on{background:var(--lx-acc,#2563EB);border-color:var(--lx-acc,#2563EB);color:#fff}
+.ho-days button.on b{color:#fff}
+.ho-eq{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+.ho-eq th{font-size:12px;color:var(--t-fg-5A6770);font-weight:700;padding:4px 0;text-align:center}
+.ho-eq th small{display:block;font-weight:500}
+.ho-eq th.hoy{color:var(--lx-acc,#2563EB)}
+.ho-eq th:first-child,.ho-eq td.nom{width:28%}
+.ho-eq td{padding:6px 0;text-align:center;border-top:1px solid var(--t-bd-F1ECE3)}
+.ho-eq td.nom{text-align:left;padding-left:6px;font-weight:600;color:var(--t-fg-333F48);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ho-eq tr.yo td{background:var(--lx-accs,#EFF4FF)}
+.ho-eq .b,.b.m,.b.t{display:inline-block;min-width:20px;border-radius:6px;font-size:11.5px;font-weight:800;padding:2px 0;margin:0 1px}
+.b.m{background:var(--lx-amb-s,#FBF0D2);color:var(--lx-amb,#7A5B00)}
+.b.t{background:var(--lx-gris-s,#E3EAF7);color:var(--lx-acc2,#1D4ED8)}
+@media (max-width:720px){ .ho-h{flex-basis:64px} .ho-pu{flex-basis:78px} }
+</style>`;
+/* ===== FIN HORARIO DEL EQUIPO ===== */
 
 /* ============================================================
    LUCAI · AVISOS DE REUNIONES EN LA APP (25/10/2026, David)
