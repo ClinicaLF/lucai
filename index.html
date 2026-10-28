@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-28-0851">
+<meta name="lucai-version" content="2026-10-28-1530">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -13308,12 +13308,14 @@ function horVistaSemana(lun, hoy){
   const dias=[0,1,2,3,4].map(i=>juntaMasDias(lun,i));
   const cab=`<tr><th class="pu"></th>${dias.map((iso,i)=>`<th class="${iso===hoy?'hoy':''}${S.horario.dias[iso]?'':' sin'}">${HOR_DIAS[i].slice(0,3)}<small>${tarDParse(iso).getDate()} ${HOR_MESES[tarDParse(iso).getMonth()]}</small></th>`).join('')}</tr>`;
   const bloque=t=>{
-    const puestos=[]; dias.forEach(iso=>{ const d=S.horario.dias[iso]; if(d) (d[t]||[]).forEach(h=>{ if(!puestos.includes(h.p)) puestos.push(h.p); }); });
+    /* siempre Recepción, Despacho y los 5 box (David, 28/10: «lo que esté vacío, que aparezca como vacío»); «Otro puesto» solo si hay alguien */
+    const puestos=['Recepción','Despacho','Box 1','Box 2','Box 3','Box 4','Box 5']; dias.forEach(iso=>{ const d=S.horario.dias[iso]; if(d) (d[t]||[]).forEach(h=>{ if(!puestos.includes(h.p)) puestos.push(h.p); }); });
     const orden=['Recepción','Despacho','Box 1','Box 2','Box 3','Box 4','Box 5','Otro puesto'];
     puestos.sort((a,b)=>orden.indexOf(a)-orden.indexOf(b));
     const filas=puestos.map(pu=>`<tr><td class="pu">${incEsc(pu)}</td>${dias.map(iso=>{
       const d=S.horario.dias[iso]; const hs=d?(d[t]||[]).filter(h=>h.p===pu):[];
       if(!d) return '<td class="sin">–</td>';
+      if(!hs.length) return `<td class="vacio${iso===hoy?' hoy':''}">Vacío</td>`;
       return `<td class="${iso===hoy?'hoy':''}">${hs.map(h=>`${(h.g||[]).map(n=>`<div class="ho-n${n===me?' ho-yo':''}${horDoc(n)?' doc':''}">${incEsc(horNom(n))}</div>`).join('')}${h.a?horAc(h.a):''}${(h.d||[]).map(x=>`<div class="ho-ac">${incEsc(x)}</div>`).join('')}`).join('')}</td>`;
     }).join('')}</tr>`).join('');
     return `<div class="jt-card ho-blq ho-blq-${t}" style="margin-bottom:12px;padding:8px 8px 10px"><h3 style="margin:4px 6px 6px"><span class="ho-turno ho-${t}">${t==='m'?'Mañana':'Tarde'}</span> <span class="muted" style="font-weight:500;font-size:12.5px">${horHoras(t)}</span></h3><div class="ho-sc"><table class="ho-sem">${cab}${filas||'<tr><td class="sin" colspan="6">Sin horario esta semana</td></tr>'}</table></div></div>`;
@@ -13401,6 +13403,7 @@ const HOR_CSS=`<style>
 .ho-sem th.pu,.ho-sem td.pu{width:84px;position:sticky;left:0;background:var(--t-bg-FFFFFF);z-index:1}
 .ho-sem td{padding:6px 4px;vertical-align:top;border-bottom:1px solid var(--t-bd-F1ECE3);border-left:1px solid var(--t-bd-F1ECE3)}
 .ho-sem td.pu{font-weight:700;font-size:12.5px;color:var(--t-fg-5A6770);border-left:none}
+.ho-sem td.vacio{color:var(--t-fg-5A6770);opacity:.55;font-size:12px;font-style:italic}
 .ho-sem td.sin{color:var(--t-fg-5A6770);text-align:center}
 .ho-sem .ho-n{font-size:13px;padding:1px 0;line-height:1.3}
 .ho-sem .ho-n.ho-yo{display:inline-block;padding:1px 6px;margin:1px 0}
