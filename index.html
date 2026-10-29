@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-29-0752">
+<meta name="lucai-version" content="2026-10-29-1344">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -842,17 +842,42 @@ function _persistSoon(){
   if (!(DEVICE && LOADED && S.user)) return;
   clearTimeout(_persistT); _persistT = setTimeout(persistNow, 400);
 }
+/* Guardar la fila de lucai_estado sin pisar a nadie (29/10/2026).
+   construir(datosLeidos) devuelve lo que se escribe. Se escribe solo si la fila no ha cambiado
+   desde que se leyó (mismo updated_at); si otro aparato escribió entremedias, se relee, se vuelve
+   a construir (juntando lo suyo) y se reintenta. Si tras varios intentos sigue cambiando, se
+   escribe como antes (la lectura es de ese mismo instante) y se deja aviso en la consola. */
+async function lxEstadoGuardar(construir, exigeFila){
+  for(let intento=0; intento<6; intento++){
+    const { data: prev, error: e1 } = await sbc.from('lucai_estado').select('data,updated_at').eq('clinica', CLINICA).maybeSingle();
+    if(e1) throw e1;
+    if(exigeFila && (!prev || !prev.data || typeof prev.data!=='object')) throw new Error('no se pudo leer lo guardado');
+    const payload = construir((prev && prev.data && typeof prev.data==='object') ? prev.data : {});
+    const ahora = new Date().toISOString();
+    if(!prev || !prev.updated_at || intento===5){
+      if(intento===5) console.warn('lxEstadoGuardar: la fila cambia sin parar; se guarda sin comprobar');
+      const { error } = await sbc.from('lucai_estado').upsert({ clinica: CLINICA, data: payload, updated_at: ahora }, { onConflict: 'clinica' });
+      if(error) throw error;
+      return;
+    }
+    const { data: hecho, error: e2 } = await sbc.from('lucai_estado').update({ data: payload, updated_at: ahora })
+      .eq('clinica', CLINICA).eq('updated_at', prev.updated_at).select('clinica');
+    if(e2) throw e2;
+    if(Array.isArray(hecho) && hecho.length) return;
+    // otro aparato escribió entre la lectura y la escritura: releer y reintentar
+    await new Promise(r=>setTimeout(r, 150 + Math.floor(Math.random()*350)));
+  }
+}
 async function persistNow(){
   if (!DEVICE) return;
   // mezclo lo que ya hay en BD con los campos que sí gestionamos desde aquí,
   // para no sobreescribir nada que viva en lucai_estado y no esté en ESTADO_FIELDS.
   try {
-    const { data: prev, error: errPrev } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
-    if (errPrev) throw errPrev;
-    const base = (prev && prev.data) ? prev.data : {};
-    const payload = Object.assign({}, base);
-    ESTADO_FIELDS.forEach(f=>{ if(S[f]!==undefined) payload[f] = S[f]; });
-    await sbc.from('lucai_estado').upsert({ clinica: CLINICA, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'clinica' });
+    await lxEstadoGuardar(base=>{
+      const payload = Object.assign({}, base);
+      ESTADO_FIELDS.forEach(f=>{ if(S[f]!==undefined) payload[f] = S[f]; });
+      return payload;
+    }, false);
   } catch(e){ console.error('persist', e); }
 }
 function deviceLoginView(){
@@ -2392,7 +2417,8 @@ async function _autoSync(){
     (S.tareas||[]).map(t=>t.id+':'+(t.estado||'')+':'+(t.fechaLimite||'')+':'+(t.prioridad||'')+':'+((t.mensajes||[]).length)+':'+((t.tiempos||[]).length)).join('|'),
     (S.incidencias||[]).map(i=>i.id+':'+(i.revisada?1:0)).join('|'),
     (S.comunicaciones||[]).map(c=>c.id+':'+Object.keys(c.leidos||{}).length+':'+((c.comentarios||[]).length)).join('|'),
-    (S.presupuestos||[]).length,(S.equipos||[]).length]);
+    (S.presupuestos||[]).length,(S.equipos||[]).length,
+    (S.module==='junta' && typeof juntaFirma==='function') ? juntaFirma() : '']);
   if(sig!==_lastSig){ _lastSig=sig; render(); }
 }
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _autoSync(); });
@@ -10270,15 +10296,14 @@ async function juntaGuardarYa(){
   if(!DEVICE) return;
   const antes=juntaFirma();
   try{
-    const { data: prev, error: e1 } = await sbc.from('lucai_estado').select('data').eq('clinica', CLINICA).maybeSingle();
-    if(e1) throw e1;
-    // si no se puede leer la fila (sin sesión, sin conexión) no se escribe nada: así nunca se pisa lo que hay
-    if(!prev || !prev.data || typeof prev.data!=='object') throw new Error('no se pudo leer lo guardado');
-    juntaAplicar(prev.data);
-    const payload = Object.assign({}, prev.data, { juntaCfg:S.juntaCfg });
-    JUNTA_KEYS.forEach(k=>{ payload[k]=S[k]; });
-    const { error } = await sbc.from('lucai_estado').upsert({ clinica: CLINICA, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'clinica' });
-    if(error) throw error;
+    // si no se puede leer la fila (sin sesión, sin conexión) no se escribe nada: así nunca se pisa lo que hay.
+    // Se escribe solo si nadie ha escrito desde la lectura; si alguien lo hizo, se relee y se junta otra vez.
+    await lxEstadoGuardar(base=>{
+      juntaAplicar(base);
+      const payload = Object.assign({}, base, { juntaCfg:S.juntaCfg });
+      JUNTA_KEYS.forEach(k=>{ payload[k]=S[k]; });
+      return payload;
+    }, true);
     S.juntaError=false;
   }catch(e){
     console.error('juntaGuardar', e); S.juntaError=true;
