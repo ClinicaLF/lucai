@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-29-1344">
+<meta name="lucai-version" content="2026-10-29-1517">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -10266,16 +10266,23 @@ canAccess = function(id){ if(id==='junta') return !!S.user && (juntaEsMiembro() 
 /* ---- persistencia (lucai_estado, fusionando) ---- */
 function juntaUpd(){ return new Date().toISOString(); }
 function juntaId(p){ return p+Date.now().toString(36)+Math.floor(Math.random()*1000); }
-function juntaMerge(loc, rem){
-  const m=new Map();
-  (Array.isArray(rem)?rem:[]).forEach(x=>{ if(x&&x.id) m.set(x.id,x); });
-  (Array.isArray(loc)?loc:[]).forEach(x=>{ if(!x||!x.id) return; const r=m.get(x.id); if(!r || String(x.upd||'')>String(r.upd||'')) m.set(x.id,x); });
+/* Lo quitado no vuelve (29/10/2026): en asuntos y prioridades, si una de las dos copias (la de esta pantalla
+   o la de la base) lo tiene quitado (borrado:true), queda quitado, aunque la otra copia sea «más nueva»
+   (reloj adelantado de un aparato, o alguien que movió o cambió el asunto en una pantalla que aún no sabía
+   que se había quitado). Así una pantalla vieja ni lo sigue enseñando ni lo resucita al guardar.
+   No se aplica a las claves que sí tienen «recuperar» (calendario, esperas…). */
+const JUNTA_BORRADO_FIJO=['juntaAsuntos','juntaPrios'];
+function juntaMerge(loc, rem, clave){
+  const m=new Map(), fijo=JUNTA_BORRADO_FIJO.includes(clave), quitados=new Set();
+  (Array.isArray(rem)?rem:[]).forEach(x=>{ if(x&&x.id){ m.set(x.id,x); if(fijo && x.borrado===true) quitados.add(x.id); } });
+  (Array.isArray(loc)?loc:[]).forEach(x=>{ if(!x||!x.id) return; if(fijo && x.borrado===true) quitados.add(x.id); const r=m.get(x.id); if(!r || String(x.upd||'')>String(r.upd||'')) m.set(x.id,x); });
+  quitados.forEach(id=>{ const x=m.get(id); if(x && x.borrado!==true) x.borrado=true; });
   return [...m.values()];
 }
 function juntaAplicar(d){
   if(!d) return;
   if(d.juntaCfg && typeof d.juntaCfg==='object' && String(d.juntaCfg.upd||'')>String(S.juntaCfg.upd||'')) S.juntaCfg=d.juntaCfg;
-  JUNTA_KEYS.forEach(k=>{ S[k]=juntaMerge(S[k], d[k]); });
+  JUNTA_KEYS.forEach(k=>{ S[k]=juntaMerge(S[k], d[k], k); });
 }
 function juntaFirma(){ try{ return JSON.stringify([S.juntaCfg].concat(JUNTA_KEYS.map(k=>S[k]))); }catch(_){ return ''; } }
 async function juntaCargar(){
@@ -10446,7 +10453,7 @@ function juntaAsuntoModal(){
 function juntaAsuntoGuardar(){
   const titulo=(F.titulo||'').trim(); if(!titulo){ toast('Escribe el asunto'); return; }
   let a;
-  if(F.id){ a=(S.juntaAsuntos||[]).find(x=>x.id===F.id); if(!a){ closeModal(); return; } a.titulo=titulo; a.detalle=(F.detalle||'').trim(); }
+  if(F.id){ a=(S.juntaAsuntos||[]).find(x=>x.id===F.id); if(!a || a.borrado){ closeModal(); render(); toast('Ese asunto lo ha quitado otra persona'); return; } a.titulo=titulo; a.detalle=(F.detalle||'').trim(); }
   else { a={ id:juntaId('A'), titulo, detalle:(F.detalle||'').trim(), autor:S.user.nombre, ts:now(), orden:juntaOrdenUltimo(), estado:'abierto' }; S.juntaAsuntos.push(a); }
   closeModal(); render(); juntaToca(a); toast(F.id?'Asunto guardado':'Asunto apuntado');
 }
@@ -12442,6 +12449,18 @@ document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-salir">
 .lx-rail .lx-it.lx-salir svg{stroke:var(--t-fg-C0392B)}
 @media(min-width:721px){ .lx-rail .lx-it.lx-salir{position:sticky;bottom:0;flex-shrink:0;background:var(--white)} }
 @media(min-width:721px) and (max-height:860px){ .lx-rail{gap:1px} .lx-rail .lx-it{padding:5px 2px 4px;gap:2px} .lx-logo{width:34px;height:34px;margin-bottom:6px} }
+/* pantallas bajas (tablet en modo ordenador, 29/10/2026): menú más apretado; si aun así no cabe, se desplaza
+   con el dedo y «Salir» queda siempre a la vista abajo */
+@media(min-width:721px) and (max-height:760px){
+  .lx-rail{padding:8px 6px 6px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .lx-rail > *{flex-shrink:0}
+  .lx-rail .lx-it{padding:3px 2px 3px;gap:1px;font-size:10px}
+  .lx-rail .lx-it svg{width:18px;height:18px}
+  .lx-rail .lx-b{top:0}
+  .lx-rail .lx-av{width:26px;height:26px;font-size:10px}
+  .lx-logo{width:30px;height:30px;font-size:16px;border-radius:9px;margin-bottom:4px}
+  .lx-rail .lx-sp{flex:1 0 4px}
+}
 .lucai-tb button.lx-salir{color:var(--t-fg-C0392B)}
 .lucai-tb button.lx-salir svg{stroke:var(--t-fg-C0392B)}
 .lx-idle{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:3000;background:var(--white);color:var(--ink);
@@ -12463,6 +12482,22 @@ body.has-tb .lx-idle{bottom:86px}
     const i=h.indexOf('</div>');
     return i<0 ? h : h.slice(0,i)+`<button class="lx-salir" onclick="lxSalir()"><svg viewBox="0 0 24 24">${LX_IC_SALIR}</svg>Salir</button>`+h.slice(i);
   };
+})();
+/* El menú lateral, del alto de lo que de verdad se ve (29/10/2026). En una tablet con las barras del navegador
+   (o con zoom) la pantalla visible puede ser más baja que la «página» y el final del menú, con «Salir», quedaba
+   tapado sin poder llegar. Solo actúa si lo visible es más bajo que la ventana; en un ordenador normal no cambia nada. */
+(function(){
+  const vv=window.visualViewport;
+  function lxRailAjusta(){
+    const r=document.getElementById('lxRail'); if(!r || !vv) return;
+    const alto=window.innerHeight, ve=Math.round(vv.height), arriba=Math.round(vv.offsetTop||0);
+    if(window.innerWidth>720 && ve>0 && (ve<alto-2 || arriba>0)){ r.style.top=Math.max(0,arriba)+'px'; r.style.bottom='auto'; r.style.height=Math.min(ve,alto)+'px'; }
+    else if(r.style.height){ r.style.top=''; r.style.bottom=''; r.style.height=''; }
+  }
+  if(vv){ vv.addEventListener('resize', lxRailAjusta); vv.addEventListener('scroll', lxRailAjusta); }
+  window.addEventListener('resize', lxRailAjusta);
+  const _rp=lxRailPaint;
+  lxRailPaint=function(){ _rp.apply(this, arguments); try{ lxRailAjusta(); }catch(_){} };
 })();
 /* cierre solo por inactividad (solo tablet compartida) */
 let _lxUltimo=Date.now();
