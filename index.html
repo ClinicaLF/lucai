@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-28-1530">
+<meta name="lucai-version" content="2026-10-29-0752">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -9176,10 +9176,11 @@ function tarChecklistHtml(t){
   const filas=chk.map(c=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 2px;border-bottom:1px solid var(--t-bd-F1ECE3)">
       <input type="checkbox" ${c.hecho?'checked':''} ${puede?'':'disabled'} onchange="tarChkToggle('${t.id}','${c.id}')" style="margin-top:3px;cursor:${puede?'pointer':'default'}">
       <div style="flex:1;min-width:0">
-        <div style="font-size:14px;color:${c.hecho?'var(--t-fg-8A949B)':'var(--t-fg-333F48)'};${c.hecho?'text-decoration:line-through;':''}word-break:break-word">${incEsc(c.texto)}</div>
+        <div ${puede?`onclick="tarChkEditTexto('${t.id}','${c.id}')" title="Tocar para cambiar el texto"`:''} style="font-size:14px;color:${c.hecho?'var(--t-fg-8A949B)':'var(--t-fg-333F48)'};${c.hecho?'text-decoration:line-through;':''}word-break:break-word${puede?';cursor:pointer':''}">${incEsc(c.texto)}</div>
         ${c.hecho&&c.por?`<div class="muted" style="font-size:11px;margin-top:1px">✔ ${incEsc(c.por)} · ${incEsc(fmtFecha(c.ts||''))}</div>`:''}
       </div>
-      ${puede&&!c.hecho?`<input type="date" class="inp" title="Fecha del paso (opcional)" value="${incEsc(c.fecha||'')}" onchange="tarChkSetFecha('${t.id}','${c.id}',this.value)" style="flex:0 0 auto;width:138px;padding:3px 6px;font-size:12.5px${c.fecha&&c.fecha<todayStr()?';color:var(--t-fg-C0392B);border-color:var(--t-bd-C0392B)':''}">`:(c.fecha?`<span class="muted" style="flex:0 0 auto;font-size:12px;margin-top:3px">${incEsc(fmtFecha(c.fecha))}</span>`:'')}
+      ${puede&&!c.hecho?`<label title="Tocar para poner o cambiar la fecha del paso" style="flex:0 0 auto;display:flex;flex-direction:column;gap:1px;margin:0;cursor:pointer"><span class="muted" style="font-size:10.5px;line-height:1.1">📅 Fecha</span><input type="date" class="inp" title="Fecha del paso (opcional)" value="${incEsc(c.fecha||'')}" onchange="tarChkSetFecha('${t.id}','${c.id}',this.value)" style="width:138px;padding:3px 6px;font-size:12.5px;cursor:pointer${c.fecha&&c.fecha<todayStr()?';color:var(--t-fg-C0392B);border-color:var(--t-bd-C0392B)':''}"></label>`:(c.fecha?`<span class="muted" style="flex:0 0 auto;font-size:12px;margin-top:3px">${incEsc(fmtFecha(c.fecha))}</span>`:'')}
+      ${puede?`<button type="button" onclick="tarChkEditTexto('${t.id}','${c.id}')" title="Cambiar el texto" style="width:22px;height:22px;border-radius:50%;background:var(--t-bg-F4F0E9);color:var(--t-fg-8A949B);border:none;font-size:12px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:1px;padding:0">✎</button>`:''}
       ${puede?`<button type="button" onclick="tarChkDelItem('${t.id}','${c.id}')" title="Quitar" style="width:18px;height:18px;border-radius:50%;background:var(--t-bg-F4F0E9);color:var(--t-fg-8A949B);border:none;font-size:12px;line-height:1;cursor:pointer;flex:0 0 auto;margin-top:3px">×</button>`:''}
     </div>`).join('');
   const vacio=`<div class="muted" style="padding:14px 2px;font-size:13.5px">Esta tarea no tiene subtareas. Añade puntos concretos para ir marcándolos según avances.</div>`;
@@ -9211,6 +9212,19 @@ function tarChkSetFecha(tid, cid, v){
   const c=t.checklist.find(x=>x&&x.id===cid); if(!c) return;
   if(v) c.fecha=v; else delete c.fecha;
   render(); srvTarUpdate(tid, t);
+}
+/* cambiar el texto de un paso (29/10/2026): misma ventanita que el resto de la app, guarda como la fecha */
+async function tarChkEditTexto(tid, cid){
+  const t=(S.tareas||[]).find(x=>x.id===tid); if(!t||!Array.isArray(t.checklist)) return;
+  const c=t.checklist.find(x=>x&&x.id===cid); if(!c) return;
+  const v=await lxPedir('Cambiar el paso:', c.texto||'');
+  if(v===null) return;
+  const nv=String(v).trim();
+  if(!nv){ toast('El paso no puede quedar vacío'); return; }
+  const t2=(S.tareas||[]).find(x=>x.id===tid); if(!t2||!Array.isArray(t2.checklist)) return;
+  const c2=t2.checklist.find(x=>x&&x.id===cid); if(!c2 || c2.texto===nv) return;
+  c2.texto=nv;
+  render(); srvTarUpdate(tid, t2);
 }
 async function tarChkDelItem(tid, cid){
   const t=(S.tareas||[]).find(x=>x.id===tid); if(!t||!Array.isArray(t.checklist)) return;
