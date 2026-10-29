@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-29-1743">
+<meta name="lucai-version" content="2026-10-29-2028">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -8207,7 +8207,7 @@ function tarVerImg(p){
     const x=document.createElement('button');
     x.textContent='×';
     x.title='Cerrar';
-    x.style.cssText='position:fixed;top:14px;right:18px;z-index:3001;width:46px;height:46px;border-radius:50%;border:none;background:rgba(255,255,255,.18);color:var(--t-fg-FFFFFF);font-size:28px;line-height:1;cursor:pointer';
+    x.style.cssText='position:fixed;top:calc(14px + env(safe-area-inset-top));right:18px;z-index:3001;width:46px;height:46px;border-radius:50%;border:none;background:rgba(255,255,255,.18);color:var(--t-fg-FFFFFF);font-size:28px;line-height:1;cursor:pointer';
     x.onclick=(e)=>{ e.stopPropagation(); d.remove(); };
     const img=document.createElement('img');
     img.src=u; img.style.cssText='max-width:100%;max-height:100%;border-radius:8px';
@@ -13649,19 +13649,40 @@ function cevAvisosHtml(){
       <div style="font-weight:700;font-size:14px;color:var(--t-fg-333F48)">${p.tipo==='formacion'?'🎓':'📅'} ${incEsc(p.titulo)}</div>
       <div style="font-size:12.5px;color:var(--t-fg-5A6770)">${incEsc(cuando)}</div></div>
       <button class="btn btn-ghost btn-sm" onclick="cevVerGrupo('${incEsc(k)}')">Ver</button><button class="btn btn-primary btn-sm" onclick="cevVistoGrupo('${incEsc(k)}')">Entendido</button></div>`; };
-  return `<div style="background:var(--t-bg-FFFFFF);border:1px solid var(--lx-acc,#2563EB);border-radius:14px;padding:10px 14px 4px;margin:0 0 14px">
+  return `<div class="lx-cevcard" style="background:var(--t-bg-FFFFFF);border:1px solid var(--lx-acc,#2563EB);border-radius:14px;padding:10px 14px 4px;margin:0 0 14px">
     <div style="font-size:13px;font-weight:700;color:var(--lx-acc,#2563EB);margin-bottom:2px">Reuniones nuevas para ti (${gs.length})</div>${gs.map(linea).join('')}</div>`;
 }
+/* Aviso flotante (29/10/2026): en ordenador y tablet, igual que antes (arriba, centrado). En móvil (≤720 px) va
+   debajo de la cabecera respetando la barra de estado del iPhone (safe-area), a todo el ancho y con botones de 44 px. */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-cevpop">
+.lx-cevpop{position:fixed;top:14px;left:50%;z-index:2000;transform:translateX(-50%);max-width:calc(100vw - 24px)}
+.lx-cevpop-in{display:flex;align-items:center;gap:10px;background:var(--lx-acc,#2563EB);color:#fff;border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.25);padding:9px 10px 9px 14px;font-size:14px}
+.lx-cevpop-ver{background:#fff;color:var(--lx-acc,#2563EB);font-weight:700;border-radius:8px;padding:6px 12px;font-size:13px;border:none;cursor:pointer;font-family:inherit}
+.lx-cevpop-x{background:none;border:none;color:#fff;font-size:18px;line-height:1;padding:0 4px;cursor:pointer;opacity:.85;font-family:inherit}
+@media(max-width:720px){
+  .lx-cevpop{top:calc(58px + env(safe-area-inset-top) + 8px);left:max(12px, env(safe-area-inset-left));right:max(12px, env(safe-area-inset-right));transform:none;max-width:none}
+  .lx-cevpop-in{padding:6px 6px 6px 14px;font-size:15px;line-height:1.3}
+  .lx-cevpop-tx{flex:1;min-width:0}
+  .lx-cevpop-ver{min-height:44px;padding:0 18px;font-size:14px;flex:0 0 auto}
+  .lx-cevpop-x{min-width:44px;min-height:44px;font-size:24px;padding:0;flex:0 0 auto}
+  /* los demás avisos flotantes del móvil, por encima de la barra de pestañas y de la raya de inicio del iPhone */
+  body.has-tb .lx-verlista{bottom:calc(84px + env(safe-area-inset-bottom));left:12px;transform:translateY(6px);max-width:calc(100vw - 96px)}
+  body.has-tb .lx-verlista.on{transform:none}
+  body.has-tb .lx-idle{bottom:calc(86px + env(safe-area-inset-bottom))}
+  body.has-tb #lucaiSaludo, body.has-tb #lucaiAvisoTar{bottom:calc(152px + env(safe-area-inset-bottom)) !important}
+}
+</style>`);
 function cevAvisoEmergente(){
   if(S._cevAvisoVisto || !S.user) return; const gs=cevMisNuevasGrupos(); if(!gs.length) return;
   S._cevAvisoVisto=true;
+  /* 29/10/2026 (David): en el Inicio ya está la tarjeta «Reuniones nuevas para ti»; el aviso flotante no se repite */
+  if(!S.module && document.querySelector('.lx-cevcard')) return;
   if(document.getElementById('cevAvisoPop')) return;
-  const d=document.createElement('div'); d.id='cevAvisoPop';
-  d.style.cssText='position:fixed;top:14px;left:50%;z-index:2000;transform:translateX(-50%);max-width:calc(100vw - 24px)';
-  d.innerHTML=`<div style="display:flex;align-items:center;gap:10px;background:var(--lx-acc,#2563EB);color:#fff;border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.25);padding:9px 10px 9px 14px;font-size:14px">
-    <span>📅 Tienes ${gs.length} reunion${gs.length===1?'':'es'} nueva${gs.length===1?'':'s'}</span>
-    <button id="cevAvisoVer" style="background:#fff;color:var(--lx-acc,#2563EB);font-weight:700;border-radius:8px;padding:6px 12px;font-size:13px;border:none;cursor:pointer">Ver</button>
-    <span id="cevAvisoX" style="font-size:18px;line-height:1;padding:0 4px;cursor:pointer;opacity:.85">×</span></div>`;
+  const d=document.createElement('div'); d.id='cevAvisoPop'; d.className='lx-cevpop';
+  d.innerHTML=`<div class="lx-cevpop-in">
+    <span class="lx-cevpop-tx">📅 Tienes ${gs.length} ${gs.length===1?'reunión nueva':'reuniones nuevas'}</span>
+    <button id="cevAvisoVer" class="lx-cevpop-ver">Ver</button>
+    <button id="cevAvisoX" class="lx-cevpop-x" aria-label="Cerrar">×</button></div>`;
   document.body.appendChild(d);
   const quitar=()=>{ const x=document.getElementById('cevAvisoPop'); if(x) x.remove(); };
   d.querySelector('#cevAvisoX').onclick=quitar;
