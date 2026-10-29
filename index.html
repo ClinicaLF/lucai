@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-29-1536">
+<meta name="lucai-version" content="2026-10-29-1743">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -38,7 +38,7 @@
         var net=m?m[1]:'';
         if(net && cur && net!==cur){
           var sp=new URLSearchParams(location.search);
-          if(sp.get('v')!==net){ sp.set('v',net); location.replace(location.pathname+'?'+sp.toString()+location.hash); }
+          if(sp.get('v')!==net){ sp.set('v',net); try{ if(window.lxRelevoGuardar) window.lxRelevoGuardar(); }catch(_){} location.replace(location.pathname+'?'+sp.toString()+location.hash); }
         }
       }).catch(function(){});
   }catch(e){}
@@ -7919,21 +7919,24 @@ async function lucaiCheckUpdate(){
   }catch(_){}
 }
 function lucaiUpdateBanner(){
+  /* Franja discreta (29/10/2026): la versión nueva se pone sola cuando nadie usa Lucai (ver «VERSIÓN NUEVA SIN
+     MOLESTAR»); el botón la pone ya, sin perder el usuario. */
   if(document.getElementById('lucaiUpd')) return;
   const d=document.createElement('div');
   d.id='lucaiUpd';
-  d.style.cssText='position:fixed;top:14px;left:50%;z-index:2000;opacity:0;transform:translate(-50%,-8px);transition:opacity .3s ease, transform .3s ease';
-  d.innerHTML=`<div style="display:flex;align-items:center;gap:12px;background:var(--t-bg-333F48);color:var(--t-fg-FFFFFF);border-radius:12px;box-shadow:0 12px 34px rgba(51,63,72,.3);padding:9px 10px 9px 16px;font-size:14px">
-      <span>Hay una versión nueva de Lucai</span>
-      <button onclick="lucaiUpdateNow()" style="background:var(--t-bg-A8C400);color:var(--t-fg-1F2A30);font-weight:700;border-radius:8px;padding:7px 14px;font-size:14px">Actualizar</button>
-      <span onclick="var b=document.getElementById('lucaiUpd'); if(b) b.remove();" style="color:var(--t-fg-8A949B);font-size:18px;line-height:1;padding:0 4px;cursor:pointer">×</span>
+  d.className='lx-verlista';
+  d.innerHTML=`<div style="display:flex;align-items:center;gap:10px;background:var(--t-bg-333F48);color:var(--t-fg-FFFFFF);border-radius:999px;box-shadow:0 8px 22px rgba(51,63,72,.22);padding:5px 6px 5px 14px;font-size:12.5px;line-height:1.3">
+      <span>Versión nueva lista · se pondrá sola cuando no uses Lucai</span>
+      <button onclick="lucaiUpdateNow()" style="background:var(--t-bg-A8C400);color:var(--t-fg-1F2A30);font-weight:700;border-radius:999px;padding:6px 12px;font-size:12.5px;white-space:nowrap;min-height:32px">Ponerla ya</button>
+      <span onclick="var b=document.getElementById('lucaiUpd'); if(b) b.remove();" title="Ocultar" style="color:var(--t-fg-8A949B);font-size:18px;line-height:1;padding:4px 6px;cursor:pointer">×</span>
     </div>`;
   document.body.appendChild(d);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{ d.style.opacity='1'; d.style.transform='translate(-50%,0)'; }));
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ d.classList.add('on'); }));
 }
 function lucaiUpdateNow(){
   // antes de recargar, marco la firma nueva como "ya conocida" por si el browser la sirve cacheada un momento
   try{ if(_lucaiNewVer) _lucaiSeenAdd(_lucaiNewVer); }catch(_){}
+  try{ if(window.lxRelevoGuardar) window.lxRelevoGuardar(); }catch(_){}   // que la recarga no quite el usuario
   const sp=new URLSearchParams(location.search);
   sp.set('v', String(Date.now()));
   location.replace(location.pathname+'?'+sp.toString());
@@ -12357,7 +12360,7 @@ function lxIntentRun(){
    ============================================================ */
 const LX_REC_KEY='lucai_recuerdo', LX_REC_DIAS=30;
 function lxEsMovil(){
-  try{ return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent||'') && (!window.matchMedia || matchMedia('(pointer:coarse)').matches); }catch(_){ return false; }
+  try{ const ua=navigator.userAgent||''; const ipad=/Macintosh/.test(ua) && (navigator.maxTouchPoints||0)>1; return (/iPhone|iPad|iPod|Android/i.test(ua) || ipad) && (!window.matchMedia || matchMedia('(pointer:coarse)').matches); }catch(_){ return false; }
 }
 function lxRecLeer(){ try{ const t=JSON.parse(localStorage.getItem(LX_REC_KEY)||'null'); return (t && t.id!=null && t.h && t.exp>Date.now()) ? t : null; }catch(_){ return null; } }
 function lxRecBorrar(){ try{ localStorage.removeItem(LX_REC_KEY); }catch(_){} }
@@ -12370,7 +12373,7 @@ function lxRecGuardar(u){
   loginView=function(){
     let h=_lv.apply(this, arguments);
     if(!lxEsMovil()) return h;
-    const casilla=`<label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--grey);margin:2px 2px 6px;cursor:pointer"><input type="checkbox" id="loginRecordar" ${S.loginRecordar?'checked':''} onchange="S.loginRecordar=this.checked" style="width:18px;height:18px"> Recordarme en este móvil (${LX_REC_DIAS} días)</label>`;
+    const casilla=`<label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--grey);margin:2px 2px 6px;cursor:pointer"><input type="checkbox" id="loginRecordar" ${S.loginRecordar?'checked':''} onchange="S.loginRecordar=this.checked" style="width:18px;height:18px"> Es mi móvil, recordarme (${LX_REC_DIAS} días)</label>`;
     const ancla='<div style="color:var(--t-fg-C0392B);font-size:13px;min-height:18px;margin:6px 2px 4px">';
     return h.includes(ancla) ? h.replace(ancla, casilla+ancla) : h;
   };
@@ -12381,13 +12384,13 @@ function lxRecGuardar(u){
   doLogin=async function(){
     const rec=!!(S.loginRecordar && lxEsMovil());
     await _dl.apply(this, arguments);
-    if(S.user){ if(rec) lxRecGuardar(S.user); else lxRecBorrar(); }
+    if(S.user){ if(rec) lxRecGuardar(S.user); else lxRecBorrar(); S.recordado=!!(rec && lxRecLeer()); }
   };
 })();
 /* al cerrar sesión: se olvida */
 (function(){
   const _lo=logout;
-  logout=function(){ lxRecBorrar(); return _lo.apply(this, arguments); };
+  logout=function(){ lxRecBorrar(); S.recordado=false; return _lo.apply(this, arguments); };
 })();
 /* al abrir la app: si este móvil tiene un recuerdo válido, entra solo */
 (function(){
@@ -12400,7 +12403,8 @@ function lxRecGuardar(u){
       if(!lxEsMovil()){ lxRecBorrar(); return; }
       const u=appUsers().find(x=>String(x.id)===String(t.id));
       if(!u || !u.passHash || u.passHash!==t.h || u.cambiarPass){ lxRecBorrar(); return; }
-      S.user=u; S.module=null; S.alert=''; S.iaOpen=false;
+      S.user=u; S.module=null; S.alert=''; S.iaOpen=false; S.recordado=true;
+      lxRecGuardar(u);   // se renueva: caduca a los 30 días sin usarlo, no a los 30 de marcarlo
       if(typeof iaWarmup==='function') iaWarmup();
       render(); if(typeof resetIdle==='function') resetIdle();
     }catch(_){}
@@ -12417,13 +12421,19 @@ function lxRecGuardar(u){
    - al cerrar sesión se cierran también las ventanas abiertas, para que el siguiente no vea nada del anterior.
    Botón «Salir» de un toque: en el menú lateral, en todos los aparatos; en la barra de abajo, solo en la tablet compartida.
    ============================================================ */
-const LX_COMP_KEY='lucai_compartida', LX_COMP_MIN=5, LX_COMP_AVISO=30;
+/* LX_INACT_MIN: minutos sin tocar nada antes de cerrar la sesión (tablet compartida y móvil o tablet sin «Es mi móvil»).
+   LX_COMP_AVISO: segundos de aviso antes («Sigo aquí»). */
+const LX_COMP_KEY='lucai_compartida', LX_INACT_MIN=5, LX_COMP_AVISO=30;
 function lxCompartida(){ try{ return localStorage.getItem(LX_COMP_KEY)==='1'; }catch(_){ return false; } }
+/* ¿Se cierra sola esta sesión al no tocarla? (29/10/2026) Sí en la tablet compartida y en cualquier aparato táctil
+   (móvil o tablet) donde no se marcó «Es mi móvil, recordarme». En los ordenadores con ratón, no (como hasta ahora). */
+function lxTactil(){ try{ return !!(window.matchMedia && matchMedia('(pointer:coarse)').matches); }catch(_){ return false; } }
+function lxCierraSolo(){ return lxCompartida() || (lxTactil() && !S.recordado); }
 (function(){
   try{
     const q=new URLSearchParams(location.search), v=(q.get('tablet')||'').toLowerCase();
     if(!v) return;
-    if(v==='compartida'){ localStorage.setItem(LX_COMP_KEY,'1'); try{ localStorage.removeItem(LX_REC_KEY); }catch(_){} window._lxCompAviso='Esta tablet queda como compartida: siempre pide usuario y contraseña y la sesión se cierra sola a los '+LX_COMP_MIN+' minutos sin tocarla.'; }
+    if(v==='compartida'){ localStorage.setItem(LX_COMP_KEY,'1'); try{ localStorage.removeItem(LX_REC_KEY); }catch(_){} window._lxCompAviso='Esta tablet queda como compartida: siempre pide usuario y contraseña y la sesión se cierra sola a los '+LX_INACT_MIN+' minutos sin tocarla.'; }
     else if(v==='personal'){ localStorage.removeItem(LX_COMP_KEY); window._lxCompAviso='Este aparato vuelve a ser personal.'; }
     q.delete('tablet');
     history.replaceState(null,'',location.pathname+(q.toString()?'?'+q.toString():'')+location.hash);
@@ -12522,10 +12532,10 @@ function lxCompSigo(){ _lxUltimo=Date.now(); lxCompAvisoQuitar(); }
 ['pointerdown','touchstart','keydown','wheel','input'].forEach(ev=>document.addEventListener(ev, ()=>{ _lxUltimo=Date.now(); if(ev!=='input') lxCompAvisoQuitar(); }, {capture:true, passive:true}));
 setInterval(function(){
   try{
-    if(!lxCompartida() || !S.user || !DEVICE){ lxCompAvisoQuitar(); return; }
+    if(!S.user || !DEVICE || !lxCierraSolo()){ lxCompAvisoQuitar(); return; }
     if(S.module==='junta' || (typeof _juntaRec!=='undefined' && _juntaRec)){ _lxUltimo=Date.now(); lxCompAvisoQuitar(); return; }
-    const quieto=(Date.now()-_lxUltimo)/1000, quedan=Math.ceil(LX_COMP_MIN*60-quieto);
-    if(quedan<=0){ const n=(S.user.nombre||'').split(' ')[0]; lxSalir(); toast('Sesión de '+n+' cerrada: nadie tocaba la tablet.'); return; }
+    const quieto=(Date.now()-_lxUltimo)/1000, quedan=Math.ceil(LX_INACT_MIN*60-quieto);
+    if(quedan<=0){ const n=(S.user.nombre||'').split(' ')[0]; lxSalir(); toast('Sesión de '+n+' cerrada: llevaba '+LX_INACT_MIN+' minutos sin usarse.'); return; }
     if(quedan<=LX_COMP_AVISO){
       let a=document.getElementById('lxIdle');
       if(!a){ a=document.createElement('div'); a.id='lxIdle'; a.className='lx-idle'; document.body.appendChild(a);
@@ -12542,6 +12552,73 @@ setInterval(function(){
     if(window._lxCompAviso){ const m=window._lxCompAviso; window._lxCompAviso=null; setTimeout(()=>toast(m),300); }
   };
 })();
+
+/* ============================================================
+   LUCAI · VERSIÓN NUEVA SIN MOLESTAR (29/10/2026, David por Max)
+   La app mira cada minuto si hay versión nueva (lucaiCheckUpdate). Cuando la hay, no recarga en mitad del uso:
+   la pone sola cuando nadie la está usando (LX_VER_QUIETO_MIN sin tocar nada, ninguna ventana abierta, nada a
+   medio escribir, sin dictar, fuera de Reuniones) o en la pantalla de entrada (p. ej. tras «Salir»).
+   Relevo: justo antes de esa recarga se guarda en esta pestaña (sessionStorage, 2 minutos, se usa una vez) quién
+   estaba dentro y dónde, para que la recarga NO quite el usuario en ningún aparato. Se comprueba con la huella
+   de la contraseña, como «Recordarme»: si la cambiaron entremedias, pide entrar.
+   ============================================================ */
+const LX_VER_QUIETO_MIN=2, LX_RELEVO_KEY='lx_relevo';
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-verlista">
+.lx-verlista{position:fixed;left:50%;bottom:16px;z-index:2000;opacity:0;transform:translate(-50%,6px);transition:opacity .3s ease, transform .3s ease;width:max-content;max-width:calc(100vw - 24px)}
+.lx-verlista.on{opacity:1;transform:translate(-50%,0)}
+body.has-tb .lx-verlista{bottom:84px}
+@media (min-width:721px) and (any-pointer:coarse){ body.has-rail .lx-verlista{bottom:96px} }
+</style>`);
+
+window.lxRelevoGuardar=function(){
+  try{
+    if(!(typeof S!=='undefined' && S && S.user && S.user.passHash)) return;
+    sessionStorage.setItem(LX_RELEVO_KEY, JSON.stringify({ id:S.user.id, h:S.user.passHash, rec:!!S.recordado,
+      mod:S.module||null, sub:S.sub||null, quieto:Math.max(0, Date.now()-_lxUltimo), exp:Date.now()+120000 }));
+  }catch(_){}
+};
+function lxRelevoUsar(){
+  let r=null;
+  try{ r=JSON.parse(sessionStorage.getItem(LX_RELEVO_KEY)||'null'); sessionStorage.removeItem(LX_RELEVO_KEY); }catch(_){ return; }
+  if(!r || !r.exp || r.exp<Date.now() || !DEVICE) return;
+  const u=appUsers().find(x=>String(x.id)===String(r.id));
+  if(!u || !u.passHash || u.passHash!==r.h || u.cambiarPass) return;
+  if(S.user && String(S.user.id)!==String(u.id)) return;
+  S.user=u; S.alert=''; S.iaOpen=false; S.recordado=!!(r.rec || S.recordado);
+  S.module=(r.mod && (typeof canAccess!=='function' || canAccess(r.mod))) ? r.mod : null;
+  if(S.module && r.sub) S.sub=r.sub;
+  _lxUltimo=Date.now()-Math.min(Number(r.quieto)||0, 10*60000);
+  if(typeof iaWarmup==='function') iaWarmup();
+  render(); if(typeof resetIdle==='function') resetIdle();
+}
+(function(){
+  const _bt=boot;
+  boot=async function(){ await _bt.apply(this, arguments); try{ lxRelevoUsar(); }catch(_){} };
+})();
+/* ¿Se puede poner ya la versión nueva sin estorbar a nadie? */
+function lxVerSePuede(){
+  if(document.querySelector('.overlay,#lxConfirm,#lxIdle')) return false;
+  const ae=document.activeElement;
+  if(ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable)) return false;
+  if(typeof _juntaRec!=='undefined' && _juntaRec) return false;
+  if(typeof _lxAsRec!=='undefined' && _lxAsRec) return false;
+  if(typeof _idRec!=='undefined' && _idRec) return false;
+  if(typeof _asdRec!=='undefined' && _asdRec) return false;
+  if(!DEVICE) return true;
+  if(!S.user){   // pantalla de entrada: solo si nadie está escribiendo su usuario o contraseña
+    const u=document.getElementById('loginUser'), p=document.getElementById('loginPass');
+    return !((u && u.value) || (p && p.value) || S.loginBusy);
+  }
+  if(S.modal || S.iaOpen || S.module==='junta') return false;
+  if((Date.now()-_lxUltimo) < LX_VER_QUIETO_MIN*60000) return false;
+  // nada a medio escribir en la página (lo que se ha cambiado y aún no se ha redibujado)
+  const campos=document.querySelectorAll('textarea, input:not([type]), input[type=text], input[type=search], input[type=number], input[type=date]');
+  for(const c of campos){ if(c.value!==c.defaultValue) return false; }
+  return true;
+}
+setInterval(function(){
+  try{ if(_lucaiNewVer && navigator.onLine!==false && lxVerSePuede()) lucaiUpdateNow(); }catch(_){}
+}, 5000);
 
 /* ============================================================
    LUCAI · CALENDARIO DE REUNIONES Y FORMACIONES (25/10/2026)
