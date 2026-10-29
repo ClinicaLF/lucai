@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-29-1517">
+<meta name="lucai-version" content="2026-10-29-1536">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -12499,6 +12499,22 @@ body.has-tb .lx-idle{bottom:86px}
   const _rp=lxRailPaint;
   lxRailPaint=function(){ _rp.apply(this, arguments); try{ lxRailAjusta(); }catch(_){} };
 })();
+/* Margen de seguridad abajo en tablets (29/10/2026, 2.º intento). En la tablet en modo ordenador la barra de
+   tareas de Android tapa los últimos ~60 px y el navegador no se entera (la ventana «llega» hasta el borde), así
+   que no se puede detectar. Sin detectar nada: en pantallas táctiles anchas (con menú lateral) se deja libre el
+   último tramo de 80 px: «Salir» queda fijo 80 px por encima del borde, el menú puede desplazarse hasta él, y la
+   burbuja del asistente, los avisos y la hoja de la cuenta suben por encima. Ordenador con ratón y móvil: igual que antes. */
+document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-margen-tablet">
+@media (min-width:721px) and (any-pointer:coarse){
+  .lx-rail::after{content:'';display:block;flex:0 0 80px;height:80px;width:1px}
+  .lx-rail .lx-it.lx-salir{bottom:80px}
+  body.has-rail main{padding-bottom:96px !important}
+  body.has-rail .ia-fab{bottom:96px !important}
+  body.has-rail .ia-panel{bottom:164px !important;max-height:calc(100vh - 190px) !important}
+  body.has-rail .toast, body.has-rail .cadpop, body.has-rail .lx-idle{bottom:96px}
+  body.has-rail .lucai-more{margin-bottom:90px;max-height:calc(100vh - 120px)}
+}
+</style>`);
 /* cierre solo por inactividad (solo tablet compartida) */
 let _lxUltimo=Date.now();
 function lxCompAvisoQuitar(){ const a=document.getElementById('lxIdle'); if(a) a.remove(); }
