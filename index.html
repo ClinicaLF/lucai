@@ -14624,8 +14624,6 @@ window.addEventListener('resize', ofiAjustaAlto);
   homeView=function(){ return _hv.apply(this, arguments).split('<span class="np-tile"><b>IA</b></span><div class="np-title">Oficina IA').join('<span class="np-tile"><svg viewBox="0 0 24 24">'+window._OFI_IC+'</svg></span><div class="np-title">Oficina IA'); };
 })();
 /* ===== FIN OFICINA IA ===== */
-
-
 /* ============================================================
    LUCAI · OFICINA 3D (David, 30/10/2026): la oficina de los empleados IA dentro de Oficina IA, para el equipo.
    Encima de los expertos, una franja «Hoy en la oficina» con cada empleado IA y lo que ha hecho hoy; al tocarla se
@@ -14702,7 +14700,7 @@ document.addEventListener('keydown', ev=>{ if(ev.key==='Escape' && el('of3Capa')
     of3Cargar().then(c=>{ if(c && S.module==='oficina' && !S.ofi.sel) render(); });
     const f=of3Franja(); if(!f) return h;
     const i=h.indexOf('class="section-sub"'), j= i<0 ? -1 : h.indexOf('</div></div>', i);
-    return j<0 ? h : h.slice(0, j+12)+OF3_CSS+f+h.slice(j+12);
+    return j<0 ? h : h.slice(0, j+12)+f+h.slice(j+12);
   };
   setInterval(()=>{ if(S.module==='oficina' && !S.ofi.sel && !el('of3Capa')) of3Cargar().then(c=>{ if(c && S.module==='oficina' && !S.ofi.sel) render(); }); }, 60000);
 })();
@@ -14730,6 +14728,7 @@ const OF3_CSS=`<style>
 body.of3-abierta{overflow:hidden}
 @media (max-width:560px){.of3-gente{grid-template-columns:1fr 1fr}.of3-franja{padding:14px}}
 </style>`;
+document.head.insertAdjacentHTML('beforeend', OF3_CSS);   // en la cabecera: la capa necesita sus estilos aunque se repinte la pantalla
 
 boot();
 
