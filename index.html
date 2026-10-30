@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-29-2028">
+<meta name="lucai-version" content="2026-10-30-1857">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -14263,6 +14263,343 @@ document.head.insertAdjacentHTML('beforeend', `<style id="lx-css-alm-avisos">
 @media(max-width:720px){ .alm-pf{flex-direction:column;align-items:flex-start} }
 </style>`);
 /* ===== FIN AVISO DE «POR PEDIR» ===== */
+
+/* ============================================================
+   LUCAI · OFICINA IA (David, 30/10/2026): los expertos de IA de la clínica, cada uno con su chat.
+   Primero Toni (ventas) para ATP y recepción; luego comunicación. Al pulsar un experto se abre su chat, como Claude:
+   conversaciones guardadas, micro para dictar (voz a texto del navegador) y botón para escuchar la respuesta.
+   Quién es cada experto, su foto, sus instrucciones y lo que sabe viven en la tabla ia_expertos (la sube cada día
+   subir_expertos.py desde la instalación de la clínica). El chat va por la función oficina-experto (Claude detrás).
+   Las conversaciones se guardan en este aparato, por usuario (localStorage); en la base solo queda cada pregunta y su
+   respuesta (ia_preguntas) para la revisión mensual, con teléfonos y DNI tapados.
+   Quién lo ve: Dirección, quien tenga el permiso «oficina» y los puestos de OFI_PUESTOS (coordinación, atención al
+   paciente y recepción).
+   Motor en el Cerebro: 1 Cerebro\Lucai\Oficina IA\expertos\ (este bloque se copia en el index.html de cada clínica).
+   ============================================================ */
+const OFI_FN = SUPABASE_URL + '/functions/v1/oficina-experto';
+const OFI_PUESTOS = /^Coordinador|Atenci[oó]n (al )?Paciente|Recepci[oó]n/i;
+const OFI_MAX_CONVS = 30;
+if(!S.ofi) S.ofi = { expertos:[], cargado:false, cargando:false, error:'', sel:null, conv:null, draft:'', busy:false, verLista:false };
+(function(){
+  if(!MODULES.find(x=>x.id==='oficina')){
+    MODULES.push({ id:'oficina', ini:'IA', nombre:'Oficina IA', desc:'Tus compañeros de IA: pregúntales cómo decir algo a un paciente o practica con ellos.', estado:'activo' });
+  }
+  if(!LUCAI_VISIBLES.includes('oficina')){ const i=LUCAI_VISIBLES.indexOf('material'); LUCAI_VISIBLES.splice(i>=0?i+1:LUCAI_VISIBLES.length, 0, 'oficina'); }
+  const ic='<rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 13v-2a5 5 0 0 1 10 0v2"/><circle cx="12" cy="6" r="2.6"/><path d="M8 20v-2M16 20v-2"/>';
+  if(typeof TB_IC==='object' && TB_IC && !TB_IC.oficina) TB_IC.oficina=ic;
+  window._OFI_IC=ic;
+})();
+const _canAccess_ofi = canAccess;
+canAccess = function(id){
+  if(id==='oficina') return !!S.user && (_canAccess_ofi(id) || OFI_PUESTOS.test(String((S.user && S.user.rol)||'')));
+  return _canAccess_ofi(id);
+};
+
+/* ---- datos ---- */
+async function ofiCargar(){
+  if(S.ofi.cargando) return false; S.ofi.cargando=true;
+  const antes=JSON.stringify([S.ofi.cargado, S.ofi.error, (S.ofi.expertos||[]).map(x=>x.id+x.actualizado)]);
+  try{
+    const { data, error } = await sbc.from('ia_expertos').select('id,nombre,puesto,descripcion,foto,orden,activo,proximamente,actualizado').eq('clinica', CLINICA);
+    if(error) throw error;
+    S.ofi.expertos=(data||[]).filter(x=>x.activo!==false).sort((a,b)=>(a.orden||0)-(b.orden||0));
+    S.ofi.error='';
+  }catch(e){ S.ofi.error = String((e && (e.message||e.code)) || e); }
+  S.ofi.cargado=true; S.ofi.cargando=false;
+  return antes!==JSON.stringify([S.ofi.cargado, S.ofi.error, (S.ofi.expertos||[]).map(x=>x.id+x.actualizado)]);   // ¿hace falta repintar?
+}
+function ofiExp(id){ return (S.ofi.expertos||[]).find(x=>x.id===id) || null; }
+function ofiClave(){ return 'lucai_ofi_'+((S.user&&S.user.nombre)||'?')+'_'+(S.ofi.sel||''); }
+function ofiConvs(){ try{ const v=JSON.parse(localStorage.getItem(ofiClave())||'[]'); return Array.isArray(v)?v:[]; }catch(_){ return []; } }
+function ofiGuardarConvs(lista){ try{ localStorage.setItem(ofiClave(), JSON.stringify(lista.slice(0,OFI_MAX_CONVS))); }catch(_){ } }
+function ofiConvActual(){ return ofiConvs().find(c=>c.id===S.ofi.conv) || null; }
+function ofiGuardarConv(c){ const l=ofiConvs().filter(x=>x.id!==c.id); l.unshift(c); ofiGuardarConvs(l); }
+function ofiNuevaConv(modo){ S.ofi.conv=null; S.ofi.modo=modo||S.ofi.modo||'duda'; S.ofi.draft=''; S.ofi.verLista=false; ofiCallar(); render(); setTimeout(()=>{ const t=el('ofiIn'); if(t) t.focus(); }, 60); }
+function ofiAbrirConv(id){ const c=ofiConvs().find(x=>x.id===id); if(!c) return; S.ofi.conv=id; S.ofi.modo=c.modo||'duda'; S.ofi.verLista=false; ofiCallar(); render(); ofiBajar(true); }
+async function ofiBorrarConv(id){ if(!await lxPregunta('¿Borrar esta conversación?')) return; ofiGuardarConvs(ofiConvs().filter(x=>x.id!==id)); if(S.ofi.conv===id) S.ofi.conv=null; render(); }
+function ofiEntrar(id){ const e=ofiExp(id); if(!e || e.proximamente) return; S.ofi.sel=id; const l=ofiConvs(); S.ofi.conv=l.length?l[0].id:null; S.ofi.modo=(l[0]&&l[0].modo)||'duda'; S.ofi.draft=''; render(); ofiBajar(true); }
+function ofiSalir(){ ofiMicParar(); ofiCallar(); S.ofi.sel=null; render(); }
+function ofiModo(m){
+  if(S.ofi.busy) return;
+  const c=ofiConvActual();
+  if(c && c.msgs && c.msgs.length && c.modo!==m){ ofiNuevaConv(m); return; }
+  S.ofi.modo=m; if(c){ c.modo=m; ofiGuardarConv(c); } render();
+}
+function ofiBajar(force){ setTimeout(()=>{ const sc=el('ofiScroll'); if(!sc) return; if(force || (sc.scrollHeight-sc.scrollTop-sc.clientHeight)<120) sc.scrollTop=sc.scrollHeight; }, 30); }
+
+/* ---- enviar y recibir (streaming, como el asistente) ---- */
+async function ofiEnviar(textoFijo){
+  const box=el('ofiIn');
+  const q=String(textoFijo!=null ? textoFijo : (box?box.value:S.ofi.draft)).trim();
+  if(!q || S.ofi.busy) return;
+  ofiMicParar(); ofiCallar(); ofiVozDesbloquear();
+  let c=ofiConvActual();
+  if(!c){ c={ id:'C'+Date.now().toString(36), titulo:q.slice(0,60), modo:S.ofi.modo||'duda', ts:now(), msgs:[] }; S.ofi.conv=c.id; }
+  c.msgs.push({ role:'user', content:q });
+  const r={ role:'assistant', content:'' }; c.msgs.push(r); c.ts=now(); ofiGuardarConv(c);
+  S.ofi.draft=''; S.ofi.busy=true; S.ofi.vivo=true; render(); ofiBajar(true);
+  const ctrl=(typeof AbortController!=='undefined')?new AbortController():null; S.ofi._ctrl=ctrl;
+  const killer=setTimeout(()=>{ try{ ctrl&&ctrl.abort(); }catch(_){ } }, 120000);
+  try{
+    const resp=await fetch(OFI_FN, { method:'POST', headers:await lucaiFnHeaders(), signal:ctrl?ctrl.signal:undefined,
+      body:JSON.stringify({ clinica:CLINICA, experto:S.ofi.sel, modo:c.modo, usuario:S.user.nombre, puesto:S.user.rol||'',
+        mensajes:c.msgs.slice(0,-1).map(m=>({ role:m.role, content:m.content })) }) });
+    const ct=resp.headers.get('content-type')||'';
+    if(!resp.ok || ct.includes('application/json') || !resp.body || !resp.body.getReader){
+      const d=await resp.json().catch(()=>({}));
+      r.content=(d && d.error) ? ('No he podido contestar: '+d.error) : 'No he recibido respuesta.'; r.fallo=true;
+    } else {
+      const rd=resp.body.getReader(), dec=new TextDecoder();
+      while(true){
+        const { done, value }=await rd.read(); if(done) break;
+        const t=dec.decode(value, {stream:true}); if(!t) continue;
+        r.content+=t;
+        const v=document.getElementById('ofiVivo');
+        if(v){ v.innerHTML=ofiFormato(r.content); ofiBajar(false); } else { render(); }
+      }
+      if(!r.content) { r.content='No he recibido respuesta.'; r.fallo=true; }
+    }
+  }catch(e){
+    const abort=e && e.name==='AbortError';
+    if(!r.content){ r.content=abort?'Ha tardado demasiado. Inténtalo otra vez.':'No he podido conectar. Revisa la conexión e inténtalo otra vez.'; r.fallo=true; }
+  }
+  clearTimeout(killer);
+  c.ts=now(); ofiGuardarConv(c); S.ofi.busy=false; S.ofi.vivo=false; render(); ofiBajar(false);
+  if(S.ofi.leerSiempre && !r.fallo) ofiHablar(c.msgs.length-1);
+}
+function ofiParar(){ try{ S.ofi._ctrl && S.ofi._ctrl.abort(); }catch(_){ } }
+function ofiFormato(t){
+  let s=(typeof iaFormat==='function') ? iaFormat(t) : incEsc(t||'');
+  s=s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+  return s;
+}
+function ofiCopiar(i){ const c=ofiConvActual(); const m=c&&c.msgs[i]; if(!m) return; try{ navigator.clipboard.writeText(m.content).then(()=>toast('Copiado')); }catch(_){ toast('No se ha podido copiar'); } }
+
+/* ---- micro: voz a texto del navegador (como «🎤 Hablar» de Reuniones) ---- */
+let _ofiRec=null;
+function ofiMicParar(){ try{ if(_ofiRec){ _ofiRec.stop(); } }catch(_){ } }
+function ofiMic(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ toast('Este navegador no deja dictar con el botón. Usa el micrófono del teclado del móvil o Win + H.'); return; }
+  if(_ofiRec){ ofiMicParar(); return; }
+  ofiCallar();
+  const rec=new SR(); _ofiRec=rec;
+  rec.lang='es-ES'; rec.continuous=true; rec.interimResults=true;
+  const box=el('ofiIn'); const base=((box?box.value:S.ofi.draft)||'').trim(); let fin='';
+  rec.onresult=function(ev){
+    let inter='';
+    for(let i=ev.resultIndex;i<ev.results.length;i++){ const x=ev.results[i]; if(x.isFinal) fin+=x[0].transcript+' '; else inter+=x[0].transcript; }
+    S.ofi.draft=((base?base+' ':'')+fin+inter).replace(/\s+/g,' ').trim();
+    const t=el('ofiIn'); if(t){ t.value=S.ofi.draft; ofiAltura(t); }
+  };
+  rec.onerror=function(e){ if(e && (e.error==='not-allowed'||e.error==='service-not-allowed')) toast('Permite el micrófono en el navegador para dictar.'); else if(e && e.error==='no-speech') toast('No te he oído. Pulsa el micro y habla.'); };
+  rec.onend=function(){ if(_ofiRec===rec) _ofiRec=null; ofiPintarMic(); };
+  try{ rec.start(); ofiPintarMic(); }catch(_){ _ofiRec=null; toast('No se ha podido abrir el micrófono.'); }
+}
+function ofiPintarMic(){ const b=el('ofiMicBtn'); if(b){ b.classList.toggle('on', !!_ofiRec); b.title=_ofiRec?'Parar de dictar':'Dictar'; } }
+function ofiAltura(t){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight, 160)+'px'; }
+
+/* ---- escuchar: lectura en voz alta del propio navegador ---- */
+function ofiVoz(){
+  const vs=(window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  const es=vs.filter(v=>/^es(-|_|$)/i.test(v.lang));
+  const esES=es.filter(v=>/es[-_]ES/i.test(v.lang));
+  const pref=/(Alvaro|Álvaro|Jorge|Pablo|Diego|Ra[uú]l|Enrique|Carlos|Juan)/i;
+  return esES.find(v=>pref.test(v.name) && /Natural|Online|Neural/i.test(v.name)) || esES.find(v=>pref.test(v.name))
+    || esES.find(v=>/Natural|Online|Neural|Google/i.test(v.name)) || esES[0] || es[0] || null;
+}
+function ofiVozDesbloquear(){ try{ if(window.speechSynthesis && !S.ofi._vozOk){ const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); S.ofi._vozOk=true; } }catch(_){ } }
+function ofiCallar(){ try{ window.speechSynthesis && speechSynthesis.cancel(); }catch(_){ } S.ofi.hablando=null; ofiPintarVoz(); }
+function ofiHablar(i){
+  if(!window.speechSynthesis){ toast('Este navegador no puede leer en voz alta.'); return; }
+  if(S.ofi.hablando===i){ ofiCallar(); return; }
+  ofiCallar();
+  const c=ofiConvActual(); const m=c&&c.msgs[i]; if(!m || !m.content) return;
+  const limpio=m.content.replace(/\*\*?|__|#+\s|`|[«»"“”]/g,'').replace(/^\s*[-•]\s+/gm,'').replace(/\s+/g,' ').trim();
+  const trozos=limpio.match(/[^.!?¿¡]+[.!?]*|[¿¡][^?!]+[?!]/g) || [limpio];   // por frases: Chrome corta las largas
+  const voz=ofiVoz(); S.ofi.hablando=i; ofiPintarVoz();
+  trozos.map(t=>t.trim()).filter(Boolean).forEach((t,k,arr)=>{
+    const u=new SpeechSynthesisUtterance(t); u.lang='es-ES'; if(voz) u.voice=voz; u.rate=1.02;
+    if(k===arr.length-1) u.onend=()=>{ if(S.ofi.hablando===i){ S.ofi.hablando=null; ofiPintarVoz(); } };
+    speechSynthesis.speak(u);
+  });
+}
+function ofiPintarVoz(){ document.querySelectorAll('[data-ofi-voz]').forEach(b=>{ const on=String(S.ofi.hablando)===b.getAttribute('data-ofi-voz'); b.classList.toggle('on', on); b.innerHTML=on?'⏹ Parar':'🔊 Escuchar'; }); }
+function ofiLeerSiempre(){ S.ofi.leerSiempre=!S.ofi.leerSiempre; try{ localStorage.setItem('lucai_ofi_leer', S.ofi.leerSiempre?'1':''); }catch(_){ } if(!S.ofi.leerSiempre) ofiCallar(); else ofiVozDesbloquear(); render(); }
+try{ S.ofi.leerSiempre = localStorage.getItem('lucai_ofi_leer')==='1'; }catch(_){ }
+try{ window.speechSynthesis && speechSynthesis.getVoices(); }catch(_){ }
+
+/* ---- pantallas ---- */
+function ofiFoto(e, px){
+  if(e && e.foto) return `<img class="ofi-foto" src="${e.foto}" alt="" style="width:${px}px;height:${px}px">`;
+  return `<span class="ofi-foto ofi-foto-vacia" style="width:${px}px;height:${px}px"><svg viewBox="0 0 24 24" width="${Math.round(px*.5)}" height="${Math.round(px*.5)}" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg></span>`;
+}
+function oficinaView(){
+  if(!S.ofi.recargado && !S.ofi.cargando){ S.ofi.recargado=true; ofiCargar().then(c=>{ if(c && S.module==='oficina') render(); }); }
+  if(S.ofi.sel && ofiExp(S.ofi.sel)) return ofiChatView();
+  const nombre=(S.user&&S.user.nombre||'').split(' ')[0];
+  let cuerpo;
+  if(!S.ofi.cargado) cuerpo='<div class="muted" style="padding:30px 0">Abriendo la oficina…</div>';
+  else if(S.ofi.error) cuerpo=`<div class="note">La oficina todavía no está lista en este aparato.${isAdmin()?' <span class="muted">(Detalle para Dirección: '+incEsc(S.ofi.error)+')</span>':''}</div>`;
+  else if(!S.ofi.expertos.length) cuerpo='<div class="note">Todavía no hay expertos en la oficina.</div>';
+  else cuerpo=`<div class="ofi-grid">${S.ofi.expertos.map(e=>e.proximamente
+      ? `<div class="ofi-card ofi-pronto">${ofiFoto(null,84)}<div class="ofi-nom">${incEsc(e.puesto||'')}</div><div class="ofi-desc">${incEsc(e.descripcion||'')}</div><span class="ofi-tag">Muy pronto</span></div>`
+      : `<button class="ofi-card" onclick="ofiEntrar('${e.id}')"><span class="ofi-fw">${ofiFoto(e,96)}<span class="ofi-punto" title="Disponible"></span></span><div class="ofi-nom">${incEsc(e.nombre||'')}</div><div class="ofi-pue">${incEsc(e.puesto||'')}</div><div class="ofi-desc">${incEsc(e.descripcion||'')}</div><span class="btn btn-primary btn-sm ofi-hablar">Hablar con ${incEsc(e.nombre||'')}</span></button>`).join('')}</div>`;
+  return `${moduleHeader('Oficina IA', false)}${OFI_CSS}
+  <main><div class="wrap">
+    <div><div class="section-title">${nombre?incEsc(nombre)+', estos son tus compañeros de IA':'Tus compañeros de IA'}</div>
+      <div class="section-sub">Pregúntales lo que necesites, por escrito o hablando. Están aprendiendo: si alguno se equivoca, díselo a David.</div></div>
+    ${cuerpo}
+  </div></main>`;
+}
+function ofiChatView(){
+  const e=ofiExp(S.ofi.sel); const c=ofiConvActual(); const modo=(c&&c.modo)||S.ofi.modo||'duda';
+  const msgs=(c&&c.msgs)||[];
+  const lista=ofiConvs();
+  const sug = modo==='practicar'
+    ? ['Practicar: «me lo pienso»','Practicar: «es muy caro»','Practicar: presentar el presupuesto','Practicar: llamada de seguimiento']
+    : ['Me dijo que se lo pensaba, ¿qué hago?','¿Cómo empiezo la entrevista antes del doctor?','Me dice que es caro','Lo tiene que hablar con su pareja'];
+  const burbujas = !msgs.length
+    ? `<div class="ofi-hola">${ofiFoto(e,64)}<div><div class="ofi-hola-t">Hola${S.user?', '+incEsc(S.user.nombre.split(' ')[0]):''}. Soy ${incEsc(e.nombre||'')}.</div>
+        <div class="muted">${modo==='practicar'?'Yo hago de paciente y tú practicas. Dime qué escena quieres o elige una.':'Cuéntame qué te ha pasado o qué quieres decirle a un paciente, y te doy la frase.'}</div></div></div>
+       <div class="ofi-sugs">${sug.map(s=>`<button class="btn btn-ghost btn-sm" onclick="ofiEnviar(this.textContent)">${incEsc(s)}</button>`).join('')}</div>`
+    : msgs.map((m,i)=> m.role==='user'
+        ? `<div class="ofi-yo"><div>${incEsc(m.content)}</div></div>`
+        : `<div class="ofi-el">${ofiFoto(e,30)}<div class="ofi-bur">${(S.ofi.vivo && i===msgs.length-1)
+            ? (m.content?`<span id="ofiVivo">${ofiFormato(m.content)}</span>`:'<span id="ofiVivo" class="ofi-pens">Pensando<span>.</span><span>.</span><span>.</span></span>')
+            : ofiFormato(m.content)}
+            ${(!S.ofi.vivo || i<msgs.length-1) && m.content && !m.fallo ? `<div class="ofi-acc"><button class="ofi-mini" data-ofi-voz="${i}" onclick="ofiHablar(${i})">🔊 Escuchar</button><button class="ofi-mini" onclick="ofiCopiar(${i})">Copiar</button></div>`:''}</div></div>`).join('');
+  const convs = `<div class="ofi-convs ${S.ofi.verLista?'ver':''}">
+      <button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:10px" onclick="ofiNuevaConv()">＋ Nueva conversación</button>
+      ${lista.length?lista.map(x=>`<div class="ofi-conv ${x.id===S.ofi.conv?'act':''}" onclick="ofiAbrirConv('${x.id}')"><span class="ofi-conv-t">${x.modo==='practicar'?'🎭 ':''}${incEsc(x.titulo||'Conversación')}</span><span class="ofi-conv-x" title="Borrar" onclick="event.stopPropagation();ofiBorrarConv('${x.id}')">×</span></div>`).join('')
+        :'<div class="muted" style="font-size:12.5px">Aquí saldrán tus conversaciones con '+incEsc(e.nombre||'')+'.</div>'}
+      <div class="muted" style="font-size:11.5px;margin-top:10px">Se guardan solo en este aparato.</div>
+    </div>`;
+  return `${moduleHeader('Oficina IA', false)}${OFI_CSS}
+  <main><div class="wrap ofi-wrap">
+    <div class="ofi-cab">
+      <button class="btn btn-ghost btn-sm" onclick="ofiSalir()">‹ Oficina</button>
+      ${ofiFoto(e,40)}<div style="min-width:0"><div class="ofi-cab-n">${incEsc(e.nombre||'')}</div><div class="muted" style="font-size:12.5px">${incEsc(e.puesto||'')}</div></div>
+      <button class="btn btn-ghost btn-sm ofi-lista-btn" onclick="S.ofi.verLista=!S.ofi.verLista;render()">☰ Chats</button>
+    </div>
+    <div class="ofi-cuerpo">
+      ${convs}
+      <div class="ofi-chat">
+        <div class="ofi-modos">
+          <button class="${modo!=='practicar'?'act':''}" onclick="ofiModo('duda')">💬 <span class="ofi-l">Tengo una duda</span><span class="ofi-c">Duda</span></button>
+          <button class="${modo==='practicar'?'act':''}" onclick="ofiModo('practicar')">🎭 Practicar<span class="ofi-l"> (hace de paciente)</span></button>
+          <label class="ofi-leer" title="Lee en voz alta cada respuesta al llegar"><input type="checkbox" ${S.ofi.leerSiempre?'checked':''} onchange="ofiLeerSiempre()"> 🔊 Leer en voz alta</label>
+        </div>
+        <div id="ofiScroll" class="ofi-scroll" data-tar-scroll>${burbujas}</div>
+        <div class="ofi-comp">
+          <textarea id="ofiIn" rows="1" placeholder="Escribe o pulsa el micro…" oninput="S.ofi.draft=this.value;ofiAltura(this)"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey&&window.matchMedia('(min-width:721px)').matches){event.preventDefault();ofiEnviar()}">${incEsc(S.ofi.draft||'')}</textarea>
+          <button id="ofiMicBtn" class="ofi-mic ${_ofiRec?'on':''}" onclick="ofiMic()" title="Dictar"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+          ${S.ofi.busy?`<button class="ofi-env" onclick="ofiParar()" title="Parar">■</button>`:`<button class="ofi-env" onclick="ofiEnviar()" title="Enviar">➤</button>`}
+        </div>
+        <div class="ofi-pie">Sin nombres de pacientes: usa el nº de ficha o una descripción. ${incEsc(e.nombre||'')} puede equivocarse; ante la duda, pregunta a David.</div>
+      </div>
+    </div>
+  </div></main>`;
+}
+const OFI_CSS=`<style>
+.ofi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;margin-top:18px}
+.ofi-card{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-radius:18px;padding:22px 16px 18px;cursor:pointer;font-family:inherit;color:inherit;transition:transform .15s,box-shadow .15s}
+button.ofi-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(30,40,60,.10)}
+.ofi-fw{position:relative;display:inline-block;margin-bottom:8px}
+.ofi-foto{border-radius:50%;object-fit:cover;display:inline-grid;place-items:center;flex:0 0 auto;background:var(--lx-gris-s,#EEF0F3);color:var(--lx-gris,#8A949B)}
+.ofi-fw .ofi-foto{box-shadow:0 0 0 4px var(--t-bg-FFFFFF),0 0 0 6px #22C55E33}
+.ofi-punto{position:absolute;right:6px;bottom:6px;width:16px;height:16px;border-radius:50%;background:#22C55E;border:3px solid var(--t-bg-FFFFFF)}
+.ofi-nom{font-weight:800;font-size:18px}
+.ofi-pue{font-size:13px;color:var(--lx-azul,#2563EB);font-weight:700}
+.ofi-desc{font-size:13px;color:var(--t-fg-6C757D);line-height:1.45;margin:4px 0 10px}
+.ofi-hablar{margin-top:auto}
+.ofi-pronto{cursor:default;opacity:.75;background:var(--lx-gris-s,#F4F5F7)}
+.ofi-pronto .ofi-foto{margin-bottom:8px}
+.ofi-tag{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;border-radius:999px;padding:3px 10px;background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);color:var(--t-fg-6C757D);margin-top:auto}
+.ofi-wrap{max-width:1100px}
+.ofi-cab{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.ofi-cab .btn{white-space:nowrap;flex:0 0 auto}
+.ofi-c{display:none}
+.ofi-cab-n{font-weight:800;font-size:16px}
+.ofi-lista-btn{margin-left:auto;display:none}
+.ofi-cuerpo{display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start}
+.ofi-convs{background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-radius:14px;padding:12px;max-height:72vh;overflow:auto}
+.ofi-conv{display:flex;align-items:center;gap:6px;padding:8px 9px;border-radius:9px;cursor:pointer;font-size:13.5px}
+.ofi-conv:hover{background:var(--lx-gris-s,#F1F3F6)}
+.ofi-conv.act{background:var(--lx-azul-s,#E8EFFD);font-weight:700}
+.ofi-conv-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ofi-conv-x{opacity:.45;font-size:16px;padding:0 4px}
+.ofi-conv-x:hover{opacity:1;color:#C0392B}
+.ofi-chat{background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-radius:14px;display:flex;flex-direction:column;min-height:60vh}
+.ofi-modos{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 12px;border-bottom:1px solid var(--t-bd-line)}
+.ofi-modos button{font-family:inherit;font-size:13px;font-weight:700;border:1px solid var(--t-bd-line);background:transparent;color:inherit;border-radius:999px;padding:6px 12px;cursor:pointer}
+.ofi-modos button.act{background:var(--lx-azul,#2563EB);border-color:var(--lx-azul,#2563EB);color:#fff}
+.ofi-leer{margin-left:auto;font-size:12.5px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--t-fg-6C757D)}
+.ofi-scroll{flex:1;overflow:auto;padding:16px 14px;max-height:58vh;min-height:300px}
+.ofi-hola{display:flex;gap:12px;align-items:center;margin:6px 0 14px}
+.ofi-hola-t{font-weight:800;font-size:16px;margin-bottom:2px}
+.ofi-sugs{display:flex;flex-wrap:wrap;gap:7px}
+.ofi-yo{display:flex;justify-content:flex-end;margin:10px 0}
+.ofi-yo>div{max-width:80%;background:var(--lx-azul-s,#E8EFFD);border-radius:16px 16px 4px 16px;padding:10px 13px;font-size:14.5px;white-space:pre-wrap;line-height:1.5}
+.ofi-el{display:flex;gap:8px;align-items:flex-start;margin:10px 0}
+.ofi-bur{max-width:85%;font-size:14.5px;line-height:1.6;white-space:pre-wrap;padding:2px 0}
+.ofi-acc{display:flex;gap:6px;margin-top:6px}
+.ofi-mini{font-family:inherit;font-size:12px;font-weight:700;border:1px solid var(--t-bd-line);background:transparent;color:var(--t-fg-6C757D);border-radius:999px;padding:3px 10px;cursor:pointer;white-space:nowrap}
+.ofi-mini.on{background:var(--lx-azul,#2563EB);border-color:var(--lx-azul,#2563EB);color:#fff}
+.ofi-pens span{animation:ofiP 1.2s infinite;opacity:.2}
+.ofi-pens span:nth-child(2){animation-delay:.2s}.ofi-pens span:nth-child(3){animation-delay:.4s}
+@keyframes ofiP{50%{opacity:1}}
+.ofi-comp{display:flex;gap:8px;align-items:flex-end;padding:10px 12px;border-top:1px solid var(--t-bd-line)}
+.ofi-comp textarea{flex:1;resize:none;border:1px solid var(--t-bd-line);border-radius:14px;padding:10px 12px;font-family:inherit;font-size:15px;line-height:1.4;min-height:44px;max-height:160px;background:transparent;color:inherit}
+.ofi-mic,.ofi-env{flex:0 0 auto;width:44px;height:44px;border-radius:50%;border:1px solid var(--t-bd-line);background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;font-size:17px}
+.ofi-env{background:var(--lx-azul,#2563EB);border-color:var(--lx-azul,#2563EB);color:#fff}
+.ofi-mic.on{background:#DC2626;border-color:#DC2626;color:#fff;animation:ofiMic 1.2s infinite}
+@keyframes ofiMic{50%{box-shadow:0 0 0 7px #DC262633}}
+.ofi-pie{font-size:11.5px;color:var(--t-fg-6C757D);padding:0 14px 10px}
+@media(max-width:720px){
+  .ofi-grid{grid-template-columns:1fr}
+  .ofi-cuerpo{grid-template-columns:1fr}
+  .ofi-convs{display:none}
+  .ofi-convs.ver{display:block}
+  .ofi-lista-btn{display:inline-flex}
+  .ofi-chat{min-height:0;border-radius:12px}
+  .ofi-scroll{max-height:none;min-height:46vh;height:calc(100dvh - 330px)}
+  .ofi-leer{margin-left:0;width:100%}
+  .ofi-modos button{flex:1 1 40%}
+  .ofi-l{display:none}
+  .ofi-c{display:inline}
+  .ofi-cab{gap:8px}
+  .ofi-cab .muted{display:none}
+}
+</style>`;
+(function(){
+  const _av=appView;
+  appView=function(){ if(S.module==='oficina'){ if(!canAccess('oficina')){ S.module=null; return homeView(); } return oficinaView(); } return _av.apply(this, arguments); };
+  const _sm=setModule;
+  setModule=function(id){ if(id==='oficina'){ S.ofi.sel=null; S.ofi.recargado=false; } else { ofiMicParar(); ofiCallar(); } _sm.apply(this, arguments); };
+  /* menú lateral (ordenador): Oficina IA al final de los módulos */
+  const _rh=lxRailHTML;
+  lxRailHTML=function(){
+    const h=_rh.apply(this, arguments);
+    if(!canAccess('oficina')) return h;
+    const b=`<button class="lx-it${S.module==='oficina'?' on':''}" onclick="S.tbMore=false;setModule('oficina')" title="Oficina IA"><svg viewBox="0 0 24 24">${window._OFI_IC}</svg>Oficina IA</button>`;
+    return h.replace('<div class="lx-sp"></div>', b+'<div class="lx-sp"></div>');
+  };
+  /* Inicio «Mi día»: un recuadro para hablar con los expertos */
+  const _lh=lxHomeTop;
+  lxHomeTop=function(){
+    const h=_lh.apply(this, arguments);
+    if(!canAccess('oficina')) return h;
+    const t=`<button class="lx-tile" onclick="setModule('oficina')"><span class="ic"><svg viewBox="0 0 24 24">${window._OFI_IC}</svg></span><span><b>Oficina IA</b><small>Pregunta o practica</small></span></button>`;
+    if(h.indexOf('<div class="lx-tiles">')>=0) return h.replace('<div class="lx-tiles">', '<div class="lx-tiles">'+t);
+    return h.replace('<div class="lx-h2">Lo tuyo</div>', `<div class="lx-tiles">${t}</div><div class="lx-h2">Lo tuyo</div>`);
+  };
+  /* icono propio en la tarjeta del Inicio (el resto de módulos lo llevan en homeView) */
+  const _hv=homeView;
+  homeView=function(){ return _hv.apply(this, arguments).split('<span class="np-tile"><b>IA</b></span><div class="np-title">Oficina IA').join('<span class="np-tile"><svg viewBox="0 0 24 24">'+window._OFI_IC+'</svg></span><div class="np-title">Oficina IA'); };
+})();
+/* ===== FIN OFICINA IA ===== */
 
 
 boot();
