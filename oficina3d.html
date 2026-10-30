@@ -1018,8 +1018,9 @@ ${A.reglas || ""}
 window.LUCAI = true;
 (() => {
   const REFRESCO = 30 * 1000;
-  const MOVIL = matchMedia("(max-width: 760px)").matches;
-  const CON_3D = !MOVIL || new URLSearchParams(location.search).has("3d");
+  // El ancho, el de la ventana de Lucai: el marco recién creado puede medir todavía 0 al arrancar
+  const ancho = () => { try { if (window.parent !== window && window.parent.innerWidth) return window.parent.innerWidth; } catch (e) { /* otro dominio */ } return innerWidth; };
+  let MOVIL = false, CON_3D = true;
   const $ = id => document.getElementById(id);
   const leer = filas => {
     let f = null;
@@ -1046,6 +1047,8 @@ window.LUCAI = true;
     try { d = await leer(["config", "estado"]); }
     catch (e) { aviso("Esta oficina se abre desde Lucai › Oficina IA."); return; }
     if (!d || !d.config) { aviso("La oficina todavía no ha llegado a Lucai: el PC de la clínica la manda en cuanto está encendido."); return; }
+    MOVIL = ancho() <= 760;
+    CON_3D = !MOVIL || new URLSearchParams(location.search).has("3d");
     $("config").textContent = JSON.stringify(d.config);
     $("foto").textContent = d.estado ? JSON.stringify(d.estado) : "null";
     if (CON_3D) {
