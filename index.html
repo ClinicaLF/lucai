@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-30-1939">
+<meta name="lucai-version" content="2026-10-30-2041">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -14402,14 +14402,45 @@ function ofiPintarMic(){ const b=el('ofiMicBtn'); if(b){ b.classList.toggle('on'
 function ofiAltura(t){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight, 160)+'px'; }
 
 /* ---- escuchar: lectura en voz alta del propio navegador ---- */
-function ofiVoz(){
+/* Voces gratis del propio aparato (David, 30/10: «no quiero pagar nada»). Se elige sola la mejor en español de
+   España (las «naturales» de Edge, las «mejoradas» o «premium» del iPhone, las de Google en Android) y cada uno
+   puede escoger otra en «☰ Chats › Voz de lectura»; se recuerda en ese aparato. */
+function ofiVocesEs(){
   const vs=(window.speechSynthesis && speechSynthesis.getVoices()) || [];
-  const es=vs.filter(v=>/^es(-|_|$)/i.test(v.lang));
-  const esES=es.filter(v=>/es[-_]ES/i.test(v.lang));
-  const pref=/(Alvaro|Álvaro|Jorge|Pablo|Diego|Ra[uú]l|Enrique|Carlos|Juan)/i;
-  return esES.find(v=>pref.test(v.name) && /Natural|Online|Neural/i.test(v.name)) || esES.find(v=>pref.test(v.name))
-    || esES.find(v=>/Natural|Online|Neural|Google/i.test(v.name)) || esES[0] || es[0] || null;
+  return vs.filter(v=>/^es(-|_|$)/i.test(v.lang));
 }
+function ofiPuntosVoz(v){
+  let p=0;
+  if(/es[-_]ES/i.test(v.lang)) p+=40;
+  if(/Natural|Neural|Online/i.test(v.name)) p+=30;
+  if(/Mejorad|Enhanced|Premium|Calidad alta|High quality/i.test(v.name)) p+=30;
+  if(/Google/i.test(v.name)) p+=15;
+  if(/(Alvaro|Álvaro|Jorge|Pablo|Diego|Ra[uú]l|Enrique|Carlos|Juan)/i.test(v.name)) p+=8;   // Toni es hombre
+  if(/compact|Eloquence|Grandpa|Grandma|Rocko|Shelley|Flo|Reed|Sandy|Eddy/i.test(v.name)) p-=50;   // voces de juguete del iPhone
+  if(v.localService===false) p+=5;
+  return p;
+}
+function ofiVoz(){
+  const es=ofiVocesEs(); if(!es.length) return null;
+  let guardada=''; try{ guardada=localStorage.getItem('lucai_ofi_voz')||''; }catch(_){ }
+  return es.find(v=>v.name===guardada) || es.slice().sort((a,b)=>ofiPuntosVoz(b)-ofiPuntosVoz(a))[0];
+}
+function ofiElegirVoz(nombre){ try{ localStorage.setItem('lucai_ofi_voz', nombre); }catch(_){ } ofiProbarVoz(); }
+function ofiProbarVoz(){
+  if(!window.speechSynthesis) return;
+  ofiCallar();
+  const u=new SpeechSynthesisUtterance('Hola, soy Toni. Así sueno cuando te leo las respuestas.');
+  const v=ofiVoz(); u.lang='es-ES'; if(v) u.voice=v; u.rate=1.0; speechSynthesis.speak(u);
+}
+function ofiSelectorVoz(){
+  const es=ofiVocesEs(); if(!es.length) return '<div class="muted" style="font-size:12px">Este aparato no tiene voces en español.</div>';
+  const act=ofiVoz(); const orden=es.slice().sort((a,b)=>ofiPuntosVoz(b)-ofiPuntosVoz(a));
+  return `<div class="ofi-voz"><label>Voz de lectura</label>
+    <select onchange="ofiElegirVoz(this.value)">${orden.map(v=>`<option value="${incEsc(v.name)}" ${act&&v.name===act.name?'selected':''}>${incEsc(v.name.replace(/\s*\(.*?\)\s*/g,' ').trim())}${/es[-_]ES/i.test(v.lang)?'':' · '+incEsc(v.lang)}</option>`).join('')}</select>
+    <button class="ofi-mini" onclick="ofiProbarVoz()">▶ Probar</button>
+    <div class="muted" style="font-size:11.5px;margin-top:6px">¿Suena a robot? En el iPhone: Ajustes › Accesibilidad › Contenido leído › Voces › Español (España) y descarga una voz «mejorada». En el ordenador, con Edge salen voces naturales. Gratis.</div></div>`;
+}
+try{ if(window.speechSynthesis) speechSynthesis.onvoiceschanged=()=>{ if(S.module==='oficina' && S.ofi.verLista) render(); }; }catch(_){ }
 function ofiVozDesbloquear(){ try{ if(window.speechSynthesis && !S.ofi._vozOk){ const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); S.ofi._vozOk=true; } }catch(_){ } }
 function ofiCallar(){ try{ window.speechSynthesis && speechSynthesis.cancel(); }catch(_){ } S.ofi.hablando=null; ofiPintarVoz(); }
 function ofiHablar(i){
@@ -14421,7 +14452,7 @@ function ofiHablar(i){
   const trozos=limpio.match(/[^.!?¿¡]+[.!?]*|[¿¡][^?!]+[?!]/g) || [limpio];   // por frases: Chrome corta las largas
   const voz=ofiVoz(); S.ofi.hablando=i; ofiPintarVoz();
   trozos.map(t=>t.trim()).filter(Boolean).forEach((t,k,arr)=>{
-    const u=new SpeechSynthesisUtterance(t); u.lang='es-ES'; if(voz) u.voice=voz; u.rate=1.02;
+    const u=new SpeechSynthesisUtterance(t); u.lang='es-ES'; if(voz) u.voice=voz; u.rate=1.0;
     if(k===arr.length-1) u.onend=()=>{ if(S.ofi.hablando===i){ S.ofi.hablando=null; ofiPintarVoz(); } };
     speechSynthesis.speak(u);
   });
@@ -14476,6 +14507,7 @@ function ofiChatView(){
       ${lista.length?lista.map(x=>`<div class="ofi-conv ${x.id===S.ofi.conv?'act':''}" onclick="ofiAbrirConv('${x.id}')"><span class="ofi-conv-t">${x.modo==='practicar'?'🎭 ':''}${incEsc(x.titulo||'Conversación')}</span><span class="ofi-conv-x" title="Borrar" onclick="event.stopPropagation();ofiBorrarConv('${x.id}')">×</span></div>`).join('')
         :'<div class="muted" style="font-size:12.5px">Aquí saldrán tus conversaciones con '+incEsc(e.nombre||'')+'.</div>'}
       <div class="muted" style="font-size:11.5px;margin-top:10px">Se guardan solo en este aparato.</div>
+      ${ofiSelectorVoz()}
     </div>`;
   return `${moduleHeader('Oficina IA', false)}${OFI_CSS}
   <main><div class="wrap ofi-wrap ofi-movil">
@@ -14532,6 +14564,9 @@ button.ofi-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(30,
 .ofi-conv.act{background:var(--lx-azul-s,#E8EFFD);font-weight:700}
 .ofi-conv-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ofi-conv-x{opacity:.45;font-size:16px;padding:0 4px}
+.ofi-voz{margin-top:14px;padding-top:12px;border-top:1px solid var(--t-bd-line)}
+.ofi-voz label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}
+.ofi-voz select{width:100%;font-family:inherit;font-size:14px;padding:7px 8px;border:1px solid var(--t-bd-line);border-radius:9px;background:transparent;color:inherit;margin-bottom:6px}
 .ofi-conv-x:hover{opacity:1;color:#C0392B}
 .ofi-chat{background:var(--t-bg-FFFFFF);border:1px solid var(--t-bd-line);border-radius:14px;display:flex;flex-direction:column;min-height:60vh}
 .ofi-modos{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 12px;border-bottom:1px solid var(--t-bd-line)}
