@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Oficina IA</title>
+</head>
+<body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: la oficina en 3D a todo el ancho (motor común de la Oficina IA; lo de cada oficina viene de su oficina3d.json).
+   Al fondo el cerebro, el café, el sofá y la mesa de reuniones; en el centro las mesas (la grande, la del coordinador si lo hay);
+   delante, el gimnasio. Quien trabaja
+   está en su mesa conectado al cerebro; quien está libre o te espera se va al café, al sofá o al gimnasio. Debajo, la
+   lista de la gente y la sala de máquinas. Diseño oscuro y cálido a propósito, para que la escena mande. */
+:root {
+  --bg: #12161b; --panel: #1a2027; --panel-2: #222a32; --ink: #ece8df; --muted: #9aa2a8; --line: #2d363f;
+  --max: #6fb7b9; --clinica: #d6b26c;
+  --ok: #6fcf7c; --ok-bg: #1d3220; --espera: #f0c050; --espera-bg: #3a3018; --mal: #ff7a6e; --mal-bg: #42201c; --libre: #8d959b;
+  --f-rotulo: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-texto: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-dato: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+/* Tema claro (29/10/2026): mismos colores de estado, fondo y paneles claros. La escena 3D es la misma en los dos. */
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f4f1ea; --panel: #ffffff; --panel-2: #efeae1; --ink: #1d2328; --muted: #5d666d; --line: #ddd6ca;
+  --max: #2f8a8c; --clinica: #a07a2c; --ok: #2f8f45; --ok-bg: #e2f3e5; --espera: #a8740a; --espera-bg: #fbf0d4; --mal: #c8372b; --mal-bg: #fbe3df; --libre: #7a8288;
+  color-scheme: light; } }
+:root[data-theme="light"] { --bg: #f4f1ea; --panel: #ffffff; --panel-2: #efeae1; --ink: #1d2328; --muted: #5d666d; --line: #ddd6ca;
+  --max: #2f8a8c; --clinica: #a07a2c; --ok: #2f8f45; --ok-bg: #e2f3e5; --espera: #a8740a; --espera-bg: #fbf0d4; --mal: #c8372b; --mal-bg: #fbe3df; --libre: #7a8288; color-scheme: light; }
+/* Lo oculto se oculta siempre (29/10/2026): antes la ficha vacia tapaba toda la pagina con un velo negro */
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-texto); font-size: 15px; line-height: 1.5; }
+.planta { max-width: 1280px; margin: 0 auto; padding-block: 16px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 16px; }
+h1, h2, h3 { font-family: var(--f-rotulo); margin: 0; line-height: 1.1; text-wrap: balance; }
+.dato { font-family: var(--f-dato); font-variant-numeric: tabular-nums; }
+.rotulo { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: space-between; }
+.rotulo h1 { font-size: clamp(26px, 5vw, 40px); }
+.marca { display: flex; align-items: center; gap: 14px; min-width: 0; } .marca img { width: 44px; height: auto; flex: none; }
+.como { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; } @media (max-width: 760px) { .como { grid-template-columns: 1fr; } }
+.como > div { padding: 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); min-width: 0; display: grid; gap: 8px; align-content: start; }
+.como h2 { font-size: 18px; } .como p { margin: 0; color: var(--muted); font-size: 14px; } .como ol { margin: 0; padding-left: 20px; font-size: 14px; display: grid; gap: 4px; }
+.receta { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; } .receta span { background: var(--panel-2); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; color: var(--muted); border-top: 2px solid var(--max); } .receta b { display: block; color: var(--ink); font-size: 14px; }
+.rotulo p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+.reloj { display: grid; gap: 1px; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.reloj b { font-family: var(--f-dato); font-size: 20px; }
+.reloj span { font-size: 12.5px; color: var(--muted); }
+.reloj.viejo { border-color: var(--mal); background: var(--mal-bg); }
+.resumen { display: flex; flex-wrap: wrap; gap: 8px; }
+.pastilla { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; padding: 4px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); }
+.pastilla i { width: 9px; height: 9px; border-radius: 50%; background: var(--libre); }
+.pastilla.trabajando i, .pastilla.ok i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.pastilla.te_espera i { background: var(--espera); }
+.pastilla.fallo { background: var(--mal-bg); border-color: var(--mal); color: var(--mal); font-weight: 700; }
+.pastilla.fallo i { background: var(--mal); }
+
+.escenario { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: radial-gradient(120% 90% at 50% 10%, #8fa3b3, #4a5866); height: clamp(420px, 72vh, 760px); }
+.escenario canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.mandos { position: absolute; left: 12px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.mandos button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid #ffffff30; background: #0d1217cc; color: #ece8df; cursor: pointer; backdrop-filter: blur(4px); }
+.mandos button:focus-visible, .chip:focus-visible, .cerrar:focus-visible { outline: 2px solid var(--max); outline-offset: 2px; }
+.ayuda { position: absolute; right: 12px; bottom: 12px; max-width: 46%; font-size: 12px; color: #cfd6db; background: #0d1217aa; padding: 6px 10px; border-radius: 10px; }
+.sin3d { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); }
+
+.gente { display: grid; gap: 10px; }
+.gente h2, .maquinas-sala h2 { font-size: 18px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: inherit; font-size: 13.5px; display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; max-width: 100%; }
+.chip i { width: 22px; height: 22px; border-radius: 50%; flex: none; border: 3px solid var(--libre); }
+.chip.trabajando i { border-color: var(--ok); } .chip.te_espera i { border-color: var(--espera); } .chip.fallo i { border-color: var(--mal); }
+.chip small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 26ch; }
+.chip.clinica { border-style: dashed; }
+
+.maquinas-sala { display: grid; gap: 10px; }
+.maquinas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.maquina { display: grid; grid-template-columns: 16px 1fr; gap: 3px 10px; align-items: start; padding: 10px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); min-width: 0; }
+.maquina i { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; background: #6b7076; }
+.maquina.ok i, .maquina.en_marcha i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.maquina.fallo { border-color: var(--mal); background: var(--mal-bg); } .maquina.fallo i { background: var(--mal); }
+.maquina.aviso i, .maquina.en_espera i { background: var(--espera); }
+.maquina b { font-size: 14px; } .maquina small { grid-column: 2; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.maquina.fallo small { color: var(--mal); }
+
+.ficha-fondo { position: fixed; inset: 0; z-index: 20; background: #0009; display: flex; align-items: flex-end; justify-content: center; padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
+.ficha { width: min(560px, 100%); max-height: 80vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: grid; gap: 12px; border-top: 6px solid var(--equipo, var(--max)); }
+.ficha-cab { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; }
+.ficha h3 { font-size: 22px; }
+.ficha p { margin: 0; color: var(--muted); font-size: 14px; }
+.cerrar { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); cursor: pointer; }
+.lista { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lista li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border-left: 4px solid var(--libre); }
+.lista li.trabajando, .lista li.en_marcha { border-left-color: var(--ok); } .lista li.te_espera, .lista li.aviso { border-left-color: var(--espera); } .lista li.fallo { border-left-color: var(--mal); }
+.lista b { font-size: 15px; } .lista small { color: var(--muted); font-size: 12.5px; }
+.vacio { color: var(--muted); font-size: 14px; }
+.pie { color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+.pie a { color: var(--max); }
+@media (max-width: 560px) { .ayuda { display: none; } .escenario { height: 68vh; } }
+/* Chat con la asistente y parte del día (solo si la oficina los lleva) */
+.chat, .parte { display: grid; gap: 12px; padding: 16px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); }
+.chat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.chat-head i { width: 36px; height: 36px; border-radius: 50%; border: 3px solid var(--panel-2); flex: none; }
+.chat-head h2, .parte h2 { font-size: 19px; }
+.chat-head p { margin: 0; font-size: 13px; color: var(--muted); }
+.chat-head > div { flex: 1 1 220px; min-width: 0; }
+.modo { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.modo.directo { background: var(--ok-bg); color: var(--ok); } .modo.resumen { background: var(--espera-bg); color: var(--espera); }
+.msgs { display: grid; gap: 10px; max-height: 380px; overflow-y: auto; }
+.msg { max-width: min(640px, 92%); padding: 9px 13px; border-radius: 14px; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.msg.yo { justify-self: end; background: var(--max); color: #10161c; border-bottom-right-radius: 4px; }
+.msg.asis { justify-self: start; background: var(--panel-2); border-bottom-left-radius: 4px; }
+.msg.pensando { color: var(--muted); font-style: italic; } .msg.error { background: var(--mal-bg); color: var(--mal); }
+.msg ul { margin: 6px 0; padding-left: 20px; }
+.sugs { display: flex; flex-wrap: wrap; gap: 8px; }
+.sug { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.chat form { display: flex; gap: 8px; }
+.chat input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+.chat button.enviar, .chat button.parar { font: inherit; font-weight: 700; padding: 10px 16px; border-radius: 12px; border: 0; cursor: pointer; }
+.chat button.enviar { background: var(--max); color: #10161c; } .chat button.parar { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); }
+.chat button:disabled { opacity: .5; cursor: default; }
+.chat input:focus-visible, .sug:focus-visible, .chat button:focus-visible { outline: 2px solid var(--max); outline-offset: 2px; }
+.chat-nota { margin: 0; font-size: 12px; color: var(--muted); }
+.panel-emp { display: grid; gap: 12px; }
+.panel-emp h2 { font-size: 19px; }
+.tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.tarjeta { display: grid; gap: 8px; align-content: start; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--libre); min-width: 0; }
+.tarjeta.trabajando { border-top-color: var(--ok); } .tarjeta.te_espera { border-top-color: var(--espera); } .tarjeta.fallo { border-top-color: var(--mal); }
+.tarjeta-cab { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; }
+.tarjeta-cab i { width: 34px; height: 34px; border-radius: 50%; }
+.tarjeta-cab b { font-family: var(--f-rotulo); font-size: 17px; display: block; } .tarjeta-cab small { color: var(--muted); font-size: 12.5px; }
+.estado-pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.trabajando .estado-pill { background: var(--ok-bg); color: var(--ok); } .te_espera .estado-pill { background: var(--espera-bg); color: var(--espera); } .fallo .estado-pill { background: var(--mal-bg); color: var(--mal); }
+.tarjeta p { margin: 0; font-size: 13.5px; color: var(--muted); }
+.tarjeta .ahora { color: var(--ink); font-weight: 700; }
+.tareas-emp { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.tareas-emp li { display: grid; grid-template-columns: 10px 1fr; gap: 2px 8px; padding: 7px 9px; border-radius: 9px; background: var(--panel-2); font-size: 13px; }
+.tareas-emp li > i { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; background: var(--libre); grid-row: span 2; }
+.tareas-emp li.ok > i, .tareas-emp li.en_marcha > i { background: var(--ok); } .tareas-emp li.en_marcha > i { animation: latido 1s infinite; }
+.tareas-emp li.fallo > i { background: var(--mal); } .tareas-emp li.aviso > i, .tareas-emp li.en_espera > i { background: var(--espera); }
+.tareas-emp li small { color: var(--muted); grid-column: 2; }
+.feed { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.feed li { display: grid; grid-template-columns: 50px 12px 1fr; gap: 10px; align-items: center; background: var(--panel-2); border-radius: 10px; padding: 8px 12px; }
+.feed .t { color: var(--max); font-size: 13px; font-family: var(--f-dato); }
+.feed li > i { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); }
+.feed li.fallo > i { background: var(--mal); }
+.feed p { margin: 0; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+</style>
+
+<div class="planta">
+  <header class="rotulo">
+    <div class="marca"><img id="logo" alt="" hidden><div><h1 id="titulo"></h1><p id="subtitulo"></p></div></div>
+    <div class="reloj" id="reloj"><b id="hora-datos">--:--</b><span id="frescura">Cargando…</span></div>
+  </header>
+  <div class="resumen" id="resumen" aria-live="polite"></div>
+
+  <section class="escenario" id="escenario" aria-label="La oficina en 3D">
+    <canvas id="c3d" aria-label="La oficina en 3D"></canvas>
+    <div class="mandos"><button id="vista-general">Vista general</button><button id="vista-mesas">Las mesas</button><button id="vista-cafe">Café y gimnasio</button></div>
+    <div class="ayuda">Arrastra para girar · dos dedos o clic derecho para moverte · rueda o pellizco para acercarte · flechas o WASD para pasear · toca a alguien para ver su ficha</div>
+  </section>
+
+  <section class="panel-emp" id="panel-emp" aria-labelledby="panel-emp-h" hidden>
+    <h2 id="panel-emp-h">Los empleados y sus tareas</h2>
+    <div class="tarjetas" id="tarjetas"></div>
+  </section>
+
+  <section class="chat" id="chat" aria-labelledby="chat-h" hidden>
+    <div class="chat-head"><i id="chat-cara" aria-hidden="true"></i>
+      <div><h2 id="chat-h"></h2><p id="chat-sub"></p></div>
+      <span class="modo" id="chat-modo">Comprobando…</span></div>
+    <div class="msgs" id="msgs" aria-live="polite"></div>
+    <div class="sugs" id="sugs"></div>
+    <form id="chat-form" autocomplete="off"><input id="chat-in" placeholder="Escribe tu pregunta…" aria-label="Tu pregunta">
+      <button class="enviar" id="chat-send">Preguntar</button><button class="parar" type="button" id="chat-stop" hidden>Parar</button></form>
+    <p class="chat-nota" id="chat-nota"></p>
+  </section>
+
+  <section class="parte" id="parte" aria-labelledby="parte-h" hidden>
+    <h2 id="parte-h">Parte del día</h2>
+    <ul class="feed" id="feed"></ul>
+  </section>
+
+  <section class="como" id="como" aria-label="Cómo funciona" hidden>
+    <div><h2 id="como-cerebro"></h2><p id="como-texto"></p>
+      <div class="receta"><span><b>Cerebro</b>El mismo para todos</span><span><b>Puesto</b>Un empleado con su responsabilidad</span><span><b>Tareas</b>Cada una con su manual y sus herramientas</span><span><b>Despertador</b>La hora de cada tarea, o cuando le escribes</span></div></div>
+    <div><h2>Reglamento común</h2><ol id="reglamento"></ol><p id="reglamento-nota"></p></div>
+  </section>
+
+  <section class="gente" aria-labelledby="t-gente">
+    <h2 id="t-gente">Quién está en la oficina</h2>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <section class="maquinas-sala" aria-labelledby="t-maq">
+    <h2 id="t-maq">Tareas automáticas</h2>
+    <p class="vacio" style="margin:0">Lo que se hace solo, a su hora: quién lo hace, cuándo toca, cuándo salió la última vez y si salió bien.</p>
+    <div class="maquinas" id="maquinas"></div>
+  </section>
+
+  <footer class="pie">
+    <span id="pie-fuente"></span>
+    <span id="enlaces"></span>
+  </footer>
+</div>
+<div class="ficha-fondo" id="ficha" hidden></div>
+
+<script id="config" type="application/json">null</script>
+<script id="foto" type="application/json">null</script>
+<script type="text/plain" id="motor">
+const CONFIG = JSON.parse(document.getElementById("config").textContent);
+const ARCHIVO_DRIVE = CONFIG.drive_id;   // el estado de esta oficina en Drive (lo lee la página de internet y el móvil)
+const REFRESCO = 30 * 1000;             // la página de internet mira Drive cada 30 s; la del PC lee el archivo local cada segundo
+const LOCAL = location.protocol === "file:";
+const QUIETO = matchMedia("(prefers-reduced-motion: reduce)").matches;
+document.documentElement.style.setProperty("--max", CONFIG.color || "#6fb7b9");
+
+// ---------- Quién es quién y dónde se sienta ----------
+// Mesa grande al fondo para el coordinador (si lo hay); el resto, en filas de hasta 6 (la tercera, de 4 y a la izquierda)
+const FILAS = [{ z: -2.4, xs: [-9, -5.4, -1.8, 1.8, 5.4, 9] }, { z: 1.2, xs: [-9, -5.4, -1.8, 1.8, 5.4, 9] }, { z: 5.8, xs: [-10.8, -7.8, -4.8, -1.8] }];
+const GENTE = CONFIG.personas.map(p => ({ ...p }));
+(() => {
+  const resto = GENTE.filter(g => !g.coordinador);
+  GENTE.filter(g => g.coordinador).slice(0, 1).forEach(g => { g.mesa = [0, -4.9]; g.grande = true; });
+  let i = 0;
+  for (const f of FILAS) {
+    const k = Math.min(f.xs.length, resto.length - i); if (k <= 0) break;
+    const xs = f.xs.length === 6 && k < 6 ? Array.from({ length: k }, (_, j) => (j - (k - 1) / 2) * 3.6) : f.xs.slice(0, k);
+    xs.forEach(x => { resto[i++].mesa = [x, f.z]; });
+  }
+})();
+const porId = Object.fromEntries(GENTE.map(g => [g.id, g]));
+
+// Pasillos (z) por donde se anda: detrás de cada fila de mesas, y dos laterales (x) que lo unen todo
+const PASILLO_FILA = { "-4.9": -6.35, "-2.4": -4.0, "1.2": -0.75, "5.8": 3.3 };   // pasillo detrás de cada fila
+const LATERAL = 12.3;
+
+// Sitios a donde va la gente cuando no está trabajando (qué hace allí y si se sienta)
+const SITIOS = [
+  ...[8.4, 9.4, 10.4, 11.4].map((x, i) => ({ id: "cafe" + i, x, z: -7.5, mira: Math.PI, hace: "cafe", pasillo: -6.35, espera: true })),
+  ...[4.4, 5.2, 6.0].map((x, i) => ({ id: "sofa" + i, x, z: -8.05, mira: 0, hace: "sofa", sentado: true, pasillo: -6.35, espera: true })),
+  ...[Math.PI * .25, Math.PI * .75, Math.PI * 1.25, Math.PI * 1.75].map((a, i) => ({ id: "mesa" + i, x: -9 + Math.sin(a) * 1.05, z: -7.7 + Math.cos(a) * 1.05, mira: a + Math.PI, hace: "charla", sentado: true, pasillo: -6.35 })),
+  { id: "bici", x: 5.0, z: 6.0, mira: 0, hace: "bici", pasillo: 3.3 },
+  { id: "pesas0", x: 7.6, z: 6.6, mira: 0, hace: "pesas", pasillo: 3.3 },
+  { id: "pesas1", x: 8.7, z: 6.6, mira: 0, hace: "pesas", pasillo: 3.3 },
+  { id: "estirar0", x: 10.4, z: 5.4, mira: 0, hace: "estirar", pasillo: 3.3 },
+  { id: "estirar1", x: 10.4, z: 7.2, mira: 0, hace: "estirar", pasillo: 3.3 },
+  { id: "ventana0", x: -12.4, z: -2.2, mira: -Math.PI / 2, hace: "ventana", pasillo: -2.2, lado: -1 },
+  { id: "ventana1", x: -12.4, z: 0.6, mira: -Math.PI / 2, hace: "ventana", pasillo: 0.6, lado: -1 },
+];
+const HACE = { cafe: "☕ Café", sofa: "Descansando", charla: "De charla", bici: "En la bici", pesas: "Pesas", estirar: "Estirando", ventana: "Mirando por la ventana" };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const fecha = iso => iso ? new Date(iso) : null;
+const hm = iso => iso ? iso.slice(11, 16) : "";
+const corto = (s, n) => { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+function cuando(iso) {
+  if (!iso) return "";
+  const d = fecha(iso), hoy = new Date();
+  if (d.toDateString() === hoy.toDateString()) return `hoy ${hm(iso)}`;
+  if (new Date(hoy - 864e5).toDateString() === d.toDateString()) return `ayer ${hm(iso)}`;
+  if (new Date(+hoy + 864e5).toDateString() === d.toDateString()) return `mañana ${hm(iso)}`;
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)} ${hm(iso)}`;
+}
+
+// ---------- Estado de cada uno a partir del archivo que escribe el PC ----------
+let ESTADO = null;
+const ETIQUETA = { trabajando: "Trabajando", te_espera: "Te espera", libre: "Libre", fallo: "Ha fallado" };
+function estadoDe(id, E = ESTADO || {}) {
+  const s = (E.personas || {})[id] || {}, est = s.estado || "libre";
+  return { est, que: est === "libre" ? (porId[id]?.fuente === "tareas" ? s.que : "") : s.que, pregunta: est === "libre" ? "" : s.pregunta, modeloMal: s.modelo_mal, abiertas: (s.conversaciones || []).filter(c => c.estado !== "libre").length };
+}
+
+// ---------- Escena 3D ----------
+const escenario = $("escenario"), canvas = $("c3d");
+const conTres = !!window.THREE;
+let scene, camera, renderer, controls;
+const animables = [], gente = {};
+const ocupado = {};             // sitio -> persona
+const CEREBRO = [0, 1.55, -8.1];
+
+// Los colores se escriben como se ven en pantalla; three.js los quiere «lineales»: sin convertirlos todo sale lavado
+const lineal = c => new THREE.Color(c).convertSRGBToLinear();
+function mat(color, o) { o = o || {}; return new THREE.MeshStandardMaterial({ color: lineal(color), roughness: o.r ?? .7, metalness: o.m ?? 0, emissive: lineal(o.em ?? 0x000000), emissiveIntensity: o.ei ?? 1, map: o.map || null, transparent: !!o.t, opacity: o.op ?? 1 }); }
+function caja(w, h, d, color, o) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), color.isMaterial ? color : mat(color, o)); m.castShadow = true; m.receiveShadow = true; return m; }
+function cil(rt, rb, h, color, o, seg = 18) { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), color.isMaterial ? color : mat(color, o)); m.castShadow = true; m.receiveShadow = true; return m; }
+function esfera(r, color, o, w = 20, h = 14) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, w, h), color.isMaterial ? color : mat(color, o)); m.castShadow = true; return m; }
+function lienzo(w, h, pinta) { const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d"); pinta(x, w, h); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; t.userData = { c, x }; return t; }
+function repinta(t, pinta) { const { c, x } = t.userData; x.clearRect(0, 0, c.width, c.height); pinta(x, c.width, c.height); t.needsUpdate = true; }
+function redondo(x, X, Y, W, H, R) { x.beginPath(); x.moveTo(X + R, Y); x.arcTo(X + W, Y, X + W, Y + H, R); x.arcTo(X + W, Y + H, X, Y + H, R); x.arcTo(X, Y + H, X, Y, R); x.arcTo(X, Y, X + W, Y, R); x.closePath(); }
+function cartel(texto, { w = 512, h = 128, fondo = "#181F26", tinta = "#E8EAED", borde = "#C8A96E", fuente = "bold 46px Georgia, serif", escala = 2.2 } = {}) {
+  const t = lienzo(w, h, (x, W, H) => { redondo(x, 6, 6, W - 12, H - 12, 26); x.fillStyle = fondo; x.fill(); if (borde) { x.lineWidth = 5; x.strokeStyle = borde; x.stroke(); } x.fillStyle = tinta; x.font = fuente; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(texto, W / 2, H / 2 + 2); });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+  s.scale.set(escala, escala * h / w, 1); s.renderOrder = 5; return s;
+}
+function alfombra(x, z, w, d, color, op = 1) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat(color, { r: 1, t: op < 1, op })); m.rotation.x = -Math.PI / 2; m.position.set(x, .012, z); m.receiveShadow = true; scene.add(m); return m; }
+function planta(x, z, s = 1) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s);
+  const maceta = cil(.32, .24, .55, 0xc46a3a); maceta.position.y = .28; g.add(maceta);
+  const hoja = mat(0x3f9a5a, { r: .8 });
+  for (let i = 0; i < 6; i++) { const h = new THREE.Mesh(new THREE.IcosahedronGeometry(.32, 0), hoja); h.castShadow = true; const a = i / 6 * Math.PI * 2; h.position.set(Math.cos(a) * .2, .85 + (i % 3) * .22, Math.sin(a) * .2); h.scale.set(.9, 1.3, .9); g.add(h); }
+  scene.add(g);
+}
+
+function montar() {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.3;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+  controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true; controls.screenSpacePanning = false;
+  controls.minDistance = 4; controls.maxDistance = 38; controls.maxPolarAngle = 1.38;
+
+  // Luz de día: ambiente claro y cálido, sol que entra por las ventanas de la izquierda y un relleno suave
+  scene.add(new THREE.HemisphereLight(0xfffaf0, 0x8a7258, 1.0));
+  scene.add(new THREE.AmbientLight(0xffffff, .15));
+  const sol = new THREE.DirectionalLight(0xfff0d6, 1.45);
+  sol.position.set(-16, 15, 6); sol.castShadow = true; sol.shadow.mapSize.set(2048, 2048);
+  Object.assign(sol.shadow.camera, { left: -16, right: 16, top: 12, bottom: -12, near: 1, far: 50 }); sol.shadow.bias = -0.0004; sol.shadow.radius = 6;
+  scene.add(sol);
+  const relleno = new THREE.DirectionalLight(0xe8f0ff, .5); relleno.position.set(10, 12, 14); scene.add(relleno);
+  for (const z of [-5.5, -1.5, 2.5, 6.5]) { const v = new THREE.PointLight(0xfff6e6, .45, 9); v.position.set(-11.5, 2.4, z); scene.add(v); }
+  const calida = new THREE.PointLight(0xffd9a8, .8, 20); calida.position.set(8, 3.4, -5); scene.add(calida);
+
+  // Suelo de madera, zócalo y paredes
+  const madera = lienzo(1024, 1024, (x, W, H) => {
+    const cols = ["#c69c6d", "#bf9465", "#cca275", "#ba8f60", "#c49a6b"];
+    for (let i = 0; i < 16; i++) for (let j = 0; j < 4; j++) { x.fillStyle = cols[(i * 3 + j * 7) % cols.length]; const off = (i % 2) * 128; x.fillRect(i * 64, j * 256 - off, 63, 255); x.fillRect(i * 64, j * 256 - off + 1024, 63, 255); }
+    x.globalAlpha = .08; for (let k = 0; k < 900; k++) { x.fillStyle = k % 2 ? "#000" : "#fff"; x.fillRect(Math.random() * W, Math.random() * H, 1 + Math.random() * 30, 1); } x.globalAlpha = 1;
+  });
+  madera.wrapS = madera.wrapT = THREE.RepeatWrapping; madera.repeat.set(4, 3);
+  const suelo = new THREE.Mesh(new THREE.PlaneGeometry(26, 18), mat(0xffffff, { map: madera, r: .8 }));
+  suelo.rotation.x = -Math.PI / 2; suelo.receiveShadow = true; scene.add(suelo);
+  const zocalo = caja(26.4, .25, 18.4, 0x2b2118); zocalo.position.y = -.13; scene.add(zocalo);
+  const pared = mat(0xf2ece1, { r: .95 });
+  const fondo = caja(26, 3.6, .2, pared); fondo.position.set(0, 1.8, -9.1); scene.add(fondo);
+  const izq = caja(.2, 3.6, 18, pared); izq.position.set(-13.1, 1.8, 0); scene.add(izq);
+  const franja = caja(26, .5, .05, 0x1f3a5f); franja.position.set(0, .25, -8.98); scene.add(franja);
+  const franja2 = caja(.05, .5, 18, 0x1f3a5f); franja2.position.set(-12.98, .25, 0); scene.add(franja2);
+  for (const z of [-5.5, -1.5, 2.5, 6.5]) {
+    const marco = caja(.08, 2, 2.8, 0xffffff); marco.position.set(-12.96, 1.9, z); scene.add(marco);
+    const cielo = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.8), mat(0xbfe6f5, { em: 0x9fd6ef, ei: .55, r: .2 }));
+    cielo.rotation.y = Math.PI / 2; cielo.position.set(-12.9, 1.9, z); scene.add(cielo);
+    const barra = caja(.09, 1.8, .06, 0xffffff); barra.position.set(-12.88, 1.9, z); scene.add(barra);
+  }
+  // Rótulo de la oficina
+  const placa = lienzo(1024, 256, (x, W, H) => { x.fillStyle = "#10161C"; x.fillRect(0, 0, W, H); x.strokeStyle = CONFIG.color || "#6fb7b9"; x.lineWidth = 8; x.strokeRect(10, 10, W - 20, H - 20); x.fillStyle = "#E8EAED"; x.textAlign = "center"; const [r1, r2] = CONFIG.rotulo || [CONFIG.titulo, ""]; x.font = "bold 72px Georgia, serif"; while (x.measureText(r1).width > W - 60) x.font = x.font.replace(/\d+px/, m => (parseInt(m) - 4) + "px"); x.fillText(r1, W / 2, 120); x.fillStyle = CONFIG.color || "#6fb7b9"; x.font = "bold 34px Georgia, serif"; x.fillText(r2 || "", W / 2, 190); });
+  const letrero = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.6), mat(0xffffff, { map: placa, r: .5, em: 0x222222, ei: .3 }));
+  letrero.position.set(-3.6, 2.6, -8.98); scene.add(letrero);
+
+  // El cerebro: todos los que trabajan se conectan a él
+  const peana = cil(.7, .85, 1.0, 0x1f2830, { r: .4, m: .3 }); peana.position.set(CEREBRO[0], .5, CEREBRO[2]); scene.add(peana);
+  const aro = new THREE.Mesh(new THREE.TorusGeometry(.62, .035, 10, 60), mat(0xC8A96E, { m: .8, r: .25, em: 0x6b5629, ei: .6 }));
+  aro.rotation.x = Math.PI / 2; aro.position.set(CEREBRO[0], 1.02, CEREBRO[2]); scene.add(aro);
+  const cerebro = new THREE.Group(); cerebro.position.set(...CEREBRO);
+  const rosa = mat(0xf2a6c0, { r: .45, em: 0xd2557f, ei: .35 });
+  for (const s of [-1, 1]) { const h = esfera(.34, rosa, null, 28, 20); h.scale.set(.85, .95, 1.2); h.position.x = s * .2; cerebro.add(h); }
+  const cuerda = mat(0xb44f76, { r: .5 });
+  for (let i = 0; i < 7; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(.18 + (i % 3) * .05, .018, 6, 24, Math.PI), cuerda); t.position.set((i % 2 ? .2 : -.2), .05 + (i - 3) * .03, (i - 3) * .1); t.rotation.set(Math.PI / 2 + .3 * (i % 3), (i % 2 ? .4 : -.4), 0); cerebro.add(t); }
+  scene.add(cerebro);
+  const brillo = new THREE.PointLight(0xff9ec2, 1.1, 7); brillo.position.set(CEREBRO[0], 1.8, CEREBRO[2] + .5); scene.add(brillo);
+  const etqC = cartel(CONFIG.cerebro || "Cerebro", { escala: 1.4 }); etqC.position.set(CEREBRO[0], 2.35, CEREBRO[2] + .2); scene.add(etqC);
+  animables.push(t => {
+    const n = [...conexiones].filter(c => !c.borrar).length;
+    cerebro.rotation.y = t * .35; cerebro.position.y = 1.55 + Math.sin(t * 1.6) * .05;
+    brillo.intensity = .9 + Math.sin(t * 2.2) * .3 + (n ? 1.2 + Math.sin(t * 9) * .4 : 0);
+    cerebro.scale.setScalar(1 + (n ? .05 + Math.sin(t * 8) * .03 : 0));
+  });
+
+  // Fondo: estantería, reloj, mesa de reuniones, sofá y café
+  const estante = new THREE.Group(); estante.position.set(-5.2, 0, -8.75);
+  const mueble = caja(2.0, 2.0, .4, 0x6e4b33); mueble.position.y = 1; estante.add(mueble);
+  for (let f = 0; f < 3; f++) for (let k = 0; k < 11; k++) { const c = caja(.11, .42, .3, [0x1f8a74, 0x6c5ce7, 0xC8A96E, 0x1f3a5f][(k + f) % 4]); c.position.set(-.8 + k * .16, .45 + f * .58, .08); estante.add(c); }
+  scene.add(estante);
+  const relTex = lienzo(256, 256, () => {});
+  const reloj = new THREE.Mesh(new THREE.CircleGeometry(.45, 40), mat(0xffffff, { map: relTex })); reloj.position.set(2.6, 2.75, -8.98); scene.add(reloj);
+  const pintaReloj = () => repinta(relTex, (x) => { const a = new Date(); x.fillStyle = "#fff"; x.fillRect(0, 0, 256, 256); x.strokeStyle = "#10161C"; x.lineWidth = 14; x.beginPath(); x.arc(128, 128, 118, 0, 7); x.stroke(); x.fillStyle = "#10161C"; for (let i = 0; i < 12; i++) { const g = i * Math.PI / 6; x.fillRect(128 + Math.sin(g) * 96 - 4, 128 - Math.cos(g) * 96 - 4, 8, 8); } const hh = (a.getHours() % 12 + a.getMinutes() / 60) * Math.PI / 6, mm = a.getMinutes() * Math.PI / 30; x.lineCap = "round"; x.lineWidth = 12; x.beginPath(); x.moveTo(128, 128); x.lineTo(128 + Math.sin(hh) * 56, 128 - Math.cos(hh) * 56); x.stroke(); x.lineWidth = 7; x.strokeStyle = "#6fb7b9"; x.beginPath(); x.moveTo(128, 128); x.lineTo(128 + Math.sin(mm) * 86, 128 - Math.cos(mm) * 86); x.stroke(); });
+  pintaReloj(); setInterval(pintaReloj, 30000);
+
+  alfombra(-9, -7.7, 3.6, 2.4, 0x96714f);
+  const tablero = cil(.85, .85, .06, 0xe8e2d6, { r: .4 }, 32); tablero.position.set(-9, .76, -7.7); scene.add(tablero);
+  const pie = cil(.1, .14, .74, 0x2b2b2b); pie.position.set(-9, .37, -7.7); scene.add(pie);
+  for (const s of SITIOS.filter(s => s.hace === "charla")) sillaSuelta(s.x, s.z, s.mira + Math.PI);
+  const etqR = cartel("Reuniones", { escala: 1.3 }); etqR.position.set(-9, 1.9, -7.2); scene.add(etqR);
+
+  alfombra(5.2, -7.9, 3.2, 1.8, 0x6f98a8);
+  const sofa = new THREE.Group(); sofa.position.set(5.2, 0, -8.35);
+  const base = caja(2.6, .42, .8, 0x2f6f73); base.position.y = .21; sofa.add(base);
+  const resp = caja(2.6, .55, .22, 0x2a6265); resp.position.set(0, .62, -.3); sofa.add(resp);
+  for (const s of [-1, 1]) { const b = caja(.22, .55, .8, 0x2a6265); b.position.set(s * 1.3, .4, 0); sofa.add(b); }
+  for (const x of [-.8, 0, .8]) { const c = caja(.72, .1, .62, 0x3a8286); c.position.set(x, .47, .05); sofa.add(c); }
+  scene.add(sofa);
+  const mesita = cil(.35, .35, .05, 0xe8e2d6); mesita.position.set(5.2, .42, -7.0); scene.add(mesita);
+  const pataM = cil(.05, .05, .4, 0x2b2b2b); pataM.position.set(5.2, .2, -7.0); scene.add(pataM);
+
+  const barra = caja(4.0, .95, .8, 0x6e4b33); barra.position.set(9.9, .475, -8.55); scene.add(barra);
+  const enci = caja(4.1, .06, .9, 0xe8e2d6); enci.position.set(9.9, .98, -8.55); scene.add(enci);
+  const cafetera = caja(.55, .7, .45, 0x2b2b2b, { m: .4, r: .35 }); cafetera.position.set(11.2, 1.36, -8.6); scene.add(cafetera);
+  const pantallita = caja(.3, .12, .01, 0x7ee0c3, { em: 0x7ee0c3, ei: .8 }); pantallita.position.set(11.2, 1.55, -8.37); scene.add(pantallita);
+  for (const dx of [-1, -.6, -.2]) { const taza = cil(.07, .06, .13, 0xffffff); taza.position.set(9.9 + dx, 1.08, -8.4); scene.add(taza); }
+  const etqCafe = cartel("Café", { escala: 1.0 }); etqCafe.position.set(9.9, 2.2, -8.2); scene.add(etqCafe);
+
+  // Zonas: las mesas y el gimnasio
+  alfombra(0, -0.6, 21.6, 6.6, 0x4f7a94);
+  const bordeMesas = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(21.2, 6.2)), new THREE.LineBasicMaterial({ color: 0x6fb7b9 }));
+  bordeMesas.rotation.x = -Math.PI / 2; bordeMesas.position.set(0, .02, -.6); scene.add(bordeMesas);
+  if (GENTE.some(g => g.grande)) alfombra(0, -4.9, 4.4, 2.2, 0x3f8f92);
+  if (GENTE.some(g => g.mesa && g.mesa[1] === 5.8)) alfombra(-6.6, 5.9, 12.4, 3.2, 0xb8925a);
+  alfombra(7.6, 6.2, 9.0, 4.4, 0x5d6f7a);
+  const etqG = cartel("Gimnasio", { escala: 1.4 }); etqG.position.set(7.6, 2.0, 4.4); scene.add(etqG);
+  gimnasio();
+  for (const [px, pz, s] of [[-12.3, -8.3, 1.1], [12.4, -6.2, 1], [12.4, 2.2, 1], [-0.2, 7.9, .9], [2.4, 8.4, .9], [9, 1.2, .9]]) planta(px, pz, s);
+
+  // Mesas y personas
+  for (const g of GENTE) {
+    const m = mesa3D(g); m.position.set(g.mesa[0], 0, g.mesa[1]); m.traverse(o => { o.userData.id = g.id; }); scene.add(m);
+    const p = persona3D(g, m); scene.add(p.g); gente[g.id] = p;
+  }
+
+  const ajustar = () => { const w = escenario.clientWidth, h = escenario.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+  new ResizeObserver(ajustar).observe(escenario); ajustar();
+  vista("general", true);
+
+  // Tocar a alguien (o su mesa) abre su ficha
+  const raycaster = new THREE.Raycaster(), puntero = new THREE.Vector2();
+  let abajo = null;
+  canvas.addEventListener("pointerdown", ev => { abajo = [ev.clientX, ev.clientY]; });
+  canvas.addEventListener("pointerup", ev => {
+    if (!abajo || Math.hypot(ev.clientX - abajo[0], ev.clientY - abajo[1]) > 6) return;
+    const r = canvas.getBoundingClientRect();
+    puntero.set((ev.clientX - r.left) / r.width * 2 - 1, -(ev.clientY - r.top) / r.height * 2 + 1);
+    raycaster.setFromCamera(puntero, camera);
+    const hit = raycaster.intersectObjects(scene.children, true).find(h => h.object.userData.id);
+    if (hit) abrir(hit.object.userData.id);
+  });
+
+  // Pasear con el teclado: flechas o WASD mueven el punto de vista por la oficina
+  const teclas = new Set();
+  addEventListener("keydown", ev => { if (!$("ficha").hidden || /INPUT|TEXTAREA/.test(document.activeElement?.tagName)) return; const k = ev.key.toLowerCase(); if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"].includes(k)) { teclas.add(k); ev.preventDefault(); } });
+  addEventListener("keyup", ev => teclas.delete(ev.key.toLowerCase()));
+  const reloj3D = new THREE.Clock();
+  const bucle = () => {
+    const dt = Math.min(.05, reloj3D.getDelta()), t = reloj3D.elapsedTime;
+    if (teclas.size) {
+      const delante = new THREE.Vector3().subVectors(controls.target, camera.position); delante.y = 0; delante.normalize();
+      const lado = new THREE.Vector3(-delante.z, 0, delante.x), mov = new THREE.Vector3();
+      if (teclas.has("arrowup") || teclas.has("w")) mov.add(delante);
+      if (teclas.has("arrowdown") || teclas.has("s")) mov.sub(delante);
+      if (teclas.has("arrowright") || teclas.has("d")) mov.add(lado);
+      if (teclas.has("arrowleft") || teclas.has("a")) mov.sub(lado);
+      mov.setLength(6 * dt); controls.target.add(mov); camera.position.add(mov);
+    }
+    // Que el punto de vista no se salga de la oficina
+    const c = controls.target, antes = c.clone();
+    c.x = Math.max(-12, Math.min(12, c.x)); c.z = Math.max(-8.5, Math.min(8.5, c.z)); c.y = Math.max(0, Math.min(3, c.y));
+    camera.position.add(new THREE.Vector3().subVectors(c, antes));
+    for (const f of [...animables]) f(t, dt);
+    for (const id in gente) gente[id].paso(t, dt);
+    animarConexiones(t);
+    controls.update(); renderer.render(scene, camera); requestAnimationFrame(bucle);
+  };
+  requestAnimationFrame(bucle);
+}
+
+const VISTAS = { general: [[0, 0, 0], [0, 17, 17]], mesas: [[0, .5, -1.5], [0, 8, 7.5]], cafe: [[7.5, .5, -1], [2, 9, 9]] };
+function vista(nombre, ya) {
+  const [t, p] = VISTAS[nombre], k = camera.aspect < 1 ? 1.5 : camera.aspect < 1.4 ? 1.15 : 1;
+  const destino = new THREE.Vector3(...t), pos = new THREE.Vector3(...t).add(new THREE.Vector3(...p).multiplyScalar(k));
+  if (ya || QUIETO) { controls.target.copy(destino); camera.position.copy(pos); return; }
+  const t0 = controls.target.clone(), p0 = camera.position.clone(); let u = 0;
+  const anim = (tt, dt) => { u = Math.min(1, u + dt * 1.6); const e = u * u * (3 - 2 * u); controls.target.lerpVectors(t0, destino, e); camera.position.lerpVectors(p0, pos, e); if (u >= 1) animables.splice(animables.indexOf(anim), 1); };
+  animables.push(anim);
+}
+for (const [b, v] of [["vista-general", "general"], ["vista-mesas", "mesas"], ["vista-cafe", "cafe"]]) $(b).addEventListener("click", () => conTres && camera && vista(v));
+
+function sillaSuelta(x, z, rot, color = 0x40617a) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot;
+  const a = caja(.5, .08, .5, color); a.position.y = .48; g.add(a);
+  const r = caja(.5, .55, .07, color); r.position.set(0, .78, .24); g.add(r);
+  for (const [lx, lz] of [[-.2, -.2], [.2, -.2], [-.2, .2], [.2, .2]]) { const l = cil(.025, .025, .46, 0x2b2b2b, null, 6); l.position.set(lx, .23, lz); g.add(l); }
+  scene.add(g);
+}
+function gimnasio() {
+  const negro = 0x22272b;
+  const bici = new THREE.Group(); bici.position.set(5.0, 0, 6.0);
+  const base = caja(.5, .06, 1.3, negro); base.position.set(0, .03, .1); bici.add(base);
+  const rueda = cil(.3, .3, .08, 0xC8A96E, { m: .7, r: .3 }, 24); rueda.rotation.z = Math.PI / 2; rueda.position.set(0, .38, .62); bici.add(rueda);
+  const tubo = caja(.07, .9, .07, negro); tubo.position.set(0, .45, .02); tubo.rotation.x = -.25; bici.add(tubo);
+  const sillin = caja(.26, .06, .3, 0x111111); sillin.position.set(0, .93, 0); bici.add(sillin);
+  const poste = caja(.06, .8, .06, negro); poste.position.set(0, .75, .6); bici.add(poste);
+  const manillar = caja(.55, .05, .06, negro); manillar.position.set(0, 1.15, .62); bici.add(manillar);
+  scene.add(bici);
+  animables.push(t => { rueda.rotation.x = Object.values(gente).some(p => p.sitio?.hace === "bici" && p.donde === "fuera" && p.llegado) ? t * 9 : 0; });
+  const rack = new THREE.Group(); rack.position.set(8.15, 0, 7.9);
+  const mr = caja(1.8, .9, .5, negro); mr.position.y = .45; rack.add(mr);
+  for (let k = 0; k < 4; k++) { const b = cil(.025, .025, .3, 0x999999); b.rotation.z = Math.PI / 2; b.position.set(-.6 + k * .4, .95, 0); rack.add(b); }
+  scene.add(rack);
+  for (const z of [5.4, 7.2]) { const est = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.4), mat(0x3f9a6a, { r: 1 })); est.rotation.x = -Math.PI / 2; est.position.set(10.4, .02, z); scene.add(est); }
+  const balon = esfera(.32, 0xC8A96E, { r: .5 }); balon.position.set(11.6, .32, 8.2); scene.add(balon);
+}
+
+function mesa3D(g) {
+  const m = new THREE.Group(), ancho = g.grande ? 2.6 : 1.8;
+  const top = caja(ancho, .07, .9, 0xa8714a, { r: .55 }); top.position.y = .76; m.add(top);
+  for (const [lx, lz] of [[-ancho / 2 + .08, -.38], [ancho / 2 - .08, -.38], [-ancho / 2 + .08, .38], [ancho / 2 - .08, .38]]) { const l = caja(.06, .74, .06, 0x2b2118); l.position.set(lx, .37, lz); m.add(l); }
+  const frente = caja(ancho - .1, .4, .03, 0x8a5a36); frente.position.set(0, .54, .43); m.add(frente);
+  const silla = new THREE.Group(); silla.position.set(0, 0, -.78);
+  const asiento = caja(.52, .08, .5, 0x2c3338); asiento.position.y = .48; silla.add(asiento);
+  const resp = caja(.52, .6, .07, 0x2c3338); resp.position.set(0, .82, -.25); silla.add(resp);
+  const col = cil(.04, .04, .42, 0x555555); col.position.y = .24; silla.add(col);
+  const base = cil(.26, .26, .04, 0x333333); base.position.y = .03; silla.add(base);
+  m.add(silla);
+  const portatil = new THREE.Group(); portatil.position.set(0, .8, -.1);
+  portatil.add(caja(.5, .025, .34, 0x9aa5a3, { m: .5, r: .35 }));
+  const pantalla = caja(.5, .34, .02, 0xb8c2c0, { m: .5, r: .35 }); pantalla.position.set(0, .17, -.16); pantalla.rotation.x = .18; portatil.add(pantalla);
+  const brillo = new THREE.Mesh(new THREE.PlaneGeometry(.44, .28), mat(0x7ee0c3, { em: 0x7ee0c3, ei: .9 })); brillo.position.set(0, .17, -.175); brillo.rotation.set(.18, Math.PI, 0); brillo.visible = false; portatil.add(brillo);
+  m.add(portatil); m.userData.brillo = brillo;
+  const taza = cil(.05, .045, .1, 0xC8A96E); taza.position.set(ancho / 2 - .3, .85, -.25); m.add(taza);
+  const papeles = caja(.3, .02, .22, 0xffffff); papeles.position.set(-ancho / 2 + .35, .8, .1); papeles.rotation.y = .2; m.add(papeles);
+  // Placa con el nombre y una luz de estado en el frente de la mesa
+  const placa = lienzo(512, 160, (x, W, H) => { x.fillStyle = "#10161C"; x.fillRect(0, 0, W, H); x.fillStyle = CONFIG.color || "#6fb7b9"; x.fillRect(0, H - 10, W, 10); x.fillStyle = "#E8EAED"; x.font = "bold 58px Georgia, serif"; x.textAlign = "center"; x.fillText(g.nombre, W / 2, 68); x.fillStyle = "#9aa5ad"; x.font = "30px Arial, sans-serif"; x.fillText(g.puesto, W / 2, 118); });
+  const np = new THREE.Mesh(new THREE.PlaneGeometry(1.25, .39), mat(0xffffff, { map: placa, r: .6 })); np.position.set(0, .54, .455); m.add(np);
+  const luz = esfera(.07, 0x8d959b, { em: 0x8d959b, ei: .6 }, 12, 10); luz.position.set(ancho / 2 - .2, .58, .46); m.add(luz); m.userData.luz = luz;
+  return m;
+}
+
+// ---------- Personas ----------
+const TONO = { trabajando: ["#1d3220", "#a8eab0", 0x6fcf7c], te_espera: ["#3a3018", "#ffd77a", 0xf0c050], fallo: ["#4a1d19", "#ffb0a6", 0xff6b5e], libre: ["#232a31", "#cfd6db", 0x8d959b] };
+function persona3D(gen, mesa) {
+  const a = gen.a, x = new Set(a.extras);
+  const g = new THREE.Group();
+  const piel = mat(a.piel, { r: .6 }), ropa = mat(a.ropa, { r: .75 }), pantalon = mat(a.pantalon || 0x2f3a4a, { r: .8 }), peloM = mat(a.colorPelo, { r: .85 });
+  const cuerpo = new THREE.Group(); g.add(cuerpo);
+  const torso = cil(.2, .24, .6, ropa, null, 20); torso.position.y = 1.12; cuerpo.add(torso);
+  const hombros = esfera(.22, ropa); hombros.scale.set(1.1, .45, .9); hombros.position.y = 1.4; cuerpo.add(hombros);
+  const cuello = cil(.07, .08, .1, piel); cuello.position.y = 1.5; cuerpo.add(cuello);
+  const cabeza = new THREE.Group(); cabeza.position.y = 1.72; cuerpo.add(cabeza);
+  cabeza.add(esfera(.21, piel, null, 24, 18));
+  const ojoM = mat(0x1d140f, { r: .3 });
+  const ojos = [-1, 1].map(s => { const o = esfera(.025, ojoM, null, 8, 6); o.position.set(s * .075, .02, .19); cabeza.add(o); return o; });
+  const boca = new THREE.Mesh(new THREE.TorusGeometry(x.has("sonrisa") ? .055 : .04, .009, 6, 12, Math.PI), mat(0x8a3b2a)); boca.position.set(0, -.07, .195); boca.rotation.z = Math.PI; cabeza.add(boca);
+  for (const s of [-1, 1]) { const m = esfera(.03, mat(0xff8a7a, { t: true, op: .35 }), null, 8, 6); m.position.set(s * .12, -.04, .17); cabeza.add(m); }
+  // Pelo
+  if (a.pelo === "calvo") { for (const s of [-1, 1]) { const m = esfera(.07, peloM, null, 10, 8); m.scale.set(.6, 1, 1.2); m.position.set(s * .19, .0, -.04); cabeza.add(m); } }
+  else if (a.pelo === "rapado") { const c = new THREE.Mesh(new THREE.SphereGeometry(.215, 24, 16, 0, Math.PI * 2, 0, Math.PI * .42), peloM); c.rotation.x = -.3; cabeza.add(c); }
+  else { const c = new THREE.Mesh(new THREE.SphereGeometry(.225, 24, 16, 0, Math.PI * 2, 0, Math.PI * .52), peloM); c.rotation.x = -.3; c.castShadow = true; cabeza.add(c); }
+  if (a.pelo === "largo") { const m = caja(.44, .5, .12, peloM); m.position.set(0, -.18, -.13); cabeza.add(m); }
+  if (a.pelo === "moño") { const m = esfera(.1, peloM); m.position.set(0, .2, -.12); cabeza.add(m); for (const s of [-1, 1]) { const r = esfera(.06, peloM, null, 8, 6); r.position.set(s * .2, -.08, .02); cabeza.add(r); } }
+  if (a.pelo === "rizado") for (let i = 0; i < 10; i++) { const m = esfera(.08, peloM, null, 8, 6); const ang = i / 10 * Math.PI * 2; m.position.set(Math.cos(ang) * .17, .12 + (i % 2) * .04, Math.sin(ang) * .17 - .03); cabeza.add(m); }
+  // Guiños de cada personaje
+  if (x.has("gorro")) { const c = new THREE.Mesh(new THREE.SphereGeometry(.232, 24, 12, 0, Math.PI * 2, 0, Math.PI * .34), mat(0x1c1b20, { r: .6 })); c.position.y = .03; cabeza.add(c); }
+  if (x.has("patillas")) for (const s of [-1, 1]) { const m = esfera(.06, peloM, null, 8, 6); m.scale.set(.6, 1.3, .9); m.position.set(s * .2, -.05, .02); cabeza.add(m); }
+  if (x.has("barba")) { const b = esfera(.17, peloM, null, 14, 10); b.scale.set(1.05, .85, .8); b.position.set(0, -.13, .07); cabeza.add(b); }
+  if (x.has("barbaCorta")) { const b = esfera(.17, mat(a.colorPelo, { r: .9 }), null, 14, 10); b.scale.set(1.0, .55, .75); b.position.set(0, -.12, .06); cabeza.add(b); }
+  if (x.has("barba") || x.has("barbaCorta")) { boca.position.z = .225; boca.position.y = -.075; }
+  if (x.has("bigote")) { const b = caja(.13, .03, .03, peloM); b.position.set(0, -.04, .205); cabeza.add(b); }
+  if (x.has("gafas") || x.has("gafasPasta")) { const gm = mat(0x111111, { r: .4 }), grueso = x.has("gafasPasta") ? .016 : .008; for (const s of [-1, 1]) { const r = new THREE.Mesh(new THREE.TorusGeometry(.05, grueso, 6, 16), gm); r.position.set(s * .075, .02, .2); cabeza.add(r); } const puente = caja(.05, grueso * 1.4, grueso * 1.4, gm); puente.position.set(0, .03, .205); cabeza.add(puente); }
+  if (x.has("cascos")) { const cm = mat(0x22252a, { r: .5 }); const arco = new THREE.Mesh(new THREE.TorusGeometry(.23, .02, 8, 24, Math.PI), cm); arco.position.y = .02; cabeza.add(arco); for (const s of [-1, 1]) { const o = cil(.06, .06, .05, cm); o.rotation.z = Math.PI / 2; o.position.set(s * .22, 0, 0); cabeza.add(o); } }
+  if (x.has("laurel")) { const l = new THREE.Mesh(new THREE.TorusGeometry(.215, .025, 6, 20), mat(0x6f9a3a, { r: .6 })); l.rotation.x = Math.PI / 2 - .3; l.position.y = .1; cabeza.add(l); }
+  if (x.has("toga")) { const t = caja(.12, .7, .44, mat(0xf4efe6, { r: .9 })); t.position.set(0, 1.15, .05); t.rotation.z = .6; cuerpo.add(t); }
+  if (x.has("corbata") || x.has("corbataVerde") || x.has("corbataGranate")) { const c = caja(.06, .32, .02, x.has("corbataVerde") ? 0x36452f : x.has("corbataGranate") ? 0x5b2a3b : 0xb8322a); c.position.set(0, 1.22, .215); cuerpo.add(c); }
+  if (x.has("panuelo")) { const c = esfera(.08, 0xf2efe8); c.scale.set(1, .7, .6); c.position.set(0, 1.42, .17); cuerpo.add(c); }
+  if (x.has("encaje")) { const c = new THREE.Mesh(new THREE.TorusGeometry(.12, .025, 6, 20), mat(0xf4efe6)); c.rotation.x = Math.PI / 2; c.position.y = 1.47; cuerpo.add(c); }
+  // Brazos, piernas, taza y mancuernas
+  const brazo = s => { const p = new THREE.Group(); p.position.set(s * .29, 1.36, 0); const b = cil(.065, .06, .5, ropa, null, 10); b.position.y = -.25; p.add(b); const m = esfera(.065, piel, null, 10, 8); m.position.y = -.52; p.add(m); cuerpo.add(p); return p; };
+  const pierna = s => { const p = new THREE.Group(); p.position.set(s * .1, .82, 0); const l = cil(.085, .075, .78, pantalon, null, 10); l.position.y = -.39; p.add(l); const z = caja(.13, .08, .24, 0x1a1a1a); z.position.set(0, -.78, .05); p.add(z); g.add(p); return p; };
+  const brazoI = brazo(-1), brazoD = brazo(1), piernaI = pierna(-1), piernaD = pierna(1);
+  const tazaMano = cil(.05, .045, .1, 0xffffff); tazaMano.position.set(0, -.58, .06); tazaMano.visible = false; brazoD.add(tazaMano);
+  const mancuernas = [brazoI, brazoD].map(b => { const m = new THREE.Group(); const barra = cil(.02, .02, .22, 0x999999); barra.rotation.z = Math.PI / 2; m.add(barra); for (const s2 of [-1, 1]) { const d = cil(.06, .06, .06, 0x1f3a5f); d.rotation.z = Math.PI / 2; d.position.x = s2 * .1; m.add(d); } m.position.y = -.55; m.visible = false; b.add(m); return m; });
+  const sombra = new THREE.Mesh(new THREE.CircleGeometry(.32, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: .18, depthWrite: false })); sombra.rotation.x = -Math.PI / 2; sombra.position.y = .015; g.add(sombra);
+  // Luz de estado sobre la cabeza y bocadillo con su nombre y lo que hace
+  const halo = esfera(.09, mat(0x8d959b, { em: 0x8d959b, ei: 1 }), null, 12, 10); halo.position.y = 2.2; g.add(halo);
+  const bubTex = lienzo(768, 128, () => {});
+  const bub = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubTex, transparent: true, depthWrite: false, depthTest: false })); bub.scale.set(3.6, .6, 1); bub.position.y = 2.65; bub.renderOrder = 10; g.add(bub);
+  g.traverse(o => { o.userData.id = gen.id; });
+
+  const silla = new THREE.Vector3(gen.mesa[0], 0, gen.mesa[1] - .78);
+  const pasilloMesa = PASILLO_FILA[String(gen.mesa[1])];
+  const p = { gen, g, mesa, silla, est: "libre", donde: "mesa", sitio: null, ruta: [], llegado: true, fase: Math.random() * 10 };
+
+  p.decir = (texto, est) => {
+    const clave = texto + "|" + est; if (p._dicho === clave) return; p._dicho = clave;
+    const [bg, fg, col] = TONO[est] || TONO.libre;
+    halo.material.color.copy(lineal(col)); halo.material.emissive.copy(lineal(col)); halo.material.emissiveIntensity = est === "libre" ? .25 : 1.2;
+    mesa.userData.luz.material.color.copy(lineal(col)); mesa.userData.luz.material.emissive.copy(lineal(col)); mesa.userData.luz.material.emissiveIntensity = est === "libre" ? .3 : 1.4;
+    repinta(bubTex, (c, W, H) => {
+      let fs = 40; c.font = `bold ${fs}px Arial, sans-serif`;
+      while (c.measureText(texto).width > W - 60 && fs > 22) { fs -= 2; c.font = `bold ${fs}px Arial, sans-serif`; }
+      const w = Math.min(W - 8, c.measureText(texto).width + 50); redondo(c, (W - w) / 2, 8, w, H - 34, 36); c.fillStyle = bg; c.fill();
+      c.lineWidth = 4; c.strokeStyle = fg + "88"; c.stroke();
+      c.beginPath(); c.moveTo(W / 2 - 13, H - 27); c.lineTo(W / 2, H - 6); c.lineTo(W / 2 + 13, H - 27); c.fillStyle = bg; c.fill();
+      c.fillStyle = fg; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(texto, W / 2, (H - 26) / 2 + 8);
+    });
+  };
+  const ponerPie = () => { piernaI.rotation.x = piernaD.rotation.x = 0; brazoI.rotation.x = brazoD.rotation.x = 0; cuerpo.position.y = 0; cabeza.rotation.set(0, 0, 0); g.position.y = 0; };
+  const ponerSentado = () => { g.position.y = -.33; piernaI.rotation.x = piernaD.rotation.x = -Math.PI / 2; cuerpo.position.y = 0; };
+  p.sentarEnMesa = () => { p.donde = "mesa"; p.sitio = null; p.llegado = true; g.position.set(silla.x, 0, silla.z); g.rotation.y = 0; ponerSentado(); };
+  p.ponerEn = s => { p.donde = "fuera"; p.sitio = s; p.llegado = true; g.position.set(s.x, 0, s.z); g.rotation.y = s.mira; if (s.sentado) ponerSentado(); else if (s.hace === "bici") { ponerPie(); g.position.y = .13; } else ponerPie(); };
+  // Punto de partida y de llegada de cada recorrido, y el camino entre ambos por los pasillos
+  p.origen = () => p.donde === "mesa" ? { x: silla.x, z: silla.z, pasillo: pasilloMesa } : { x: p.sitio.x, z: p.sitio.z, pasillo: p.sitio.pasillo, lado: p.sitio.lado };
+  p.ir = (destino, alLlegar) => {
+    const a = p.origen(), b = destino;
+    const lado = (a.lado ?? b.lado ?? (b.x >= 0 ? 1 : -1)) * LATERAL;
+    const ruta = [[a.x, a.pasillo]];
+    if (a.pasillo !== b.pasillo) ruta.push([lado, a.pasillo], [lado, b.pasillo]);
+    ruta.push([b.x, b.pasillo], [b.x, b.z]);
+    tazaMano.visible = false; mancuernas.forEach(m => m.visible = false); ponerPie();
+    p.donde = "andando";
+    if (QUIETO) { alLlegar(); return; }
+    p.ruta = ruta.map(q => new THREE.Vector3(q[0], 0, q[1])); p.alLlegar = alLlegar; p.llegado = false;
+  };
+  p.paso = (t, dt) => {
+    const tt = t + p.fase;
+    mesa.userData.brillo.visible = p.donde === "mesa" && (p.est === "trabajando" || p.est === "fallo");
+    halo.position.y = (g.position.y < 0 ? 2.0 : 2.2) + Math.sin(tt * 2) * .04;
+    if (!p.llegado && p.ruta.length) {
+      const obj = p.ruta[0], d = new THREE.Vector3().subVectors(obj, g.position); d.y = 0;
+      const dist = d.length(), v = 2.2 * dt;
+      if (dist < v) { g.position.set(obj.x, 0, obj.z); p.ruta.shift(); if (!p.ruta.length) { p.llegado = true; const f = p.alLlegar; p.alLlegar = null; f && f(); } }
+      else { d.normalize(); g.position.addScaledVector(d, v); const ob = Math.atan2(d.x, d.z); g.rotation.y += ((ob - g.rotation.y + Math.PI * 3) % (Math.PI * 2) - Math.PI) * .25; const s = Math.sin(tt * 10); piernaI.rotation.x = s * .55; piernaD.rotation.x = -s * .55; brazoI.rotation.x = -s * .45; brazoD.rotation.x = s * .45; cuerpo.position.y = Math.abs(Math.cos(tt * 10)) * .04; }
+      return;
+    }
+    ojos.forEach(o => o.scale.y = (Math.sin(tt * 2.3) > .985 ? .1 : 1));
+    if (p.donde === "mesa") {
+      if (p.est === "trabajando") { const k = QUIETO ? 0 : .14; brazoI.rotation.x = -1.05 + Math.sin(tt * 13) * k; brazoD.rotation.x = -1.05 + Math.sin(tt * 13 + 1.6) * k; cabeza.rotation.x = .12 + Math.sin(tt * .9) * .03; cabeza.rotation.z = 0; }
+      else if (p.est === "fallo") { brazoI.rotation.x = brazoD.rotation.x = -2.6; cabeza.rotation.x = -.1; cabeza.rotation.z = Math.sin(tt * 3) * .12; }
+      else { brazoI.rotation.x = brazoD.rotation.x = -.6; cabeza.rotation.x = .05; }
+      return;
+    }
+    const h = p.sitio && p.sitio.hace;
+    if (h === "bici") { const s = Math.sin(tt * 7); g.position.y = .13; piernaI.rotation.x = -1.15 + s * .55; piernaD.rotation.x = -1.15 - s * .55; brazoI.rotation.x = brazoD.rotation.x = -1.3; cuerpo.position.y = Math.abs(s) * .02; }
+    else if (h === "pesas") { mancuernas.forEach(m => m.visible = true); brazoI.rotation.x = -.3 - (Math.sin(tt * 4) + 1) * .95; brazoD.rotation.x = -.3 - (Math.sin(tt * 4 + Math.PI) + 1) * .95; }
+    else if (h === "estirar") { const s = Math.sin(tt * 5); brazoI.rotation.x = brazoD.rotation.x = -1.45 - s * 1.25; cuerpo.position.y = Math.abs(s) * .07; }
+    else if (h === "cafe") { tazaMano.visible = true; brazoD.rotation.x = -1.2 + Math.max(0, Math.sin(tt * .8)) * -.9; brazoI.rotation.x = 0; }
+    else if (h === "charla" || h === "sofa") { brazoI.rotation.x = -.6 + Math.sin(tt * 2) * .2; brazoD.rotation.x = -.6 + Math.sin(tt * 2 + 2) * .2; cabeza.rotation.z = Math.sin(tt * 1.3) * .08; }
+    else { brazoI.rotation.x = brazoD.rotation.x = 0; cabeza.rotation.y = Math.sin(tt * .5) * .3; }
+    if (p.est === "te_espera") cabeza.rotation.y = Math.sin(tt * .7) * .25;   // mira a ver si llegas
+  };
+  p.sentarEnMesa();
+  return p;
+}
+
+// ---------- Conexión al cerebro mientras trabajan ----------
+const conexiones = new Set();
+function conectar(p) {
+  if (p.conexion && !p.conexion.borrar) return;
+  const desde = new THREE.Vector3(p.silla.x, 1.62, p.silla.z), hasta = new THREE.Vector3(...CEREBRO);
+  const medio = desde.clone().lerp(hasta, .5); medio.y += 1.8 + desde.distanceTo(hasta) * .1;
+  const curva = new THREE.QuadraticBezierCurve3(desde, medio, hasta);
+  const linea = new THREE.Mesh(new THREE.TubeGeometry(curva, 60, .03, 6, false), new THREE.MeshBasicMaterial({ color: 0x8ff0a0, transparent: true, opacity: 0 }));
+  const pulsos = [0, 1, 2, 3].map(i => { const s = new THREE.Mesh(new THREE.SphereGeometry(i % 2 ? .06 : .085, 10, 8), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff9ec2 : 0xffffff, transparent: true, opacity: 0, depthWrite: false })); scene.add(s); return s; });
+  scene.add(linea);
+  p.conexion = { linea, pulsos, curva, fade: 0, borrar: false };
+  conexiones.add(p.conexion);
+}
+function desconectar(p) { if (p.conexion) { p.conexion.borrar = true; p.conexion = null; } }
+function animarConexiones(t) {
+  for (const c of conexiones) {
+    c.fade += ((c.borrar ? 0 : 1) - c.fade) * .08;
+    c.linea.material.opacity = .55 * c.fade;
+    c.pulsos.forEach((s, i) => { let u = (t * .45 + i / 4) % 1; if (i % 2) u = 1 - u; s.position.copy(c.curva.getPoint(u)); s.material.opacity = c.fade * Math.sin(u * Math.PI); });
+    if (c.borrar && c.fade < .02) { for (const o of [c.linea, ...c.pulsos]) { scene.remove(o); o.geometry.dispose(); o.material.dispose(); } conexiones.delete(c); }
+  }
+}
+
+// ---------- Llevar a cada uno a donde le toca según su estado ----------
+function sitioLibre(preferirEspera, quitar) {
+  const libres = SITIOS.filter(s => !ocupado[s.id] && s !== quitar);
+  const buenos = preferirEspera ? libres.filter(s => s.espera) : libres;
+  const lista = buenos.length ? buenos : libres;
+  return lista[Math.floor(Math.random() * lista.length)];
+}
+function textoDe(gen, s, sitio) {
+  if (s.est === "trabajando") return s.pregunta ? `${gen.nombre} · «${corto(s.pregunta, 42)}»` : `${gen.nombre} · ${corto(s.que || "trabajando", 34)}`;
+  if (s.est === "te_espera") return `${gen.nombre} · te espera`;
+  if (s.est === "fallo") return `${gen.nombre} · ¡${corto(s.que || "algo ha fallado", 30)}!`;
+  return gen.nombre + (sitio ? " · " + HACE[sitio.hace] : "");
+}
+function colocar(id, inmediato) {
+  const p = gente[id]; if (!p) return;
+  const s = estadoDe(id), antes = p.est;
+  p.est = s.est;
+  const quiereMesa = s.est === "trabajando" || s.est === "fallo";
+  if (quiereMesa) {
+    if (p.donde === "fuera" || (p.donde === "andando" && p.destino !== "mesa")) {
+      if (p.sitio) delete ocupado[p.sitio.id];
+      p.destino = "mesa";
+      if (inmediato) p.sentarEnMesa();
+      else p.ir({ x: p.silla.x, z: p.silla.z, pasillo: PASILLO_FILA[String(p.gen.mesa[1])] }, () => { p.sentarEnMesa(); colocar(id, true); });
+    }
+    if (s.est === "trabajando" && p.donde === "mesa") conectar(p); else desconectar(p);
+    p.decir(textoDe(p.gen, s), s.est);
+    return;
+  }
+  desconectar(p);
+  const sale = p.donde === "mesa" || (p.donde === "andando" && p.destino === "mesa") || (s.est === "te_espera" && antes !== "te_espera" && p.sitio && !p.sitio.espera);
+  if (sale) {
+    const destino = sitioLibre(s.est === "te_espera", p.sitio);
+    if (destino) {
+      if (p.sitio) delete ocupado[p.sitio.id];
+      ocupado[destino.id] = id; p.destino = destino.id;
+      if (inmediato) p.ponerEn(destino);
+      else { if (p.donde === "andando") { p.sentarEnMesa(); } p.ir(destino, () => { p.ponerEn(destino); p._dicho = ""; p.decir(textoDe(p.gen, estadoDe(id), destino), p.est); }); p.sitio = destino; }
+    }
+  }
+  p.decir(textoDe(p.gen, s, p.donde === "fuera" ? p.sitio : null), s.est);
+}
+// De vez en cuando, quien está libre cambia de sitio (del café al gimnasio, etc.)
+function pasear() {
+  if (conTres && !QUIETO && !document.hidden) {
+    const libres = Object.values(gente).filter(p => p.est === "libre" && p.donde === "fuera" && p.llegado);
+    if (libres.length) {
+      const p = libres[Math.floor(Math.random() * libres.length)], destino = sitioLibre(false, p.sitio);
+      if (destino) {
+        delete ocupado[p.sitio.id]; ocupado[destino.id] = p.gen.id; p.destino = destino.id;
+        p.ir(destino, () => { p.ponerEn(destino); p._dicho = ""; p.decir(textoDe(p.gen, estadoDe(p.gen.id), destino), p.est); });
+        p.sitio = destino; p.decir(p.gen.nombre, "libre");
+      }
+    }
+  }
+  setTimeout(pasear, 9000 + Math.random() * 9000);
+}
+
+// ---------- Página: reloj, resumen, chips y sala de máquinas ----------
+let clave = "", primeraVez = true;
+function actualizar(E) {
+  if (ESTADO && E.generado < ESTADO.generado) return;
+  pintarReloj(E);
+  const nueva = JSON.stringify({ ...E, generado: 0, segundo: 0 });
+  ESTADO = E;
+  if (nueva === clave) return;
+  clave = nueva;
+  pintarPagina(E);
+  pintarTarjetas(E);
+  if (conTres && camera) { for (const g of GENTE) colocar(g.id, primeraVez); primeraVez = false; }
+}
+function pintarReloj(E) {
+  const gen = fecha(E.generado), minutos = gen ? (Date.now() - gen) / 6e4 : 999;
+  $("hora-datos").textContent = (E.segundo ? E.generado.slice(11, 16) + ":" + E.segundo : hm(E.generado)) || "--:--";
+  const viejo = minutos > (LOCAL ? 3 : 10);
+  $("reloj").classList.toggle("viejo", viejo);
+  $("frescura").textContent = viejo ? `Datos de ${cuando(E.generado)}: el PC no manda nada. ¿Está apagado?` : `Datos del PC · ${cuando(E.generado)}${LOCAL ? " · en directo" : ""}`;
+}
+function pintarPagina(E) {
+  const est = GENTE.map(g => ({ g, s: estadoDe(g.id, E) }));
+  const trab = est.filter(x => x.s.est === "trabajando").length;
+  const espera = est.filter(x => x.s.est === "te_espera").length;
+  const tareas = E.tareas || [];
+  const fallos = tareas.filter(t => t.estado === "fallo").length + (E.windows || []).filter(w => w.estado === "fallo").length;
+  $("resumen").innerHTML =
+    `<span class="pastilla trabajando"><i></i>${trab} trabajando</span>` +
+    `<span class="pastilla te_espera"><i></i>${espera} ${espera === 1 ? "te espera" : "te esperan"}</span>` +
+    (fallos ? `<span class="pastilla fallo"><i></i>${fallos} ${fallos === 1 ? "fallo" : "fallos"} hoy</span>` : `<span class="pastilla ok"><i></i>Sin fallos hoy</span>`);
+  $("chips").innerHTML = est.map(({ g, s }) => `<button class="chip ${s.est}" data-id="${g.id}"><i style="background:${esc(g.a.ropa)}"></i><span>${esc(g.nombre)}</span><small>${esc(s.est === "libre" ? (s.que || "Libre") : ETIQUETA[s.est] + (s.que ? ": " + s.que : ""))}</small></button>`).join("");
+  // Todas las tareas automáticas: las programadas de Claude y las de Windows
+  const SALIO = { ok: "salió bien", fallo: "falló", en_marcha: "en marcha ahora", aviso: "salió, pero hay que mirar algo", en_espera: "le toca ahora", no_toca: "hoy no le toca" };
+  const maquinas = [
+    ...tareas.map(t => ({ nombre: t.nombre, quien: t.quien_txt || "", horario: t.horario || "", estado: t.estado, ultima: t.cuando, proxima: t.proxima, nota: t.estado === "fallo" ? t.resumen : "" })),
+    ...(E.windows || []).map(w => ({ nombre: w.nombre, quien: w.quien_txt || "Tarea de Windows", horario: w.horario || "", estado: w.estado, ultima: w.cuando, proxima: w.proxima, nota: w.estado === "fallo" ? `Código ${w.codigo}` : (!w.cuando ? "Todavía no ha funcionado" : "") })),
+  ].sort((a, b) => (b.estado === "fallo") - (a.estado === "fallo"));
+  $("maquinas").innerHTML = maquinas.map(q => `<div class="maquina ${q.estado}"><i></i><b>${esc(q.nombre)}</b>
+    <small>${esc(q.quien)}${q.horario ? " · " + esc(q.horario) : ""}</small>
+    <small>${q.ultima ? "Última: " + esc(cuando(q.ultima)) + " · " : ""}${esc(SALIO[q.estado] || "")}${q.proxima ? " · Próxima: " + esc(cuando(q.proxima)) : ""}</small>
+    ${q.nota ? `<small>${esc(q.nota)}</small>` : ""}</div>`).join("");
+}
+// Panel de empleados (opcional): qué hace cada uno, sus tareas y su estado en directo
+function pintarTarjetas(E) {
+  if (!CONFIG.panel_empleados) return;
+  $("panel-emp").hidden = false;
+  const SALIO = { ok: "salió bien", fallo: "falló", en_marcha: "trabajando en ella ahora", aviso: "salió, pero hay que mirar algo", en_espera: "le toca ahora", no_toca: "hoy no le toca" };
+  $("tarjetas").innerHTML = GENTE.filter(g => g.fuente === "tareas").map(g => {
+    const s = estadoDe(g.id, E), suyas = (E.tareas || []).filter(t => t.quien === g.id);
+    return `<article class="tarjeta ${s.est}" data-id="${g.id}">
+      <div class="tarjeta-cab"><i style="background:${esc(g.a.ropa)}"></i><div><b>${esc(g.nombre)}</b><small>${esc(g.puesto)}</small></div><span class="estado-pill">${ETIQUETA[s.est]}</span></div>
+      ${s.est !== "libre" && s.que ? `<p class="ahora">${esc(s.que)}</p>` : ""}
+      <p>${esc(g.resumen || g.para || "")}</p>
+      ${suyas.length ? `<ul class="tareas-emp">${suyas.map(t => `<li class="${t.estado}"><i></i><span><b>${esc(t.nombre)}</b> · ${esc(t.horario || "")}</span>
+        <small>${t.cuando ? "Última: " + esc(cuando(t.cuando)) + " · " : ""}${esc(SALIO[t.estado] || "")}${t.proxima ? " · Próxima: " + esc(cuando(t.proxima)) : ""}</small></li>`).join("")}</ul>`
+        : `<p>Sin tareas programadas: trabaja cuando se le pregunta.</p>`}
+    </article>`;
+  }).join("");
+}
+$("tarjetas").addEventListener("click", ev => { const t = ev.target.closest(".tarjeta"); if (t) abrir(t.dataset.id); });
+$("chips").addEventListener("click", ev => { const b = ev.target.closest(".chip"); if (b) abrir(b.dataset.id); });
+
+// ---------- Ficha de cada persona ----------
+function abrir(id) {
+  const E = ESTADO || {}, g = porId[id]; if (!g) return;
+  const s = estadoDe(id);
+  let cuerpo = "";
+  const yo = (E.personas || {})[id] || {};
+  if (g.fuente === "tareas") {
+    const suyas = (E.tareas || []).filter(t => t.quien === id);
+    cuerpo = suyas.length ? `<ul class="lista">${suyas.map(t => `<li class="${t.estado === "ok" ? "" : t.estado}"><b>${esc(t.nombre)}</b><small>${esc(t.horario || "")}${t.para_quien ? " · para " + esc(t.para_quien) : ""}</small>${t.que_hace ? `<small>${esc(t.que_hace)}</small>` : ""}${t.entrega ? `<small>Entrega: ${esc(t.entrega)}</small>` : ""}${t.manual ? `<small>Su manual: ${esc(t.manual)}${t.herramientas ? " · herramientas: " + esc(t.herramientas.join(", ")) : ""}</small>` : ""}<small>${esc(estadoLargo(t))}</small>${t.resumen && t.estado !== "fallo" ? `<small>${esc(t.resumen)}</small>` : ""}</li>`).join("")}</ul>`
+      : `<p class="vacio">No tiene tareas automáticas: trabaja cuando se le pregunta.</p>`;
+  } else {
+    const cs = yo.conversaciones || [];
+    cuerpo = cs.length ? `<ul class="lista">${cs.map(fila).join("")}</ul>` : `<p class="vacio">Nada abierto en los últimos 3 días.</p>`;
+    if (g.coordinador && (E.sin_asignar || []).length) cuerpo += `<p>Otras conversaciones sin ayudante:</p><ul class="lista">${E.sin_asignar.map(fila).join("")}</ul>`;
+  }
+  const p = gente[id], donde = p && p.donde === "fuera" && p.sitio ? ` · ahora: ${HACE[p.sitio.hace].toLowerCase()}` : "";
+  $("ficha").innerHTML = `<div class="ficha" role="dialog" aria-modal="true" aria-labelledby="ficha-t" style="--equipo:var(--max)">
+    <div class="ficha-cab"><div><h3 id="ficha-t">${esc(g.nombre)}</h3><p>${esc(g.puesto)} · ${esc(g.para)}</p>${g.resumen ? `<p>${esc(g.resumen)}</p>` : ""}<p>${ETIQUETA[s.est]}${donde}${g.modelo ? " · " + (g.modelo === "opus" ? "Opus" : "Sonnet") : ""}</p></div>
+    <button class="cerrar" id="cerrar">Cerrar</button></div>${cuerpo}</div>`;
+  $("ficha").hidden = false; $("cerrar").focus();
+  if (conTres && camera && p) { const q = p.g.position, mov = new THREE.Vector3(q.x, .8, q.z).sub(controls.target); controls.target.add(mov); camera.position.add(mov); }
+}
+function fila(c) {
+  const extra = [ETIQUETA[c.estado], cuando(c.cuando), c.modelo ? (c.modelo_ok === false ? `⚠ en ${c.modelo}, debería ser otro` : c.modelo) : "", c.dentro_de_coordinador ? "encargo del coordinador" : "", c.adivinado ? "asignado por el título" : ""].filter(Boolean).join(" · ");
+  return `<li class="${c.estado}"><b>${esc(c.titulo)}</b><small>${esc(extra)}</small>${c.pregunta ? `<small>Lo último que le han pedido: «${esc(c.pregunta)}»</small>` : ""}${c.detalle ? `<small>${esc(c.detalle)}</small>` : ""}</li>`;
+}
+function estadoLargo(t) {
+  return { ok: `Hecho ${cuando(t.cuando)}`, fallo: t.resumen || "Ha fallado", en_marcha: "Trabajando ahora", aviso: `Terminó ${cuando(t.cuando)} pero necesita que mires algo`, en_espera: "Le toca ahora mismo", no_toca: t.proxima ? `Hoy no le toca · próxima ${cuando(t.proxima)}` : "Hoy no le toca" }[t.estado] || "";
+}
+document.addEventListener("click", ev => { if (ev.target.id === "cerrar" || ev.target.id === "ficha") $("ficha").hidden = true; });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") $("ficha").hidden = true; });
+
+// ---------- Arranque y datos ----------
+if (CONFIG.logo) { $("logo").src = CONFIG.logo; $("logo").hidden = false; }
+if (CONFIG.como_funciona) {
+  const C = CONFIG.como_funciona; $("como").hidden = false;
+  $("como-cerebro").textContent = `El cerebro: ${CONFIG.cerebro || "Lucai"}`; $("como-texto").textContent = C.cerebro || "";
+  $("reglamento").innerHTML = (C.reglamento || []).map(r => `<li>${esc(r)}</li>`).join(""); $("reglamento-nota").textContent = C.nota || "";
+}
+$("titulo").textContent = CONFIG.titulo; $("subtitulo").textContent = CONFIG.subtitulo || "";
+$("enlaces").innerHTML = (CONFIG.enlaces || []).filter(e => e.url && !e.url.startsWith("__")).map(e => `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.texto)}</a>`).join(" · ");
+if (conTres) { try { montar(); pasear(); } catch (e) { console.error(e); camera = null; escenario.insertAdjacentHTML("beforeend", `<div class="sin3d">No se ha podido dibujar la oficina en 3D en este dispositivo. Abajo tienes a todos con su estado.</div>`); } }
+else escenario.insertAdjacentHTML("beforeend", `<div class="sin3d">No se ha podido cargar el motor 3D (¿sin conexión?). Abajo tienes a todos con su estado.</div>`);
+try { actualizar(JSON.parse($("foto").textContent)); } catch (e) { console.error(e); $("frescura").textContent = "Sin datos todavía"; }
+if (LOCAL) {
+  $("pie-fuente").textContent = "Versión del PC: lee el estado directamente de tu ordenador cada segundo.";
+  const leerLocal = () => {
+    const s = document.createElement("script");
+    s.src = "estado_local.js?" + Date.now();
+    s.onload = () => { s.remove(); if (window.ESTADO_OFICINA) actualizar(window.ESTADO_OFICINA); };
+    s.onerror = () => s.remove();
+    document.head.appendChild(s);
+  };
+  leerLocal(); setInterval(leerLocal, 1000);
+} else {
+  $("pie-fuente").textContent = "Los datos los escribe el PC en Google Drive cuando algo cambia. Si el PC está apagado, ves la última foto.";
+}
+// Drive puede devolver el archivo de varias formas (29/10/2026: ahora llega como bloque «resource» con el contenido
+// en base64, sin `payload`); se prueban todas y se coge la primera que sea el estado de la oficina.
+function deTexto(t) {
+  if (typeof t !== "string") return null;
+  t = t.trim();
+  if (t.startsWith("{")) return JSON.parse(t);
+  const bin = atob(t);
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+}
+function leerPayload(r) {
+  const candidatos = [];
+  let p = r && r.payload;
+  if (p && typeof p === "object" && !Array.isArray(p) && !p.v) candidatos.push(p.content, p.data, p.text, p.blob);
+  candidatos.push(p, r && r.structuredContent);
+  for (const b of (r && r.content) || []) candidatos.push(b.text, b.data, b.blob, b.resource && b.resource.text, b.resource && b.resource.blob);
+  for (const c of candidatos) {
+    try { const e = c && typeof c === "object" ? c : deTexto(c); if (e && e.v && e.generado) return e; } catch (e) { /* siguiente */ }
+  }
+  throw new Error("formato desconocido");
+}
+(async () => {
+  if (LOCAL || window.LUCAI) return;
+  const mcp = await window.claude?.use?.("mcp");
+  if (!mcp) { $("pie-fuente").textContent += " Esta vista no puede leer Drive: ves la foto de cuando se publicó."; return; }
+  mcp.watchTool("Google Drive", "download_file_content", { fileId: ARCHIVO_DRIVE }, ev => {
+    if (ev.type === "data") {
+      try { actualizar(leerPayload(ev.result)); }
+      catch (e) { console.warn("No entiendo el archivo de Drive", e, ev.result); $("frescura").textContent = "Drive contesta, pero no entiendo el archivo: ves la última foto."; }
+    } else {
+      const c = ev.error && ev.error.code;
+      const aviso = { server_not_connected: "Conecta Google Drive en claude.ai (Ajustes → Conectores) para verla en directo.", needs_reauth: "Vuelve a conectar Google Drive en claude.ai (Ajustes → Conectores).", not_in_manifest: "No has permitido que esta página lea Drive: ves la última foto.", approval_required: "Esta página necesita tu permiso para leer Drive.", not_granted: "No has permitido que esta página lea Drive: ves la última foto." }[c];
+      console.warn("Drive:", ev.error);
+      $("frescura").textContent = aviso || `No puedo leer Drive (${c || "error"}): ves la última foto.`;
+    }
+  }, { refetchInterval: REFRESCO });
+})();
+// ---------- Pregúntale a la asistente (solo si la oficina la lleva: CONFIG.asistente) ----------
+// Con el conector del programa de gestión en este ordenador consulta en directo; si no, responde con el resumen del día.
+(() => {
+  const A = CONFIG.asistente; if (!A) return;
+  const yo = porId[A.id] || { nombre: "La asistente" };
+  $("chat").hidden = false;
+  $("chat-h").textContent = `Pregúntale a ${yo.nombre}`;
+  $("chat-sub").textContent = A.subtitulo || "";
+  $("chat-cara").style.background = yo.a ? yo.a.ropa : "var(--max)";
+  let probado = false, ocupada = false, MODO = "comprobando", sampleApi = null, mcpApi = null, dbApi = null, ctl = null;
+  const turnos = [];
+  const formato = t => { const ls = esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").split("\n"); let o = "", li = false;
+    for (const l of ls) { const m = l.match(/^\s*[-•*]\s+(.*)/); if (m) { if (!li) { o += "<ul>"; li = true; } o += `<li>${m[1]}</li>`; continue; } if (li) { o += "</ul>"; li = false; } o += l.trim() ? `<div>${l.replace(/^#+\s*/, "")}</div>` : ""; }
+    return o + (li ? "</ul>" : ""); };
+  const burbuja = (c, html) => { const d = document.createElement("div"); d.className = "msg " + c; d.innerHTML = html; $("msgs").appendChild(d); $("msgs").scrollTop = $("msgs").scrollHeight; return d; };
+  function pintarModo() {
+    $("chat-modo").className = "modo " + (MODO === "directo" ? "directo" : MODO === "resumen" ? "resumen" : "");
+    $("chat-modo").textContent = { directo: "En directo", resumen: "Con el resumen de hoy", comprobando: "Comprobando…", no: "No disponible aquí" }[MODO];
+    $("chat-nota").textContent = MODO === "directo" ? `${yo.nombre} consulta el programa de gestión en este ordenador. Cada pregunta gasta de tu cuenta.`
+      : MODO === "resumen" ? `Desde aquí ${yo.nombre} no llega al programa de gestión: responde con el resumen de cada mañana. Para todo lo demás, ábrela en la app de Claude del ordenador.`
+      : MODO === "no" ? `Para preguntar a ${yo.nombre}, abre la oficina desde tu cuenta de Claude.` : "";
+    const off = MODO === "no" || MODO === "comprobando"; $("chat-in").disabled = off; $("chat-send").disabled = off || ocupada;
+  }
+  $("sugs").innerHTML = (A.sugerencias || []).map(t => `<button type="button" class="sug">${esc(t)}</button>`).join("");
+  $("sugs").addEventListener("click", ev => { const b = ev.target.closest(".sug"); if (b && !ocupada && MODO !== "no") { $("chat-in").value = b.textContent; preguntar(); } });
+  $("chat-form").addEventListener("submit", ev => { ev.preventDefault(); preguntar(); });
+  $("chat-stop").addEventListener("click", () => ctl?.abort());
+  pintarModo();
+  // En la escena: se conecta al cerebro mientras responde
+  const empieza = () => { const p = gente[A.id]; if (!p) return; p.decir(`${yo.nombre} · consultando…`, "trabajando"); if (p.donde === "mesa") conectar(p); };
+  const dice = t => { const p = gente[A.id]; if (p) p.decir(`${yo.nombre} · ${t}`, "trabajando"); };
+  const acaba = () => { const p = gente[A.id]; if (!p) return; if (p.est !== "trabajando") desconectar(p); p._dicho = ""; colocar(A.id, true); };
+  async function resumenDeHoy() {
+    if (!dbApi) return null;
+    const leer = async col => { try { const s = await dbApi.collection(col).orderBy("fecha", "desc").limit(1).get(); return s.docs[0]?.data() || null; } catch { return null; } };
+    const [r, a] = await Promise.all([leer("resumen"), leer("avisos")]);
+    if (!r && !a) return null;
+    return (r ? `RESUMEN DEL DÍA (${r.fecha}, datos hasta ${r.datos_hasta || "?"}):\n${String(r.texto || "").slice(0, 60000)}` : "") + (a ? `\n\nAVISOS (${a.fecha}):\n${String(a.texto || "").slice(0, 8000)}` : "");
+  }
+  function instrucciones(resumen) {
+    const hoy = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return `${A.quien_eres || `Eres ${yo.nombre}, la asistente IA del director.`} Hoy es ${hoy}.
+Responde en español, como una compañera de trabajo: directo, claro y corto (3-6 frases o una lista corta). Cifras redondas con € y el periodo. Sin tablas grandes.
+No des nombres de pacientes salvo que te pregunten por uno concreto; si hace falta, usa el nº de ficha.
+${A.reglas || ""}
+` + (MODO === "directo" ? "Tienes herramientas que consultan el programa de gestión en directo (solo lectura). Úsalas para responder con datos reales; fechas en formato AAAA-MM-DD. Si los datos no llegan al día, dilo."
+      : `Ahora NO puedes consultar el programa de gestión: solo tienes el resumen de abajo. Si lo que te preguntan no está, dilo con naturalidad y explica que se puede mirar en directo abriendo la oficina en la app de Claude del ordenador.\n\n${resumen || "No hay resumen disponible todavía."}`);
+  }
+  async function preguntar() {
+    const texto = $("chat-in").value.trim();
+    if (!texto || ocupada || !sampleApi || MODO === "no" || MODO === "comprobando") return;
+    $("chat-in").value = ""; ocupada = true; pintarModo();
+    burbuja("yo", esc(texto));
+    const caja = burbuja("asis pensando", `${yo.nombre} se está conectando al cerebro…`);
+    $("chat-stop").hidden = false; ctl = new AbortController();
+    turnos.push({ role: "user", content: texto }); while (turnos.length > 10) turnos.shift();
+    empieza();
+    try {
+      const op = { signal: ctl.signal, cache: false, onText: ({ text }) => { caja.classList.remove("pensando"); caja.innerHTML = formato(text); $("msgs").scrollTop = $("msgs").scrollHeight; } };
+      let resumen = null;
+      if (MODO === "directo" && !probado) {
+        caja.textContent = `${yo.nombre} está comprobando la conexión…`;
+        try { await mcpApi.callTool(A.servidor, A.prueba || "estado_datos", {}, { signal: ctl.signal }); probado = true; }
+        catch (e) { if (e && e.code === "cancelled") throw e; MODO = "resumen"; pintarModo(); }
+      }
+      if (MODO === "directo") {
+        delete op.cache;
+        op.tools = (A.herramientas || []).map(([name, description, properties, required, etiqueta]) => ({
+          name, description, inputSchema: { type: "object", properties, required },
+          execute: async (input, ctx) => {
+            dice(`mirando ${etiqueta}…`); caja.textContent = `${yo.nombre} está mirando ${etiqueta}…`;
+            try { const r = await mcpApi.callTool(A.servidor, name, input || {}, { signal: ctx.signal }); const v = r.payload ?? r.content; const s2 = typeof v === "string" ? v : JSON.stringify(v); return s2.length > 30000 ? s2.slice(0, 30000) + " …(recortado)" : s2; }
+            catch (e) { throw new Error(e && e.code === "server_not_connected" ? "El programa de gestión no está conectado ahora" : (e && (e.message || e.code)) || "fallo al consultar"); }
+          },
+        }));
+      } else resumen = await resumenDeHoy();
+      const { text } = await sampleApi([{ role: "user", content: instrucciones(resumen) }, ...turnos], op);
+      caja.classList.remove("pensando"); caja.innerHTML = formato(text);
+      turnos.push({ role: "assistant", content: text });
+    } catch (e) {
+      turnos.pop();
+      const msg = { cancelled: "Pregunta cancelada.", not_granted: "No has dado permiso a la oficina para usar Claude. Puedes darlo en el menú de permisos de la página.", rate_limited: "Has llegado al límite de uso de Claude por ahora. Prueba dentro de un rato.", refused: "No puedo responder a eso. Prueba a preguntarlo de otra forma." }[e && e.code] || "No he podido responder ahora mismo. Vuelve a intentarlo.";
+      if (e && e.text) caja.innerHTML = formato(e.text) + `<div style="color:var(--muted);font-size:13px">(${esc(msg)})</div>`;
+      else { caja.className = "msg " + (e && e.code === "cancelled" ? "asis" : "error"); caja.textContent = msg; }
+      if (e && e.code === "not_granted") MODO = "no";
+    } finally { acaba(); ocupada = false; $("chat-stop").hidden = true; ctl = null; pintarModo(); $("chat-in").focus(); }
+  }
+  (async () => {
+    const use = window.claude?.use;
+    if (!use) { MODO = "no"; pintarModo(); return; }
+    const [s, u, m, d] = await Promise.all([use("sample"), use("user"), use("mcp"), use("db")]);
+    sampleApi = s; mcpApi = m; dbApi = d;
+    const esDueno = u ? await u.isOwner().catch(() => true) : true;
+    if (!sampleApi || !esDueno) { MODO = "no"; pintarModo(); if (!esDueno) $("chat-nota").textContent = `Solo el director puede preguntar a ${yo.nombre}.`; return; }
+    MODO = "resumen";
+    if (mcpApi) { try { const r = await mcpApi.listTools(A.servidor); if (r.servers.some(x => x.server === A.servidor && x.tools.length)) MODO = "directo"; } catch {} }
+    pintarModo();
+    burbuja("asis", A.saludo || `¡Hola! Pregúntame lo que quieras.`);
+  })();
+})();
+
+// ---------- Parte del día (solo si la oficina lo lleva: CONFIG.parte). Lo apuntan las tareas al terminar ----------
+(() => {
+  const PT = CONFIG.parte; if (!PT) return;
+  $("parte").hidden = false;
+  const quienDe = t => porId[(PT.tareas || {})[t]];
+  const hoy = () => { const a = new Date(), p = n => String(n).padStart(2, "0"); return `${a.getFullYear()}-${p(a.getMonth() + 1)}-${p(a.getDate())}`; };
+  const pinta = filas => {
+    const deHoy = filas.filter(r => r.cuando.startsWith(hoy()) && !r.cuando.endsWith("T00:00")).sort((a, b) => a.cuando.localeCompare(b.cuando));
+    $("feed").innerHTML = deHoy.length ? deHoy.map(r => { const g = quienDe(r.empleado); return `<li class="${r.ok ? "" : "fallo"}"><span class="t">${esc(r.cuando.slice(11, 16))}</span><i></i><p><b>${esc(g ? g.nombre : r.empleado)}</b> · ${esc(r.resumen)}</p></li>`; }).join("")
+      : `<li><span></span><span></span><p class="vacio">Hoy todavía no ha terminado nadie.</p></li>`;
+  };
+  pinta([]);
+  (async () => {
+    const db = await window.claude?.use?.("db"); if (!db) { $("feed").innerHTML = `<li><span></span><span></span><p class="vacio">El parte se ve al abrir la oficina desde Claude.</p></li>`; return; }
+    let antes = null;
+    db.collection("actividad").orderBy("cuando", "desc").limit(300).onSnapshot(snap => {
+      const filas = snap.docs.map(d => d.data()).filter(r => r && r.empleado && r.cuando);
+      pinta(filas);
+      // Quien acaba de terminar lo cuenta en su bocadillo un momento
+      if (antes) for (const r of filas) if (!antes.has(r.empleado + r.cuando)) {
+        const g = quienDe(r.empleado), p = g && gente[g.id];
+        if (p) { p.decir(`${g.nombre} · ${r.ok ? "¡hecho!" : "¡ha fallado!"}`, r.ok ? "trabajando" : "fallo"); setTimeout(() => { p._dicho = ""; colocar(g.id, true); }, 8000); }
+      }
+      antes = new Set(filas.map(r => r.empleado + r.cuando));
+    }, () => {});
+  })();
+})();
+</script>
+
+<script>
+// Arranque de la oficina 3D dentro de la app Lucai (30/10/2026, Ada). generar.py --lucai lo mete al final de la página.
+// La página no lleva ningún dato: los pide a Lucai, que la abre en un marco y le presta su sesión con
+// window.ofi3dLeer(filas) (bloque «LUCAI · OFICINA 3D» del módulo). Fuera de Lucai solo dice dónde abrirla.
+// En el móvil sale primero la lista (sin descargar el 3D); con ?3d=1, la oficina en 3D. En ordenador y tablet, el 3D.
+window.LUCAI = true;
+(() => {
+  const REFRESCO = 30 * 1000;
+  const MOVIL = matchMedia("(max-width: 760px)").matches;
+  const CON_3D = !MOVIL || new URLSearchParams(location.search).has("3d");
+  const $ = id => document.getElementById(id);
+  const leer = filas => {
+    let f = null;
+    try { f = window.parent !== window && window.parent.ofi3dLeer; } catch (e) { /* otro dominio */ }
+    if (!f) return Promise.reject(new Error("fuera de Lucai"));
+    return f(filas);
+  };
+  const aviso = t => { $("frescura").textContent = t; $("hora-datos").textContent = "--:--"; };
+  const script = src => new Promise((ok, mal) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = mal; document.head.appendChild(s); });
+
+  // Lo que en Lucai sobra: la lista de «quién está» y la sala de máquinas (las tarjetas ya lo dicen todo)
+  document.head.insertAdjacentHTML("beforeend", `<style>
+    .gente, .maquinas-sala, .pastilla.te_espera { display: none !important; }   /* «te espera» es del director */
+    .ver3d { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: 16px;
+      border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; width: 100%; text-align: left; }
+    .ver3d small { display: block; font-weight: 400; color: var(--muted); }
+    .ver3d b { font-size: 22px; color: var(--max); }
+    .volver-lista { position: absolute; top: 10px; left: 10px; z-index: 3; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line);
+      background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+  </style>`);
+
+  (async () => {
+    let d;
+    try { d = await leer(["config", "estado"]); }
+    catch (e) { aviso("Esta oficina se abre desde Lucai › Oficina IA."); return; }
+    if (!d || !d.config) { aviso("La oficina todavía no ha llegado a Lucai: el PC de la clínica la manda en cuanto está encendido."); return; }
+    $("config").textContent = JSON.stringify(d.config);
+    $("foto").textContent = d.estado ? JSON.stringify(d.estado) : "null";
+    if (CON_3D) {
+      try { await script("https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js");
+            await script("https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"); }
+      catch (e) { console.warn("Sin motor 3D", e); }
+    }
+    const motor = document.createElement("script");
+    motor.textContent = $("motor").textContent;
+    document.body.appendChild(motor);   // arranca la oficina con lo que ha mandado Lucai
+
+    $("pie-fuente").textContent = "Lo manda el PC de la clínica cada vez que algo cambia. Si está apagado, ves la última foto.";
+    if (!CON_3D) {
+      $("escenario").hidden = true;
+      $("escenario").insertAdjacentHTML("beforebegin",
+        `<button class="ver3d" id="ver3d"><span>Ver la oficina en 3D<small>Los empleados en su mesa o en el café, en directo</small></span><b aria-hidden="true">›</b></button>`);
+      $("ver3d").onclick = () => { location.search = "?3d=1"; };
+    } else if (MOVIL) {
+      $("escenario").insertAdjacentHTML("afterbegin", `<button class="volver-lista" id="volver-lista">‹ Lista</button>`);
+      $("volver-lista").onclick = () => { location.search = ""; };
+    }
+    if (!d.estado) aviso("Todavía no hay datos de hoy.");
+    setInterval(async () => {
+      try { const n = await leer(["estado"]); if (n && n.estado && window.actualizar) window.actualizar(n.estado); }
+      catch (e) { /* sin conexión: se queda la última foto */ }
+    }, REFRESCO);
+  })();
+})();
+</script>
+</body>
+</html>

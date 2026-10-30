@@ -14626,6 +14626,111 @@ window.addEventListener('resize', ofiAjustaAlto);
 /* ===== FIN OFICINA IA ===== */
 
 
+/* ============================================================
+   LUCAI · OFICINA 3D (David, 30/10/2026): la oficina de los empleados IA dentro de Oficina IA, para el equipo.
+   Encima de los expertos, una franja «Hoy en la oficina» con cada empleado IA y lo que ha hecho hoy; al tocarla se
+   abre la oficina entera (oficina3d.html, en un marco a toda pantalla). En el móvil sale primero la lista y el 3D a
+   un toque; en ordenador y tablet, el 3D.
+   Versión EQUIPO, la mínima: quién trabaja, su burbuja y cómo salió cada tarea. Sin resúmenes, chat de la asistente,
+   parte del día ni cifras (eso es de Dirección y sigue en su página aparte).
+   Los datos están en la tabla oficina_estado (filas 'config' y 'estado'); los sube estado.py desde el PC de la
+   clínica. oficina3d.html no lleva ningún dato (el repositorio es público): los pide a esta página con ofi3dLeer,
+   que usa la sesión de Lucai. Si la tabla no existe o está vacía, la franja no sale y no se rompe nada.
+   Va DESPUÉS del bloque «LUCAI · OFICINA IA» (lo envuelve) y antes de boot();.
+   Motor en el Cerebro: 1 Cerebro\Lucai\Oficina IA\oficina3d\ (este bloque, en expertos\modulo_oficina3d.js).
+   ============================================================ */
+const OF3_PAGINA = 'oficina3d.html';
+if(!S.of3) S.of3 = { config:null, estado:null, cargando:false, hora:0 };
+const of3Esc = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+
+/* ---- datos: también se los presta a oficina3d.html (mismo dominio) ---- */
+window.ofi3dLeer = async function(filas){
+  const { data, error } = await sbc.from('oficina_estado').select('id,datos').eq('clinica', CLINICA).in('id', filas||['config','estado']);
+  if(error) throw error;
+  const r = {}; (data||[]).forEach(f=>{ r[f.id]=f.datos; }); return r;
+};
+async function of3Cargar(){
+  if(S.of3.cargando || Date.now()-S.of3.hora < 60000) return false;   // como mucho una vez por minuto
+  S.of3.cargando=true;
+  const antes=JSON.stringify([S.of3.config&&S.of3.config.titulo, S.of3.estado]);
+  try{
+    const r = await ofi3dLeer(S.of3.config ? ['estado'] : ['config','estado']);
+    if(r.config){ delete r.config.logo; S.of3.config=r.config; }
+    if(r.estado) S.of3.estado=r.estado;
+  }catch(_){ /* sin tabla o sin conexión: la franja no sale */ }
+  S.of3.hora=Date.now(); S.of3.cargando=false;
+  return antes!==JSON.stringify([S.of3.config&&S.of3.config.titulo, S.of3.estado]);
+}
+
+/* ---- la franja «Hoy en la oficina» ---- */
+function of3Franja(){
+  const C=S.of3.config, E=S.of3.estado||{};
+  if(!C || !Array.isArray(C.personas)) return '';
+  const gente=C.personas.filter(p=>p.fuente==='tareas');
+  if(!gente.length) return '';
+  const filas=gente.map(p=>{
+    const e=(E.personas||{})[p.id]||{}, est=e.estado||'libre';
+    const que= est==='trabajando' ? 'Trabajando'+(e.que?': '+e.que:'') : est==='fallo' ? (e.que||'Algo no ha salido') : (e.que||'Libre');
+    const color=/^#[0-9a-f]{3,8}$/i.test((p.a&&p.a.ropa)||'') ? p.a.ropa : '#8d959b';
+    return `<span class="of3-p ${of3Esc(est)}"><i style="background:${color}"></i><span><b>${of3Esc(p.nombre)}</b><small>${of3Esc(que)}</small></span></span>`;
+  }).join('');
+  const gen=E.generado ? new Date(E.generado) : null, min=gen ? (Date.now()-gen)/6e4 : 1e9;
+  const pie= !gen ? 'Todavía no hay datos de hoy.' : min>10 ? `El PC de la clínica no manda datos desde las ${of3Esc(E.generado.slice(11,16))}: ves la última foto.` : `En directo · datos de las ${of3Esc(E.generado.slice(11,16))}`;
+  return `<button class="of3-franja" onclick="of3Abrir()" aria-label="Abrir la oficina de los empleados IA">
+    <span class="of3-cab"><b>Hoy en la oficina</b><span class="of3-ver">Ver la oficina ›</span></span>
+    <span class="of3-gente">${filas}</span>
+    <small class="of3-pie">${pie}</small></button>`;
+}
+
+/* ---- la oficina entera, en un marco a toda pantalla ---- */
+function of3Abrir(){
+  if(el('of3Capa')) return;
+  const d=document.createElement('div'); d.id='of3Capa'; d.className='of3-capa';
+  d.innerHTML=`<div class="of3-barra"><b>${of3Esc((S.of3.config&&S.of3.config.titulo)||'La oficina')}</b><button type="button" onclick="of3Cerrar()">✕ Cerrar</button></div>
+    <iframe src="${OF3_PAGINA}" title="La oficina de los empleados IA"></iframe>`;
+  document.body.appendChild(d); document.body.classList.add('of3-abierta');
+}
+function of3Cerrar(){ const d=el('of3Capa'); if(d) d.remove(); document.body.classList.remove('of3-abierta'); }
+document.addEventListener('keydown', ev=>{ if(ev.key==='Escape' && el('of3Capa')) of3Cerrar(); });
+
+/* ---- engancha la franja encima de los expertos (sin tocar el bloque de Oficina IA) ---- */
+(function(){
+  const _v=oficinaView;
+  oficinaView=function(){
+    const h=_v.apply(this, arguments);
+    if(S.ofi.sel) return h;   // dentro del chat de un experto no sale
+    of3Cargar().then(c=>{ if(c && S.module==='oficina' && !S.ofi.sel) render(); });
+    const f=of3Franja(); if(!f) return h;
+    const i=h.indexOf('class="section-sub"'), j= i<0 ? -1 : h.indexOf('</div></div>', i);
+    return j<0 ? h : h.slice(0, j+12)+OF3_CSS+f+h.slice(j+12);
+  };
+  setInterval(()=>{ if(S.module==='oficina' && !S.ofi.sel && !el('of3Capa')) of3Cargar().then(c=>{ if(c && S.module==='oficina' && !S.ofi.sel) render(); }); }, 60000);
+})();
+
+const OF3_CSS=`<style>
+.of3-franja{display:flex;flex-direction:column;gap:12px;width:100%;margin-top:18px;padding:16px 18px;border-radius:18px;border:1px solid var(--t-bd-line);background:var(--t-bg-FFFFFF);color:inherit;font-family:inherit;text-align:left;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.of3-franja:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(30,40,60,.10)}
+.of3-cab{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.of3-cab b{font-size:16px}
+.of3-ver{font-size:13px;font-weight:700;color:var(--lx-acento,#2f6f8f);white-space:nowrap}
+.of3-gente{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px 16px}
+.of3-p{display:flex;align-items:flex-start;gap:9px;min-width:0}
+.of3-p>i{flex:0 0 auto;width:12px;height:12px;border-radius:50%;margin-top:4px;box-shadow:0 0 0 3px rgba(141,149,155,.18)}
+.of3-p.trabajando>i{box-shadow:0 0 0 3px rgba(47,143,69,.35)}
+.of3-p.fallo>i{box-shadow:0 0 0 3px rgba(200,55,43,.40)}
+.of3-p>span{display:flex;flex-direction:column;min-width:0}
+.of3-p b{font-size:14px}
+.of3-p small{font-size:12.5px;color:var(--lx-gris,#6b747b);overflow-wrap:anywhere}
+.of3-p.fallo small{color:#c8372b}
+.of3-pie{font-size:12px;color:var(--lx-gris,#8A949B)}
+.of3-capa{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;background:#12161b}
+.of3-barra{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px max(14px,env(safe-area-inset-right)) 10px max(14px,env(safe-area-inset-left));padding-top:max(10px,env(safe-area-inset-top));background:#1a2027;color:#ece8df;font-family:inherit}
+.of3-barra button{padding:8px 14px;border-radius:999px;border:1px solid #3a444e;background:transparent;color:inherit;font:inherit;font-size:14px;cursor:pointer}
+.of3-capa iframe{flex:1;width:100%;border:0;background:#12161b}
+body.of3-abierta{overflow:hidden}
+@media (max-width:560px){.of3-gente{grid-template-columns:1fr 1fr}.of3-franja{padding:14px}}
+</style>`;
+
 boot();
 
 </script>
