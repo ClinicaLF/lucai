@@ -20,7 +20,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="lucai-version" content="2026-10-30-1857">
+<meta name="lucai-version" content="2026-10-30-1939">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <script>
 /* Comprobador de versión: si hay una versión más nueva publicada, recarga a la última.
@@ -14337,7 +14337,7 @@ async function ofiEnviar(textoFijo){
   if(!c){ c={ id:'C'+Date.now().toString(36), titulo:q.slice(0,60), modo:S.ofi.modo||'duda', ts:now(), msgs:[] }; S.ofi.conv=c.id; }
   c.msgs.push({ role:'user', content:q });
   const r={ role:'assistant', content:'' }; c.msgs.push(r); c.ts=now(); ofiGuardarConv(c);
-  S.ofi.draft=''; S.ofi.busy=true; S.ofi.vivo=true; render(); ofiBajar(true);
+  S.ofi.draft=''; if(box){ box.value=''; box.blur(); } S.ofi.busy=true; S.ofi.vivo=true; render(); ofiBajar(true);
   const ctrl=(typeof AbortController!=='undefined')?new AbortController():null; S.ofi._ctrl=ctrl;
   const killer=setTimeout(()=>{ try{ ctrl&&ctrl.abort(); }catch(_){ } }, 120000);
   try{
@@ -14377,7 +14377,8 @@ function ofiCopiar(i){ const c=ofiConvActual(); const m=c&&c.msgs[i]; if(!m) ret
 
 /* ---- micro: voz a texto del navegador (como «🎤 Hablar» de Reuniones) ---- */
 let _ofiRec=null;
-function ofiMicParar(){ try{ if(_ofiRec){ _ofiRec.stop(); } }catch(_){ } }
+/* al parar, lo que el móvil aún devuelva se ignora: si no, el mensaje ya enviado volvía a la caja */
+function ofiMicParar(){ try{ if(_ofiRec){ _ofiRec._parar=true; _ofiRec.stop(); } }catch(_){ } }
 function ofiMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ toast('Este navegador no deja dictar con el botón. Usa el micrófono del teclado del móvil o Win + H.'); return; }
@@ -14387,13 +14388,14 @@ function ofiMic(){
   rec.lang='es-ES'; rec.continuous=true; rec.interimResults=true;
   const box=el('ofiIn'); const base=((box?box.value:S.ofi.draft)||'').trim(); let fin='';
   rec.onresult=function(ev){
+    if(rec._parar) return;
     let inter='';
     for(let i=ev.resultIndex;i<ev.results.length;i++){ const x=ev.results[i]; if(x.isFinal) fin+=x[0].transcript+' '; else inter+=x[0].transcript; }
     S.ofi.draft=((base?base+' ':'')+fin+inter).replace(/\s+/g,' ').trim();
     const t=el('ofiIn'); if(t){ t.value=S.ofi.draft; ofiAltura(t); }
   };
   rec.onerror=function(e){ if(e && (e.error==='not-allowed'||e.error==='service-not-allowed')) toast('Permite el micrófono en el navegador para dictar.'); else if(e && e.error==='no-speech') toast('No te he oído. Pulsa el micro y habla.'); };
-  rec.onend=function(){ if(_ofiRec===rec) _ofiRec=null; ofiPintarMic(); };
+  rec.onend=function(){ if(_ofiRec===rec) _ofiRec=null; ofiPintarMic(); if(rec._parar && !S.ofi.draft){ const t=el('ofiIn'); if(t) t.value=''; } };
   try{ rec.start(); ofiPintarMic(); }catch(_){ _ofiRec=null; toast('No se ha podido abrir el micrófono.'); }
 }
 function ofiPintarMic(){ const b=el('ofiMicBtn'); if(b){ b.classList.toggle('on', !!_ofiRec); b.title=_ofiRec?'Parar de dictar':'Dictar'; } }
@@ -14476,7 +14478,7 @@ function ofiChatView(){
       <div class="muted" style="font-size:11.5px;margin-top:10px">Se guardan solo en este aparato.</div>
     </div>`;
   return `${moduleHeader('Oficina IA', false)}${OFI_CSS}
-  <main><div class="wrap ofi-wrap">
+  <main><div class="wrap ofi-wrap ofi-movil">
     <div class="ofi-cab">
       <button class="btn btn-ghost btn-sm" onclick="ofiSalir()">‹ Oficina</button>
       ${ofiFoto(e,40)}<div style="min-width:0"><div class="ofi-cab-n">${incEsc(e.nombre||'')}</div><div class="muted" style="font-size:12.5px">${incEsc(e.puesto||'')}</div></div>
@@ -14488,7 +14490,7 @@ function ofiChatView(){
         <div class="ofi-modos">
           <button class="${modo!=='practicar'?'act':''}" onclick="ofiModo('duda')">💬 <span class="ofi-l">Tengo una duda</span><span class="ofi-c">Duda</span></button>
           <button class="${modo==='practicar'?'act':''}" onclick="ofiModo('practicar')">🎭 Practicar<span class="ofi-l"> (hace de paciente)</span></button>
-          <label class="ofi-leer" title="Lee en voz alta cada respuesta al llegar"><input type="checkbox" ${S.ofi.leerSiempre?'checked':''} onchange="ofiLeerSiempre()"> 🔊 Leer en voz alta</label>
+          <label class="ofi-leer" title="Lee en voz alta cada respuesta al llegar"><input type="checkbox" ${S.ofi.leerSiempre?'checked':''} onchange="ofiLeerSiempre()"> 🔊<span class="ofi-l"> Leer en voz alta</span></label>
         </div>
         <div id="ofiScroll" class="ofi-scroll" data-tar-scroll>${burbujas}</div>
         <div class="ofi-comp">
@@ -14497,7 +14499,7 @@ function ofiChatView(){
           <button id="ofiMicBtn" class="ofi-mic ${_ofiRec?'on':''}" onclick="ofiMic()" title="Dictar"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
           ${S.ofi.busy?`<button class="ofi-env" onclick="ofiParar()" title="Parar">■</button>`:`<button class="ofi-env" onclick="ofiEnviar()" title="Enviar">➤</button>`}
         </div>
-        <div class="ofi-pie">Sin nombres de pacientes: usa el nº de ficha o una descripción. ${incEsc(e.nombre||'')} puede equivocarse; ante la duda, pregunta a David.</div>
+        <div class="ofi-pie">Sin nombres de pacientes: usa el nº de ficha.<span class="ofi-l"> ${incEsc(e.nombre||'')} puede equivocarse; ante la duda, pregunta a David.</span></div>
       </div>
     </div>
   </div></main>`;
@@ -14559,21 +14561,43 @@ button.ofi-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(30,
 .ofi-pie{font-size:11.5px;color:var(--t-fg-6C757D);padding:0 14px 10px}
 @media(max-width:720px){
   .ofi-grid{grid-template-columns:1fr}
-  .ofi-cuerpo{grid-template-columns:1fr}
-  .ofi-convs{display:none}
-  .ofi-convs.ver{display:block}
+  /* chat en el móvil como WhatsApp (David, 30/10): pantalla entera, arriba la cabecera, abajo la barra de escribir,
+     las dos fijas; solo se mueve la conversación. El alto sigue al teclado (ofiAjustaAlto, visualViewport). */
+  .ofi-movil{position:fixed;left:0;right:0;top:0;height:100dvh;max-width:none;margin:0;padding:0;z-index:920;background:var(--t-bg-FFFFFF);display:flex;flex-direction:column}
+  .ofi-movil .ofi-cab{flex:0 0 auto;margin:0;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 8px;border-bottom:1px solid var(--t-bd-line)}
+  .ofi-movil .ofi-cab .muted{display:none}
+  .ofi-movil .ofi-cuerpo{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;position:relative;gap:0}
+  .ofi-movil .ofi-convs{display:none}
+  .ofi-movil .ofi-convs.ver{display:block;position:absolute;inset:0;z-index:3;border:0;border-radius:0;max-height:none}
   .ofi-lista-btn{display:inline-flex}
-  .ofi-chat{min-height:0;border-radius:12px}
-  .ofi-scroll{max-height:none;min-height:46vh;height:calc(100dvh - 330px)}
-  .ofi-leer{margin-left:0;width:100%}
-  .ofi-modos button{flex:1 1 40%}
+  .ofi-movil .ofi-chat{flex:1 1 auto;min-height:0;border:0;border-radius:0}
+  .ofi-movil .ofi-modos{flex:0 0 auto;flex-wrap:nowrap;padding:7px 10px}
+  .ofi-movil .ofi-modos button{flex:1 1 auto;padding:6px 8px}
+  .ofi-movil .ofi-scroll{flex:1 1 auto;min-height:0;max-height:none;height:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:12px}
+  .ofi-movil .ofi-comp{flex:0 0 auto;padding:8px 10px}
+  .ofi-movil .ofi-pie{flex:0 0 auto;padding:0 12px calc(env(safe-area-inset-bottom,0px) + 8px);font-size:11px}
+  .ofi-movil .ofi-comp textarea{font-size:16px}
+  .ofi-leer{margin-left:0}
+  .ofi-leer .ofi-l{display:none}
   .ofi-l{display:none}
   .ofi-c{display:inline}
-  .ofi-cab{gap:8px}
-  .ofi-cab .muted{display:none}
+  body.ofi-en-chat #lucaiTb, body.ofi-en-chat .lucai-tb, body.ofi-en-chat .lx-rail{display:none !important}
+  body.ofi-en-chat .toast{z-index:960}
 }
 </style>`;
+/* móvil: el chat ocupa lo que se ve de pantalla (con teclado abierto, también), y fuera la barra de abajo */
+function ofiAjustaAlto(){
+  const c=document.querySelector('.ofi-movil'); if(!c) return;
+  if(!window.matchMedia('(max-width:720px)').matches){ c.style.height=''; c.style.top=''; return; }
+  const vv=window.visualViewport;
+  c.style.height=(vv?vv.height:window.innerHeight)+'px';
+  c.style.top=(vv?vv.offsetTop:0)+'px';
+}
+if(window.visualViewport){ visualViewport.addEventListener('resize', ()=>{ ofiAjustaAlto(); ofiBajar(false); }); visualViewport.addEventListener('scroll', ofiAjustaAlto); }
+window.addEventListener('resize', ofiAjustaAlto);
 (function(){
+  const _r=render;
+  render=function(){ _r.apply(this, arguments); try{ document.body.classList.toggle('ofi-en-chat', S.module==='oficina' && !!S.ofi.sel && !!document.querySelector('.ofi-movil')); ofiAjustaAlto(); }catch(_){ } };
   const _av=appView;
   appView=function(){ if(S.module==='oficina'){ if(!canAccess('oficina')){ S.module=null; return homeView(); } return oficinaView(); } return _av.apply(this, arguments); };
   const _sm=setModule;
